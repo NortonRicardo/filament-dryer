@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESP32-D0WD-V3 · Pinagem e especificações da placa</title>
+<style>
+  :root {
+    --bg: #0b1020;
+    --bg-2: #121a33;
+    --panel: #161f3d;
+    --line: #27315c;
+    --txt: #e6ebff;
+    --txt-dim: #9aa6d4;
+    --board: #1d6b4f;
+    --board-edge: #14523c;
+    --shield: #b9c2d9;
+
+    --c-gpio: #38bdf8;
+    --c-in:   #c084fc;
+    --c-boot: #fb923c;
+    --c-uart: #f472b6;
+    --c-dac:  #34d399;
+    --c-pwr:  #fbbf24;
+    --c-gnd:  #7c89b4;
+    --c-ctrl: #f87171;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 600px at 50% -10%, #1a2550 0%, var(--bg) 60%);
+    color: var(--txt);
+    font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 32px 20px 80px;
+  }
+
+  .wrap { max-width: 1240px; margin: 0 auto; }
+
+  header { margin-bottom: 28px; }
+
+  h1 {
+    margin: 0 0 6px;
+    font-size: 28px;
+    letter-spacing: -0.02em;
+  }
+
+  .sub { color: var(--txt-dim); margin: 0; }
+
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+
+  .badge {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 12.5px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--txt-dim);
+  }
+  .badge b { color: var(--txt); font-weight: 600; }
+
+  .warn {
+    margin: 22px 0 0;
+    background: #2a1f0e;
+    border: 1px solid #6b4e16;
+    border-left: 3px solid var(--c-pwr);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 14px;
+    color: #f5e4bd;
+  }
+
+  h2 {
+    font-size: 17px;
+    margin: 40px 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+    letter-spacing: 0.01em;
+  }
+
+  /* ---------- layout principal ---------- */
+  .main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 28px;
+    align-items: start;
+    margin-top: 28px;
+  }
+  @media (max-width: 900px) {
+    .main { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px;
+  }
+
+  svg { width: 100%; height: auto; display: block; }
+
+  .pin-hit { cursor: pointer; }
+  .pin-hit:hover .pin-label { fill: #fff; }
+  .pin-hit:hover .pin-pad { stroke: #fff; stroke-width: 2; }
+  .pin-hit.sel .pin-pad { stroke: #fff; stroke-width: 2.5; }
+  .pin-hit.sel .pin-label { fill: #fff; font-weight: 700; }
+  .pin-hit.sel .pin-row-bg { fill: rgba(255,255,255,0.09); }
+
+  .pin-label {
+    font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace;
+    fill: var(--txt);
+  }
+  .pin-gpio {
+    font: 500 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+    fill: var(--txt-dim);
+  }
+
+  /* ---------- painel de detalhes ---------- */
+  .detail { position: sticky; top: 24px; }
+
+  .detail-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .detail-pin {
+    font: 700 24px ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .detail-gpio {
+    font: 500 13px ui-monospace, Menlo, monospace;
+    color: var(--txt-dim);
+  }
+  .detail-role { color: var(--txt-dim); font-size: 13.5px; margin-bottom: 14px; }
+  .detail-desc { font-size: 14px; margin: 0 0 14px; }
+
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag {
+    font: 500 11.5px ui-monospace, Menlo, monospace;
+    background: #1e2a52;
+    border: 1px solid var(--line);
+    color: var(--txt-dim);
+    border-radius: 6px;
+    padding: 3px 8px;
+  }
+
+  .alert {
+    margin-top: 14px;
+    font-size: 13px;
+    background: #2d1515;
+    border: 1px solid #6e2b2b;
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: #ffd9d9;
+  }
+  .hint { color: var(--txt-dim); font-size: 13.5px; }
+
+  /* ---------- legenda ---------- */
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 16px; }
+  .legend span { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--txt-dim); }
+  .dot { width: 11px; height: 11px; border-radius: 3px; flex: 0 0 auto; }
+
+  /* ---------- grades de info ---------- */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 14px;
+  }
+  .spec { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .spec dt { color: var(--txt-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .spec dd {
+    margin: 6px 0 0;
+    font: 600 17px ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .spec small { display: block; color: var(--txt-dim); font-weight: 400; font-size: 12.5px; margin-top: 4px; font-family: ui-sans-serif, system-ui, sans-serif; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--txt-dim); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  td.mono, th.mono { font-family: ui-monospace, Menlo, monospace; }
+
+  .notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; }
+  .note { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .note h3 { margin: 0 0 8px; font-size: 14.5px; display: flex; align-items: center; gap: 8px; }
+  .note p { margin: 0; font-size: 13.5px; color: #cdd5f5; }
+  .note code {
+    font-family: ui-monospace, Menlo, monospace;
+    background: #1e2a52;
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 12.5px;
+  }
+
+  footer { margin-top: 48px; color: var(--txt-dim); font-size: 12.5px; border-top: 1px solid var(--line); padding-top: 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>ESP32 DevKit V1 &mdash; 30 pinos</h1>
+    <p class="sub">Pinagem e especificações da placa deste projeto, lidas do próprio chip.</p>
+    <div class="badges">
+      <span class="badge">Chip <b>ESP32-D0WD-V3</b></span>
+      <span class="badge">Revisão <b>v3.0</b></span>
+      <span class="badge"><b>2</b> núcleos @ <b>240 MHz</b></span>
+      <span class="badge">Flash <b>4 MB</b></span>
+      <span class="badge">RAM <b>367 KB</b></span>
+      <span class="badge">PSRAM <b>nenhuma</b></span>
+      <span class="badge">MAC <b>70:B8:F6:5B:33:D0</b></span>
+    </div>
+    <p class="warn">
+      <b>Confira o silkscreen antes de ligar qualquer coisa.</b> Quase toda placa
+      &ldquo;DevKit V1&rdquo; vendida hoje é clone, e a ordem dos pinos varia entre
+      fabricantes. Este diagrama segue o layout DOIT de 30 pinos (25 GPIOs + EN + 3V3
+      + VIN + 2&times;GND); as capacidades de cada GPIO vêm do chip e valem sempre.
+    </p>
+  </header>
+
+  <div class="main">
+    <div class="card">
+      <svg id="board" viewBox="0 0 700 830" role="img"
+           aria-label="Diagrama da pinagem do ESP32 DevKit V1 de 30 pinos">
+        <!-- placa -->
+        <rect x="232" y="26" width="236" height="770" rx="12"
+              fill="#1d6b4f" stroke="#14523c" stroke-width="2"/>
+
+        <!-- blindagem do modulo WROOM -->
+        <rect x="252" y="40" width="196" height="118" rx="6"
+              fill="#b9c2d9" stroke="#8d97b4" stroke-width="1.5"/>
+        <text x="350" y="92" text-anchor="middle" fill="#2b3350"
+              style="font:700 13px ui-monospace,Menlo,monospace">ESP32-WROOM-32</text>
+        <text x="350" y="112" text-anchor="middle" fill="#4a5473"
+              style="font:500 11px ui-monospace,Menlo,monospace">D0WD-V3 · 4 MB</text>
+        <text x="350" y="132" text-anchor="middle" fill="#4a5473"
+              style="font:500 10px ui-sans-serif,system-ui,sans-serif">antena Wi-Fi / BT</text>
+
+        <!-- antena (traco na PCB acima da blindagem) -->
+        <path d="M268 36 h164" stroke="#2f8e69" stroke-width="3" fill="none"/>
+
+        <!-- conector USB -->
+        <rect x="306" y="788" width="88" height="34" rx="5"
+              fill="#8d97b4" stroke="#6b7493" stroke-width="1.5"/>
+        <text x="350" y="810" text-anchor="middle" fill="#2b3350"
+              style="font:600 11px ui-sans-serif,system-ui,sans-serif">USB</text>
+
+        <!-- botoes, no centro da placa para nao cobrir os pads -->
+        <rect x="290" y="745" width="50" height="26" rx="4" fill="#2a3a5c" stroke="#1b2745"/>
+        <text x="315" y="762" text-anchor="middle" fill="#9aa6d4"
+              style="font:600 9.5px ui-sans-serif,system-ui,sans-serif">EN</text>
+        <rect x="360" y="745" width="50" height="26" rx="4" fill="#2a3a5c" stroke="#1b2745"/>
+        <text x="385" y="762" text-anchor="middle" fill="#9aa6d4"
+              style="font:600 9.5px ui-sans-serif,system-ui,sans-serif">BOOT</text>
+
+        <!-- LED onboard (GPIO2) -->
+        <circle cx="350" cy="186" r="7" fill="#2563eb" stroke="#1e3a8a" stroke-width="1.5"/>
+        <text x="366" y="190" fill="#bfe0ff"
+              style="font:500 9.5px ui-monospace,Menlo,monospace">LED · D2</text>
+
+        <g id="pins"></g>
+      </svg>
+
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <div class="card detail" id="detail">
+      <p class="hint">Clique em qualquer pino do diagrama para ver o que ele faz.</p>
+    </div>
+  </div>
+
+  <h2>O que este chip tem</h2>
+  <div class="grid" id="specs"></div>
+
+  <h2>Cuidados que valem para esta placa</h2>
+  <div class="notes" id="notes"></div>
+
+  <h2>Sugestão de ligação para a estufa de filamento</h2>
+  <div class="card">
+    <table id="estufa">
+      <thead>
+        <tr><th>Função</th><th class="mono">Pinos</th><th>Por quê</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <h2>Partições da flash (4 MB, tabela de fábrica)</h2>
+  <div class="card">
+    <table id="parts">
+      <thead>
+        <tr><th class="mono">Nome</th><th>Tipo</th><th class="mono">Endereço</th><th class="mono">Tamanho</th><th>Para quê</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <footer>
+    Dados de identidade, memória e partições lidos da placa em 02/11/2026 via
+    <code>esptool flash_id</code> e pelo firmware de diagnóstico em <code>src/main.cpp</code>
+    (ESP-IDF v4.4.7, Arduino-ESP32 2.0.17). Capacidades por GPIO conforme o
+    datasheet da série ESP32.
+  </footer>
+
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Categoria de cada pino: define a cor no diagrama e o rotulo da legenda.
+// ---------------------------------------------------------------------------
+const CATS = {
+  gpio: { cor: "#38bdf8", nome: "GPIO de uso geral" },
+  in:   { cor: "#c084fc", nome: "Somente entrada" },
+  boot: { cor: "#fb923c", nome: "Sensível ao boot" },
+  uart: { cor: "#f472b6", nome: "Serial do monitor" },
+  dac:  { cor: "#34d399", nome: "Saída analógica (DAC)" },
+  pwr:  { cor: "#fbbf24", nome: "Alimentação" },
+  gnd:  { cor: "#7c89b4", nome: "Terra" },
+  ctrl: { cor: "#f87171", nome: "Controle do chip" },
+};
+
+// ---------------------------------------------------------------------------
+// Pinos na ordem fisica, de cima (antena) para baixo (USB), vistos por cima.
+// ---------------------------------------------------------------------------
+const ESQ = [
+  { l: "EN", cat: "ctrl", papel: "Enable / Reset",
+    d: "Reinicia o chip quando levado a GND. É o mesmo sinal do botão EN da placa. Um capacitor de 100 nF daqui para o GND ajuda quando a gravação falha ao conectar.",
+    tags: ["ativo em nível baixo"] },
+
+  { l: "VP", gpio: 36, cat: "in", papel: "SENSOR_VP",
+    d: "Entrada analógica de alta qualidade, ligada internamente ao sensor Hall. Não aciona nada: é só entrada.",
+    tags: ["ADC1_CH0", "só entrada", "sem pull interno", "Hall"],
+    aviso: "Não tem pull-up nem pull-down interno. Se usar como botão, coloque um resistor externo." },
+
+  { l: "VN", gpio: 39, cat: "in", papel: "SENSOR_VN",
+    d: "Par da VP, também ligada ao sensor Hall interno. Boa escolha para termistor ou qualquer divisor resistivo.",
+    tags: ["ADC1_CH3", "só entrada", "sem pull interno", "Hall"],
+    aviso: "Não tem pull-up nem pull-down interno. Se usar como botão, coloque um resistor externo." },
+
+  { l: "D34", gpio: 34, cat: "in", papel: "Entrada analógica",
+    d: "Entrada do ADC1, portanto funciona com o Wi-Fi ligado. Ideal para ler sensores analógicos na estufa.",
+    tags: ["ADC1_CH6", "só entrada", "sem pull interno"],
+    aviso: "Não tem pull-up nem pull-down interno. Se usar como botão, coloque um resistor externo." },
+
+  { l: "D35", gpio: 35, cat: "in", papel: "Entrada analógica",
+    d: "Igual ao D34: entrada do ADC1, compatível com Wi-Fi ativo.",
+    tags: ["ADC1_CH7", "só entrada", "sem pull interno"],
+    aviso: "Não tem pull-up nem pull-down interno. Se usar como botão, coloque um resistor externo." },
+
+  { l: "D32", gpio: 32, cat: "gpio", papel: "GPIO + ADC1 + touch",
+    d: "Um dos pinos mais versáteis da placa: entrada e saída digital, ADC1 (funciona com Wi-Fi) e sensor capacitivo. Livre no boot.",
+    tags: ["ADC1_CH4", "Touch9", "PWM", "XTAL 32 kHz"] },
+
+  { l: "D33", gpio: 33, cat: "gpio", papel: "GPIO + ADC1 + touch",
+    d: "Mesmas qualidades do D32. Também livre durante o boot, então serve para acionar cargas sem sustos.",
+    tags: ["ADC1_CH5", "Touch8", "PWM", "XTAL 32 kHz"] },
+
+  { l: "D25", gpio: 25, cat: "dac", papel: "DAC1",
+    d: "Saída analógica real de 8 bits, não um PWM filtrado. Como GPIO comum é excelente: fica em nível baixo no boot.",
+    tags: ["DAC1", "ADC2_CH8", "PWM"] },
+
+  { l: "D26", gpio: 26, cat: "dac", papel: "DAC2",
+    d: "O segundo e último DAC do chip. Também confiável no boot, boa escolha para o relé ou MOSFET do aquecedor.",
+    tags: ["DAC2", "ADC2_CH9", "PWM"] },
+
+  { l: "D27", gpio: 27, cat: "gpio", papel: "GPIO + touch",
+    d: "GPIO comum, sem função especial no boot. Outro bom candidato para acionar carga.",
+    tags: ["ADC2_CH7", "Touch7", "PWM"] },
+
+  { l: "D14", gpio: 14, cat: "boot", papel: "HSPI CLK · JTAG MTMS",
+    d: "Funciona bem como GPIO, mas emite pulsos durante o boot. Evite ligá-lo direto no gate de um MOSFET que controla aquecedor.",
+    tags: ["ADC2_CH6", "Touch6", "HSPI CLK", "JTAG MTMS"],
+    aviso: "Emite pulsos de PWM nos primeiros instantes do boot." },
+
+  { l: "D12", gpio: 12, cat: "boot", papel: "Strapping · JTAG MTDI",
+    d: "Pino de strapping: o chip lê seu nível no boot para escolher a tensão da flash. Se estiver em nível alto na energização, a placa pode não dar boot.",
+    tags: ["ADC2_CH5", "Touch5", "HSPI MISO", "JTAG MTDI", "strapping"],
+    aviso: "Precisa estar em nível baixo no boot. Não pendure pull-up aqui." },
+
+  { l: "D13", gpio: 13, cat: "gpio", papel: "GPIO + touch",
+    d: "GPIO comum e bem comportado no boot, apesar de ficar no meio dos pinos de JTAG.",
+    tags: ["ADC2_CH4", "Touch4", "HSPI MOSI", "JTAG MTCK", "PWM"] },
+
+  { l: "GND", cat: "gnd", papel: "Terra",
+    d: "Referência de 0 V. Todo sensor, relé e fonte do projeto precisa compartilhar este terra com o ESP32.",
+    tags: ["0 V"] },
+
+  { l: "VIN", cat: "pwr", papel: "Entrada 5 V",
+    d: "Alimente a placa aqui com 5 V quando não houver USB. Passa pelo regulador de bordo, que entrega os 3V3 do chip.",
+    tags: ["4,5 – 5,5 V"],
+    aviso: "Não ligue 5 V aqui e o USB ao mesmo tempo, e nunca aplique 5 V no pino 3V3." },
+];
+
+const DIR = [
+  { l: "D23", gpio: 23, cat: "gpio", papel: "VSPI MOSI",
+    d: "MOSI padrão do SPI na biblioteca Arduino. Como GPIO comum é ótimo: livre no boot.",
+    tags: ["VSPI MOSI", "PWM"] },
+
+  { l: "D22", gpio: 22, cat: "gpio", papel: "I2C SCL",
+    d: "Clock padrão do I2C. É aqui que entra o SCL do sensor de temperatura e umidade e do display OLED.",
+    tags: ["I2C SCL", "PWM"] },
+
+  { l: "TX0", gpio: 1, cat: "uart", papel: "UART0 TX",
+    d: "Transmissão da serial usada pela gravação e pelo monitor. Deixe livre: usar como GPIO atrapalha o upload.",
+    tags: ["UART0 TX"],
+    aviso: "Ocupado pelo monitor serial e pela gravação. Emite dados no boot." },
+
+  { l: "RX0", gpio: 3, cat: "uart", papel: "UART0 RX",
+    d: "Recepção da serial de gravação. Fica em nível alto no boot. Melhor não usar para outra coisa.",
+    tags: ["UART0 RX"],
+    aviso: "Ocupado pelo monitor serial e pela gravação. Em nível alto no boot." },
+
+  { l: "D21", gpio: 21, cat: "gpio", papel: "I2C SDA",
+    d: "Dados padrão do I2C. Com o D22 forma o barramento onde você pendura sensor e display juntos.",
+    tags: ["I2C SDA", "PWM"] },
+
+  { l: "D19", gpio: 19, cat: "gpio", papel: "VSPI MISO",
+    d: "MISO padrão do SPI e GPIO de uso geral sem restrição de boot.",
+    tags: ["VSPI MISO", "PWM"] },
+
+  { l: "D18", gpio: 18, cat: "gpio", papel: "VSPI CLK",
+    d: "Clock padrão do SPI. Livre no boot, serve bem para PWM de ventoinha.",
+    tags: ["VSPI CLK", "PWM"] },
+
+  { l: "D5", gpio: 5, cat: "boot", papel: "VSPI CS · strapping",
+    d: "Chip select padrão do SPI e pino de strapping: emite pulsos de PWM no boot.",
+    tags: ["VSPI CS", "strapping", "PWM"],
+    aviso: "Emite pulsos no boot. Evite para acionar carga." },
+
+  { l: "TX2", gpio: 17, cat: "gpio", papel: "UART2 TX",
+    d: "Transmissão da segunda serial, livre para você usar sem conflitar com o monitor. Também vale como GPIO comum.",
+    tags: ["UART2 TX", "PWM"] },
+
+  { l: "RX2", gpio: 16, cat: "gpio", papel: "UART2 RX",
+    d: "Recepção da segunda serial. Útil se um dia quiser conversar com outro módulo sem perder o monitor.",
+    tags: ["UART2 RX", "PWM"] },
+
+  { l: "D4", gpio: 4, cat: "gpio", papel: "GPIO + touch",
+    d: "GPIO comum, confiável no boot. Boa opção para o sensor DHT ou para um botão.",
+    tags: ["ADC2_CH0", "Touch0", "PWM"] },
+
+  { l: "D2", gpio: 2, cat: "boot", papel: "LED onboard · strapping",
+    d: "Ligado ao LED azul da placa, o que o torna prático para sinalizar estado. Mas é pino de strapping e precisa ficar livre durante a gravação.",
+    tags: ["ADC2_CH2", "Touch2", "LED azul", "strapping"],
+    aviso: "Strapping: deve poder ir a nível baixo no boot, senão a gravação falha." },
+
+  { l: "D15", gpio: 15, cat: "boot", papel: "HSPI CS · JTAG MTDO",
+    d: "Pino de strapping que silencia o log de boot quando puxado a nível baixo. Emite pulsos na energização.",
+    tags: ["ADC2_CH3", "Touch3", "HSPI CS", "JTAG MTDO", "strapping"],
+    aviso: "Emite pulsos no boot. Em nível baixo, suprime o log de boot." },
+
+  { l: "GND", cat: "gnd", papel: "Terra",
+    d: "Segundo ponto de terra, no lado oposto da placa. Use o mais próximo de cada carga para encurtar o retorno de corrente.",
+    tags: ["0 V"] },
+
+  { l: "3V3", cat: "pwr", papel: "Saída 3,3 V",
+    d: "Saída do regulador de bordo para alimentar sensores. Dá conta de sensores e display, não de aquecedor nem motor.",
+    tags: ["≈ 500 mA no limite"],
+    aviso: "É saída, não entrada. Nunca aplique tensão externa aqui, e não puxe corrente de carga pesada." },
+];
+
+// ---------------------------------------------------------------------------
+// Desenho dos pinos
+// ---------------------------------------------------------------------------
+const Y0 = 212, DY = 38;
+const SVG_NS = "http://www.w3.org/2000/svg";
+const grupo = document.getElementById("pins");
+let selecionado = null;
+
+function el(tag, attrs) {
+  const n = document.createElementNS(SVG_NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  return n;
+}
+
+function desenhaPino(pino, i, lado) {
+  const y = Y0 + i * DY;
+  const esq = lado === "esq";
+  const cor = CATS[pino.cat].cor;
+
+  const g = el("g", { class: "pin-hit", tabindex: "0", role: "button" });
+  g.setAttribute("aria-label", pino.l + (pino.gpio != null ? " GPIO " + pino.gpio : ""));
+
+  // faixa de fundo clicavel, cobrindo rotulo + pad
+  g.appendChild(el("rect", {
+    class: "pin-row-bg",
+    x: esq ? 8 : 444, y: y - 15, width: 252, height: 30, rx: 5, fill: "transparent",
+  }));
+
+  // perna metalica ligando o pad ao rotulo
+  g.appendChild(el("line", {
+    x1: esq ? 200 : 472, y1: y, x2: esq ? 234 : 502, y2: y,
+    stroke: "#8d97b4", "stroke-width": 2.5,
+  }));
+
+  // pad no corpo da placa
+  g.appendChild(el("rect", {
+    class: "pin-pad",
+    x: esq ? 236 : 448, y: y - 10, width: 20, height: 20, rx: 4,
+    fill: cor, stroke: "#0b1020", "stroke-width": 1.5,
+  }));
+
+  // rotulo do silkscreen
+  const rot = el("text", {
+    class: "pin-label",
+    x: esq ? 190 : 514, y: y - 1,
+    "text-anchor": esq ? "end" : "start",
+  });
+  rot.textContent = pino.l;
+  g.appendChild(rot);
+
+  // numero do GPIO embaixo do rotulo
+  if (pino.gpio != null) {
+    const n = el("text", {
+      class: "pin-gpio",
+      x: esq ? 190 : 514, y: y + 11,
+      "text-anchor": esq ? "end" : "start",
+    });
+    n.textContent = "GPIO " + pino.gpio;
+    g.appendChild(n);
+  }
+
+  const abrir = () => mostra(pino, g);
+  g.addEventListener("click", abrir);
+  g.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); abrir(); }
+  });
+
+  grupo.appendChild(g);
+}
+
+ESQ.forEach((p, i) => desenhaPino(p, i, "esq"));
+DIR.forEach((p, i) => desenhaPino(p, i, "dir"));
+
+// ---------------------------------------------------------------------------
+// Painel de detalhes
+// ---------------------------------------------------------------------------
+const painel = document.getElementById("detail");
+
+function mostra(pino, g) {
+  if (selecionado) selecionado.classList.remove("sel");
+  g.classList.add("sel");
+  selecionado = g;
+
+  const cor = CATS[pino.cat].cor;
+  painel.innerHTML = `
+    <div class="detail-head">
+      <span class="detail-pin" style="color:${cor}">${pino.l}</span>
+      ${pino.gpio != null ? `<span class="detail-gpio">GPIO ${pino.gpio}</span>` : ""}
+    </div>
+    <div class="detail-role">${pino.papel} &middot; ${CATS[pino.cat].nome}</div>
+    <p class="detail-desc">${pino.d}</p>
+    <div class="tags">${(pino.tags || []).map((t) => `<span class="tag">${t}</span>`).join("")}</div>
+    ${pino.aviso ? `<div class="alert"><b>Atenção:</b> ${pino.aviso}</div>` : ""}
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// Legenda
+// ---------------------------------------------------------------------------
+document.getElementById("legend").innerHTML = Object.values(CATS)
+  .map((c) => `<span><i class="dot" style="background:${c.cor}"></i>${c.nome}</span>`)
+  .join("");
+
+// ---------------------------------------------------------------------------
+// Especificacoes lidas da placa
+// ---------------------------------------------------------------------------
+const SPECS = [
+  ["Processador", "2 × Xtensa LX6", "240 MHz, 32 bits. Revisão v3.0, a mais recente do ESP32 clássico."],
+  ["Memória RAM", "367 KB", "Heap utilizável medido na placa. Sem PSRAM: é um módulo WROOM, não WROVER."],
+  ["Flash", "4 MB", "Externa, modo DIO a 40 MHz. JEDEC 0x5E4016."],
+  ["Espaço p/ firmware", "1,25 MB", "Por slot de aplicação, com dois slots para atualização OTA."],
+  ["Wi-Fi", "2,4 GHz b/g/n", "Station e access point. Antena em trilha na própria PCB."],
+  ["Bluetooth", "Clássico + BLE", "O ESP32 clássico tem os dois; os modelos S2 e C3 não."],
+  ["GPIOs no header", "25", "Dos 34 do chip. Os GPIOs 6–11 servem à flash e não saem na placa."],
+  ["Conversores", "18 × ADC · 2 × DAC", "ADC de 12 bits em dois blocos; DAC de 8 bits em D25 e D26."],
+  ["PWM", "16 canais", "O LEDC controla ventoinha e aquecedor de sobra."],
+  ["Touch capacitivo", "10 sensores", "Nos pinos marcados com Touch no diagrama."],
+  ["Cristal", "40 MHz", "Confirmado pelo esptool na detecção do chip."],
+  ["Alimentação", "5 V ou USB", "Regulador de bordo gera os 3,3 V do chip."],
+];
+
+document.getElementById("specs").innerHTML = SPECS
+  .map(([t, v, s]) => `<dl class="spec"><dt>${t}</dt><dd>${v}<small>${s}</small></dd></dl>`)
+  .join("");
+
+// ---------------------------------------------------------------------------
+// Cuidados
+// ---------------------------------------------------------------------------
+const NOTAS = [
+  ["#fb923c", "ADC2 não funciona com Wi-Fi ligado",
+   "O bloco ADC2 é requisitado pelo rádio. Se a estufa for ter interface web, leia sensores analógicos só pelo ADC1: <code>D32</code>, <code>D33</code>, <code>D34</code>, <code>D35</code>, <code>VP</code> e <code>VN</code>."],
+  ["#c084fc", "Quatro pinos são só entrada",
+   "<code>D34</code>, <code>D35</code>, <code>VP</code> (36) e <code>VN</code> (39) não acionam nada e não têm pull-up nem pull-down interno. Não tente ligar relé neles."],
+  ["#f87171", "Pinos que mexem no boot",
+   "<code>D2</code>, <code>D5</code>, <code>D12</code> e <code>D15</code> são de strapping, e <code>D14</code> emite pulsos ao energizar. Um aquecedor ligado a eles pode ganhar um tranco a cada reset."],
+  ["#38bdf8", "Os GPIOs 6 a 11 não existem aqui",
+   "Ficam dedicados à flash SPI e nem saem no header de 30 pinos. Se um tutorial pedir por eles, é de outra placa."],
+  ["#fbbf24", "O 3V3 é saída, não entrada",
+   "Alimente pelo <code>VIN</code> (5 V) ou pelo USB. Aplicar tensão no <code>3V3</code> passa por cima do regulador e pode queimar o chip."],
+  ["#34d399", "ADC não é linear nas pontas",
+   "A leitura satura perto de 3,3 V e é imprecisa abaixo de ~0,15 V. Dimensione o divisor do termistor para trabalhar no meio da escala."],
+];
+
+document.getElementById("notes").innerHTML = NOTAS
+  .map(([c, t, p]) => `<div class="note"><h3><i class="dot" style="background:${c}"></i>${t}</h3><p>${p}</p></div>`)
+  .join("");
+
+// ---------------------------------------------------------------------------
+// Sugestao para o projeto da estufa
+// ---------------------------------------------------------------------------
+const ESTUFA = [
+  ["Sensor de temperatura e umidade (I2C)", "D21 (SDA) · D22 (SCL)", "Barramento I2C padrão. SHT31, BME280 e AHT20 entram aqui, e o display pode dividir os mesmos dois fios."],
+  ["Display OLED", "D21 · D22", "Compartilha o I2C com o sensor; só precisa ter endereço diferente."],
+  ["Termistor ou sensor analógico", "D32 · D33 · D34 · D35", "Todos no ADC1, que continua funcionando com o Wi-Fi ativo."],
+  ["Aquecedor (relé ou MOSFET)", "D25 · D26 · D27", "Ficam em nível baixo durante o boot, então o aquecedor não dispara sozinho no reset."],
+  ["Ventoinha com PWM", "D18 · D19 · D23", "GPIOs livres no boot e com PWM por hardware para controlar rotação."],
+  ["LED de status", "D2", "Já tem o LED azul soldado na placa, sem nenhum componente extra."],
+  ["Botão de ajuste", "D4 · D13 · D16 · D17", "Aceitam pull-up interno, dispensando resistor externo."],
+  ["Deixe livres", "TX0 · RX0 · D12", "A serial é usada na gravação e no monitor; o D12 decide a tensão da flash no boot."],
+];
+
+document.querySelector("#estufa tbody").innerHTML = ESTUFA
+  .map(([f, p, m]) => `<tr><td>${f}</td><td class="mono" style="white-space:nowrap">${p}</td><td style="color:#cdd5f5">${m}</td></tr>`)
+  .join("");
+
+// ---------------------------------------------------------------------------
+// Particoes lidas da placa
+// ---------------------------------------------------------------------------
+const PARTS = [
+  ["nvs", "data", "0x009000", "20 KB", "Chave-valor não volátil: credenciais de Wi-Fi e temperatura alvo salva."],
+  ["otadata", "data", "0x00E000", "8 KB", "Marca qual dos dois slots de aplicação deve dar boot."],
+  ["app0", "app", "0x010000", "1280 KB", "Onde seu firmware está rodando agora."],
+  ["app1", "app", "0x150000", "1280 KB", "Slot reservado para receber atualização pelo ar."],
+  ["spiffs", "data", "0x290000", "1408 KB", "Sistema de arquivos: espaço de sobra para a interface web da estufa."],
+  ["coredump", "data", "0x3F0000", "64 KB", "Guarda o despejo de memória quando o firmware trava."],
+];
+
+document.querySelector("#parts tbody").innerHTML = PARTS
+  .map(([n, t, e, s, p]) => `<tr><td class="mono">${n}</td><td>${t}</td><td class="mono">${e}</td><td class="mono">${s}</td><td style="color:#cdd5f5">${p}</td></tr>`)
+  .join("");
+
+// abre o painel ja com um pino util selecionado
+document.querySelectorAll(".pin-hit")[0].dispatchEvent(new Event("click"));
+</script>
+</body>
+</html>
