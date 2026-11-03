@@ -1,0 +1,848 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>NodeMCU ESP-32S — placa e ligações</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Semi+Condensed:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f3f2ef; --surface:#ffffff; --fg:#26282b; --muted:#6b6e72; --line:#d9d7d2;
+  --accent:#e2681a; --accent-soft:#fbe7d8;
+  --pwr:#c8372d; --v33:#c98a12; --sig:#3c3f44; --gpio:#2f6fb3; --in:#2e8a57; --sys:#7a5cc0;
+  --board:#e9e4d8; --board-line:#bcb4a2; --code:#f7f6f3;
+  --font-display:"Saira Semi Condensed","Arial Narrow",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#1c1d1f; --surface:#25272a; --fg:#ebe9e5; --muted:#a2a39f; --line:#3a3c40;
+  --accent:#f0832f; --accent-soft:#3d2a1c;
+  --pwr:#ef6a5f; --v33:#e2b04a; --sig:#cfcdc8; --gpio:#6aa6e6; --in:#5cc28a; --sys:#a68be6;
+  --board:#34322d; --board-line:#5c574c; --code:#1b1c1e;
+  color-scheme:dark;
+}}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 var(--font-body)}
+.wrap{max-width:1040px;margin:0 auto;padding-inline:max(16px,env(safe-area-inset-left,0px));padding-block:28px 56px;display:flex;flex-direction:column;gap:28px}
+h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0;line-height:1.15}
+h1{font-size:clamp(30px,5vw,44px);font-weight:700;letter-spacing:.3px}
+h1 span{color:var(--accent)}
+h2{font-size:24px;font-weight:700}
+h3{font-size:17px;font-weight:700}
+p{margin:0;max-width:68ch}
+.eyebrow{font:500 12px/1 var(--font-mono);text-transform:uppercase;letter-spacing:1.4px;color:var(--muted)}
+.lead{color:var(--muted);font-size:16px}
+header{display:flex;flex-direction:column;gap:10px}
+.spec{display:flex;flex-wrap:wrap;gap:8px 22px;font:13px var(--font-mono);color:var(--muted)}
+.spec b{color:var(--fg);font-weight:500}
+section{display:flex;flex-direction:column;gap:16px}
+.fig{background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow-x:auto}
+.fig svg{display:block;min-width:860px;width:100%;height:auto}
+.cap{font-size:13px;color:var(--muted)}
+code{font:500 12.5px var(--font-mono);background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:1px 4px;color:var(--fg)}
+
+.tabs{display:flex;gap:4px;border-bottom:2px solid var(--fg);margin-top:4px}
+.tab{font:700 17px var(--font-display);letter-spacing:.3px;padding:10px 20px;cursor:pointer;
+  background:transparent;color:var(--muted);border:1px solid var(--line);border-bottom:none;
+  border-radius:6px 6px 0 0;margin-bottom:-1px}
+.tab small{display:block;font:500 10.5px var(--font-mono);letter-spacing:1.2px;text-transform:uppercase;opacity:.75}
+.tab[aria-selected="true"]{background:var(--surface);color:var(--fg);border-color:var(--fg);border-bottom:1px solid var(--surface)}
+.tab[aria-selected="true"] small{color:var(--accent);opacity:1}
+.panel{display:flex;flex-direction:column;gap:38px;padding-top:10px}
+.panel[hidden]{display:none}
+
+svg text{font-family:var(--font-mono);fill:var(--fg)}
+.t-s{font-size:11px}.t-m{font-size:12.5px}.t-b{font-size:13px;font-weight:500}.t-mut{fill:var(--muted)}
+.box{fill:var(--surface);stroke:var(--fg);stroke-width:1.4}
+
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;font:12.5px var(--font-mono);color:var(--muted)}
+.legend i{display:inline-block;width:22px;height:3px;vertical-align:middle;margin-right:6px;border-radius:2px}
+
+.tbl{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:6px}
+table{border-collapse:collapse;width:100%;min-width:660px;font-size:14px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:500 11.5px var(--font-mono);text-transform:uppercase;letter-spacing:1px;color:var(--muted);background:var(--bg)}
+tr.grp td{font:700 14px var(--font-display);letter-spacing:.4px;background:var(--bg);padding-top:12px}
+td.pin{font-family:var(--font-mono);font-weight:500;white-space:nowrap}
+td.q{font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+td small{color:var(--muted)}
+.chip{display:inline-block;font:500 11px/1 var(--font-mono);padding:4px 7px;border-radius:3px;white-space:nowrap;border:1px solid}
+
+.power{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media (max-width:860px){.power{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:460px){.power{grid-template-columns:1fr}}
+.pw{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px;display:flex;flex-direction:column;gap:3px}
+.pw .n{font:700 24px var(--font-display);font-variant-numeric:tabular-nums;line-height:1.1}
+.pw .n small{font-size:14px;color:var(--muted);font-weight:500}
+.pw p{font-size:13px;color:var(--muted)}
+
+.notes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (max-width:760px){.notes{grid-template-columns:1fr}}
+.note{border-left:3px solid var(--accent);background:var(--surface);padding:12px 14px;border-radius:0 6px 6px 0;min-width:0}
+.note.warn{border-left-color:var(--pwr)}
+.note b{display:block;margin-bottom:3px}
+.note p{font-size:14px;color:var(--muted)}
+.note code{background:var(--bg)}
+
+.codehead{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.codehead .eyebrow{font-size:11px}
+.copy{font:500 11.5px var(--font-mono);color:var(--muted);background:var(--surface);
+  border:1px solid var(--line);border-radius:4px;padding:5px 10px;cursor:pointer}
+.copy:hover{color:var(--fg);border-color:var(--fg)}
+pre{margin:0;background:var(--code);border:1px solid var(--line);border-radius:6px;
+  padding:14px 16px;overflow-x:auto}
+pre code{font:400 12.5px/1.65 var(--font-mono);background:none;border:none;padding:0;white-space:pre;color:var(--fg)}
+.cmt{color:var(--muted)}
+.str{color:var(--in)}
+.num{color:var(--accent)}
+
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:10px;margin:0;padding:0;list-style:none}
+.steps li{counter-increment:s;display:flex;gap:12px;align-items:flex-start;font-size:14.5px}
+.steps li::before{content:counter(s);flex:none;width:22px;height:22px;border-radius:50%;
+  background:var(--accent);color:#fff;font:700 12px/22px var(--font-mono);text-align:center;margin-top:1px}
+.steps li small{display:block;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <span class="eyebrow">Placa do projeto</span>
+  <h1>NodeMCU <span>ESP-32S</span></h1>
+  <p class="lead">V1.1, header de 38 pinos. Ficha da placa e das ligações, conferidas no próprio hardware e no silkscreen.</p>
+</header>
+
+<div class="tabs" role="tablist">
+  <button class="tab" role="tab" id="t1" aria-controls="p1" aria-selected="true"><small>Etapa 1</small>A placa</button>
+  <button class="tab" role="tab" id="t2" aria-controls="p2" aria-selected="false"><small>Etapa 2</small>Display TFT</button>
+</div>
+
+<!-- =================================================================== -->
+<!-- ETAPA 1                                                             -->
+<!-- =================================================================== -->
+<div class="panel" id="p1" role="tabpanel" aria-labelledby="t1">
+
+  <div class="spec">
+    <span>chip <b>ESP32-D0WD-V3</b></span>
+    <span>revisão <b>v3.0</b></span>
+    <span>núcleos <b>2 × 240 MHz</b></span>
+    <span>flash <b>4 MB</b></span>
+    <span>USB <b>CP2102</b></span>
+    <span>MAC <b>C8:F0:9E:52:EC:FC</b></span>
+  </div>
+
+  <section>
+    <h2>O que ela tem</h2>
+    <div class="power" id="specs"></div>
+  </section>
+
+  <section>
+    <h2>Pinagem</h2>
+    <p>Placa vista por cima, com a antena no topo e o USB embaixo. São 19 pinos
+    de cada lado: 32 GPIOs, três terras, 3V3, 5V e o EN. Dos 34 GPIOs do chip,
+    só o 37 e o 38 não saem — esses dois nem existem no módulo WROOM.</p>
+    <div class="legend" id="legend"></div>
+    <div class="fig">
+      <svg id="pinout" viewBox="0 0 920 820" role="img"
+           aria-label="Pinagem da NodeMCU ESP-32S de 38 pinos, com a função de cada pino">
+        <rect x="378" y="56" width="164" height="742" rx="6" class="box"/>
+        <rect x="392" y="68" width="136" height="54" rx="3" fill="var(--board)" stroke="var(--board-line)" stroke-width="1.2"/>
+        <text x="460" y="90" text-anchor="middle" class="t-s t-mut">ESP32-WROOM-32</text>
+        <text x="460" y="106" text-anchor="middle" class="t-s t-mut">antena Wi-Fi / BT</text>
+        <rect x="430" y="762" width="60" height="22" rx="3" fill="var(--board)" stroke="var(--board-line)" stroke-width="1.2"/>
+        <text x="460" y="777" text-anchor="middle" class="t-s t-mut">USB</text>
+        <g id="rows"></g>
+      </svg>
+    </div>
+    <p class="cap">Os rótulos são os que estão impressos na placa. O número entre parênteses é o GPIO que você escreve no código — e repare que os dois nem sempre batem.</p>
+  </section>
+
+  <section>
+    <h2>Monitor serial</h2>
+    <p>O ESP32 não tem USB nativo: quem conversa com o computador é o
+    <b>CP2102</b> soldado na placa, visível na foto ao lado do conector. Ele
+    aparece no Mac como <code>/dev/cu.usbserial-0001</code>. Todo
+    <code>Serial.println()</code> do firmware sai por ali.</p>
+
+    <div class="tbl"><table>
+      <thead><tr><th>Configuração</th><th>Valor</th><th>Para quê</th></tr></thead>
+      <tbody>
+        <tr><td>Velocidade</td><td class="pin">115200</td><td><small>Definida em <code>monitor_speed</code>. Precisa ser igual ao <code>Serial.begin()</code> do código, senão só aparece lixo na tela.</small></td></tr>
+        <tr><td>Porta</td><td class="pin">/dev/cu.usbserial-0001</td><td><small>Detectada sozinha. Só aparece com a placa plugada.</small></td></tr>
+        <tr><td>Abrir o monitor</td><td class="pin">pio device monitor</td><td><small>Ou o ícone de tomada na barra do PlatformIO. <code>Ctrl+C</code> fecha.</small></td></tr>
+        <tr><td>Gravar e abrir junto</td><td class="pin">pio run -t upload -t monitor</td><td><small>Grava e já mostra o boot, sem perder as primeiras linhas.</small></td></tr>
+        <tr><td>Filtros</td><td class="pin">esp32_exception_decoder</td><td><small>Traduz travamento em número de linha do seu código, em vez de endereço de memória.</small></td></tr>
+        <tr><td></td><td class="pin">time</td><td><small>Põe a hora na frente de cada linha, útil para medir intervalos.</small></td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Bibliotecas e dependências</h3>
+    <p>A Etapa 1 não precisa de nenhuma biblioteca de fora. Tudo que o firmware
+    de diagnóstico usa já vem com o core Arduino do ESP32.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Dependência</th><th>Origem</th><th>Para quê</th></tr></thead>
+      <tbody>
+        <tr><td class="pin">platform = espressif32</td><td><span class="chip" style="color:var(--in);border-color:var(--in)">PlatformIO</span></td><td><small>Compilador, esptool e o core do ESP32. Instala sozinho no primeiro build.</small></td></tr>
+        <tr><td class="pin">framework = arduino</td><td><span class="chip" style="color:var(--in);border-color:var(--in)">PlatformIO</span></td><td><small>Core Arduino-ESP32 2.0.17, sobre o ESP-IDF v4.4.7.</small></td></tr>
+        <tr><td class="pin">Arduino.h</td><td><span class="chip" style="color:var(--gpio);border-color:var(--gpio)">core</span></td><td><small><code>Serial</code>, <code>ESP.getFlashChipSize()</code>, <code>psramFound()</code> e os apelidos de pino.</small></td></tr>
+        <tr><td class="pin">esp_system.h</td><td><span class="chip" style="color:var(--gpio);border-color:var(--gpio)">core</span></td><td><small>Motivo do último boot, via <code>esp_reset_reason()</code>.</small></td></tr>
+        <tr><td class="pin">esp_chip_info.h</td><td><span class="chip" style="color:var(--gpio);border-color:var(--gpio)">core</span></td><td><small>Modelo, revisão, número de núcleos e quais rádios existem.</small></td></tr>
+        <tr><td class="pin">esp_mac.h</td><td><span class="chip" style="color:var(--gpio);border-color:var(--gpio)">core</span></td><td><small>Os quatro endereços MAC derivados do eFuse.</small></td></tr>
+        <tr><td class="pin">esp_flash.h</td><td><span class="chip" style="color:var(--gpio);border-color:var(--gpio)">core</span></td><td><small>JEDEC ID da flash, que identifica o fabricante.</small></td></tr>
+        <tr><td class="pin">esp_partition.h</td><td><span class="chip" style="color:var(--gpio);border-color:var(--gpio)">core</span></td><td><small>Percorre a tabela de partições gravada na flash.</small></td></tr>
+        <tr><td class="pin">soc/soc_caps.h</td><td><span class="chip" style="color:var(--gpio);border-color:var(--gpio)">core</span></td><td><small>Quantos UART, I2C, SPI, PWM e touch este SoC tem.</small></td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="notes">
+      <div class="note"><b>Onde está esse firmware</b><p>Em <code>extras/diagnostico_placa.cpp</code>. Fica fora de <code>src/</code> de propósito: o PlatformIO não compila o que está lá, então ele não briga com o teste do display. Para rodar de novo, copie por cima de <code>src/main.cpp</code>.</p></div>
+      <div class="note"><b>Nada aparece no monitor?</b><p>Quase sempre é velocidade errada ou o monitor aberto em outro programa travando a porta. O firmware também espera 400 ms antes de imprimir, senão as primeiras linhas se perdem.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Pino por pino</h2>
+    <p>Na ordem física, de cima para baixo, com a placa vista por cima e o USB embaixo.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Pino</th><th>GPIO</th><th>Recursos</th><th>Observação</th></tr></thead>
+      <tbody id="pinrows"></tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Limitações da placa</h2>
+    <div class="notes" id="notes"></div>
+  </section>
+
+  <section>
+    <h2>Memória e rádios</h2>
+    <p>A coluna da direita diz de onde veio cada número, para você saber no que confiar.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Item</th><th>Valor</th><th>Detalhe</th><th>Fonte</th></tr></thead>
+      <tbody id="memrows"></tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Divisão da flash</h2>
+    <p>Tabela padrão de fábrica para 4 MB, que é a que o PlatformIO grava. Ainda
+    não li a tabela desta placa: para isso é preciso gravar o firmware de
+    diagnóstico nela.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Nome</th><th>Tipo</th><th>Endereço</th><th>Tamanho</th><th>Conteúdo</th></tr></thead>
+      <tbody id="partrows"></tbody>
+    </table></div>
+  </section>
+
+  <p class="cap">Chip, flash e MAC lidos desta placa em 02/11/2026 com <code>esptool flash_id</code>.
+  Pinagem conferida no silkscreen da própria placa, frente e verso.</p>
+
+</div>
+
+<!-- =================================================================== -->
+<!-- ETAPA 2                                                             -->
+<!-- =================================================================== -->
+<div class="panel" id="p2" role="tabpanel" aria-labelledby="t2" hidden>
+
+  <div class="spec">
+    <span>módulo <b>GMT024-10 v2.1</b></span>
+    <span>tela <b>2,4" · 240×320</b></span>
+    <span>interface <b>SPI 4 fios</b></span>
+    <span>driver <b>ST7789V (a confirmar)</b></span>
+    <span>biblioteca <b>TFT_eSPI</b></span>
+  </div>
+
+  <section>
+    <h2>O display</h2>
+    <p>Primeira peça a entrar no circuito. Painel de 2,4 polegadas com 240×320
+    pixels e interface SPI de 4 fios, que o ESP32 toca por hardware pelo
+    barramento VSPI.</p>
+    <div class="notes">
+      <div class="note warn"><b>Confira o silkscreen antes de ligar</b><p>Não achei a folha de dados do <code>GMT024-10 v2.1</code> em nenhuma fonte. O que achei: na mesma família da GoldenMorning, o <code>GMT024-08</code> é 2,4" 240×320 SPI com <b>ST7789V</b> e 8 pinos. Por isso o projeto começa com esse driver. Os nomes dos pinos abaixo são os usuais; compare um por um com o seu módulo.</p></div>
+      <div class="note warn"><b>Alimente com 3,3 V</b><p>O ESP32 fala em 3,3 V. Se o módulo não tiver regulador, 5 V no <code>VCC</code> pode queimar o painel. Comece pelo <code>3V3</code> da placa: se o módulo aceita os dois, 3,3 V funciona igual.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Ligações</h2>
+    <p>Oito fios, dos quais cinco ocupam GPIO. Os pinos foram escolhidos longe
+    dos de strapping, dos que emitem pulso no boot e dos seis reservados à
+    flash — tudo que a Etapa 1 mapeou.</p>
+    <div class="legend" id="legend2"></div>
+    <div class="fig">
+      <svg id="ligacao" viewBox="0 0 920 430" role="img"
+           aria-label="Ligação da NodeMCU ESP-32S ao display SPI de 2,4 polegadas, oito fios">
+        <rect x="60" y="66" width="170" height="306" rx="6" class="box"/>
+        <text x="145" y="356" text-anchor="middle" class="t-b" style="font-size:16px">NodeMCU</text>
+        <text x="145" y="88" text-anchor="middle" class="t-s t-mut">ESP-32S · 38p</text>
+
+        <rect x="690" y="56" width="180" height="326" rx="6" class="box"/>
+        <rect x="704" y="70" width="152" height="252" rx="3" fill="var(--board)" stroke="var(--board-line)" stroke-width="1.2"/>
+        <text x="780" y="186" text-anchor="middle" class="t-s t-mut">2,4"</text>
+        <text x="780" y="204" text-anchor="middle" class="t-s t-mut">240 × 320</text>
+        <text x="780" y="348" text-anchor="middle" class="t-b" style="font-size:15px">GMT024-10</text>
+        <text x="780" y="366" text-anchor="middle" class="t-s t-mut">header de 8 pinos</text>
+
+        <g id="rows2"></g>
+      </svg>
+    </div>
+    <div class="tbl"><table>
+      <thead><tr><th>Pino da placa</th><th>Pino do display</th><th>Sinal</th><th>Observação</th></tr></thead>
+      <tbody id="wirerows"></tbody>
+    </table></div>
+    <div class="notes">
+      <div class="note"><b>Outros nomes para os mesmos pinos</b><p>Cada fabricante escreve diferente. <code>SCL</code> também aparece como <code>SCK</code> ou <code>CLK</code>; <code>SDA</code> como <code>SDI</code>, <code>MOSI</code> ou <code>DIN</code>; <code>RES</code> como <code>RST</code> ou <code>RESET</code>; <code>DC</code> como <code>RS</code> ou <code>A0</code>; <code>BLK</code> como <code>LED</code> ou <code>BL</code>.</p></div>
+      <div class="note"><b>Se o módulo tiver 14 pinos</b><p>Então é um ILI9341 com touch resistivo. Os cinco pinos <code>T_</code> são o touch, num chip separado (XPT2046), e podem ficar desligados neste teste. Troque o driver em <code>platformio.ini</code>.</p></div>
+      <div class="note"><b>Nada de MISO neste teste</b><p>O display só recebe dados; não precisamos ler nada dele. Por isso <code>TFT_MISO</code> não é definido e o <code>P19</code> fica livre.</p></div>
+      <div class="note"><b>Luz de fundo no 3V3</b><p>O <code>BLK</code> fica aceso direto. Controlar o brilho por PWM puxa corrente demais para um GPIO: pede um transistor, e isso fica para depois.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Dá para usar menos pinos</h2>
+    <p>Dos oito fios, três não disputam GPIO: <code>VCC</code>, <code>GND</code> e
+    <code>BLK</code> vão em alimentação e terra. Sobram cinco GPIOs, e dois deles
+    são negociáveis.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Fio</th><th>Dá para economizar?</th><th>O que acontece</th></tr></thead>
+      <tbody>
+        <tr><td class="pin">SCL / SCK</td><td><span class="chip" style="color:var(--pwr);border-color:var(--pwr)">não</span></td><td><small>É o clock do barramento.</small></td></tr>
+        <tr><td class="pin">SDA / MOSI</td><td><span class="chip" style="color:var(--pwr);border-color:var(--pwr)">não</span></td><td><small>É por onde os pixels passam.</small></td></tr>
+        <tr><td class="pin">DC</td><td><span class="chip" style="color:var(--pwr);border-color:var(--pwr)">não</span></td><td><small>Diz se o byte é comando ou pixel. Sem ele o painel não entende nada.</small></td></tr>
+        <tr><td class="pin">RES</td><td><span class="chip" style="color:var(--in);border-color:var(--in)">sim, de graça</span></td><td><small>Ligue no <code>EN</code> da placa: o display reinicia junto com o ESP32, que é o que você quer. Use <code>-DTFT_RST=-1</code>.</small></td></tr>
+        <tr><td class="pin">CS</td><td><span class="chip" style="color:var(--accent);border-color:var(--accent)">sim, com preço</span></td><td><small>Ligue no <code>GND</code> e use <code>-DTFT_CS=-1</code>. Só funciona enquanto o display for o único dispositivo no SPI: cartão SD ou touch deixam de ser possíveis.</small></td></tr>
+      </tbody>
+    </table></div>
+    <div class="notes">
+      <div class="note"><b>A recomendação: 4 GPIOs</b><p>Ligue o <code>RES</code> no <code>EN</code> e mantenha o <code>CS</code> num GPIO. Você economiza um pino sem perder nada, e guarda a porta aberta para um cartão SD depois.</p></div>
+      <div class="note"><b>Nesta placa não falta pino</b><p>Com 32 GPIOs expostos, cinco para o display não apertam nada. E os sensores I2C usam <code>P21</code> e <code>P22</code>, que é outro barramento: não competem com o display.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Configuração do projeto</h2>
+    <p>A TFT_eSPI é rápida mas exige saber os pinos em tempo de compilação. Dá
+    para configurar sem editar nada dentro da biblioteca: é o que
+    <code>USER_SETUP_LOADED</code> faz, passando tudo por <code>build_flags</code>.</p>
+    <div class="codehead">
+      <span class="eyebrow">platformio.ini</span>
+      <button class="copy" data-copy="c-ini">copiar</button>
+    </div>
+    <pre><code id="c-ini">[env:esp32doit-devkit-v1]
+platform = espressif32
+board = esp32doit-devkit-v1
+framework = arduino
+
+monitor_speed = 115200
+monitor_filters = esp32_exception_decoder, time
+
+lib_deps =
+  bodmer/TFT_eSPI@^2.5.43
+
+build_flags =
+  -DUSER_SETUP_LOADED=1
+
+  <span class="cmt">; driver do painel. Se a tela acender branca ou embaralhada,</span>
+  <span class="cmt">; troque uma linha pela outra.</span>
+  -DST7789_DRIVER=1
+  <span class="cmt">; -DILI9341_DRIVER=1</span>
+
+  -DTFT_WIDTH=240
+  -DTFT_HEIGHT=320
+
+  <span class="cmt">; ligacao ao ESP32</span>
+  -DTFT_MOSI=23
+  -DTFT_SCLK=18
+  -DTFT_CS=13
+  -DTFT_DC=27
+  -DTFT_RST=26
+
+  <span class="cmt">; fontes embutidas</span>
+  -DLOAD_GLCD=1
+  -DLOAD_FONT2=1
+  -DLOAD_FONT4=1
+  -DLOAD_FONT6=1
+  -DLOAD_FONT7=1
+  -DLOAD_GFXFF=1
+
+  -DSPI_FREQUENCY=40000000</code></pre>
+    <div class="notes">
+      <div class="note"><b>Por que ainda diz devkit-v1</b><p>O <code>board</code> descreve o chip e a flash, não o formato do header. A NodeMCU ESP-32S tem o mesmo ESP32-D0WD-V3 e os mesmos 4 MB, então o perfil serve e grava sem erro. Trocar para <code>nodemcu-32s</code> funciona igual.</p></div>
+      <div class="note"><b>Dependências</b><p><code>bodmer/TFT_eSPI@^2.5.43</code> desenha na tela usando o SPI por hardware e traz as fontes embutidas, incluindo a de sete segmentos do relógio. Baixa sozinha no primeiro build. A <code>SPI</code> já vem com o core.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Código de teste</h2>
+    <p>Põe <b>Hello World</b> na tela e um relógio que anda de segundo em segundo,
+    contando desde o boot. O mesmo relógio sai no monitor serial, junto da memória
+    livre, e o LED azul da placa pisca no mesmo ritmo. Se os três andarem juntos,
+    a ligação está certa.</p>
+    <div class="codehead">
+      <span class="eyebrow">src/main.cpp</span>
+      <button class="copy" data-copy="c-cpp">copiar</button>
+    </div>
+    <pre><code id="c-cpp"><span class="cmt">// ---------------------------------------------------------------------------</span>
+<span class="cmt">// Etapa 2 - teste do display 2,4" SPI 240x320 (GMT024-10 v2.1)</span>
+<span class="cmt">//</span>
+<span class="cmt">// Mostra "Hello World" e um relogio que anda de segundo em segundo, tanto na</span>
+<span class="cmt">// tela quanto no monitor serial. Serve para provar tres coisas de uma vez:</span>
+<span class="cmt">// a ligacao esta certa, o driver escolhido e o correto, e o ESP32 esta vivo.</span>
+<span class="cmt">//</span>
+<span class="cmt">// Ligacao (configurada em platformio.ini, nao aqui):</span>
+<span class="cmt">//   VCC -&gt; 3V3        SCL/SCK -&gt; GPIO18        RES -&gt; GPIO26</span>
+<span class="cmt">//   GND -&gt; GND        SDA/MOSI -&gt; GPIO23       CS  -&gt; GPIO13</span>
+<span class="cmt">//   BLK -&gt; 3V3                                 DC  -&gt; GPIO27</span>
+<span class="cmt">// ---------------------------------------------------------------------------</span>
+
+#include &lt;Arduino.h&gt;
+#include &lt;TFT_eSPI.h&gt;
+
+TFT_eSPI tft = TFT_eSPI();
+
+<span class="cmt">// Qual driver foi compilado. Se a tela nao acender, troque em platformio.ini.</span>
+#if defined(ST7789_DRIVER)
+static const char *DRIVER = "ST7789V";
+#elif defined(ILI9341_DRIVER)
+static const char *DRIVER = "ILI9341";
+#else
+static const char *DRIVER = "nao definido";
+#endif
+
+static const uint8_t LED_PLACA = 2;  <span class="cmt">// LED azul de bordo, prova de vida extra</span>
+
+static uint32_t segundoAnterior = UINT32_MAX;
+static int16_t  larguraRelogio = 0;   <span class="cmt">// para apagar o valor antigo sem piscar</span>
+
+<span class="cmt">// Converte segundos desde o boot em HH:MM:SS.</span>
+static void formataRelogio(uint32_t total, char *buf, size_t n) {
+  snprintf(buf, n, "%02u:%02u:%02u",
+           (unsigned)((total / 3600) % 100),
+           (unsigned)((total / 60) % 60),
+           (unsigned)(total % 60));
+}
+
+<span class="cmt">// Alturas calculadas a partir da altura real da tela, nao fixas, para o</span>
+<span class="cmt">// layout continuar centrado se a rotacao mudar (retrato 240x320 ou</span>
+<span class="cmt">// paisagem 320x240).</span>
+static int16_t yTitulo()  { return tft.height() * 22 / 100; }
+static int16_t yLegenda() { return tft.height() * 40 / 100; }
+static int16_t yRelogio() { return tft.height() * 52 / 100; }
+static int16_t yRodape()  { return tft.height() - 28; }
+
+<span class="cmt">// Desenha o que nao muda: moldura, titulo e rodape.</span>
+static void telaFixa() {
+  tft.fillScreen(TFT_BLACK);
+  tft.drawRoundRect(4, 4, tft.width() - 8, tft.height() - 8, 6, TFT_DARKGREY);
+
+  tft.setTextDatum(MC_DATUM);
+
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.drawString("Hello World", tft.width() / 2, yTitulo(), 4);
+
+  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  tft.drawString("ligado ha", tft.width() / 2, yLegenda(), 2);
+
+  char rodape[64];
+  snprintf(rodape, sizeof rodape, "%s  %dx%d  SPI %d MHz",
+           DRIVER, tft.width(), tft.height(), SPI_FREQUENCY / 1000000);
+
+  <span class="cmt">// Em retrato a tela e estreita: cai para a fonte menor se nao couber.</span>
+  const uint8_t fonte = tft.textWidth(rodape, 2) &lt;= tft.width() - 16 ? 2 : 1;
+  tft.drawString(rodape, tft.width() / 2, yRodape(), fonte);
+}
+
+<span class="cmt">// Redesenha so o relogio. O padding apaga o valor anterior, evitando piscada.</span>
+static void desenhaRelogio(const char *texto) {
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextColor(TFT_ORANGE, TFT_BLACK);
+  tft.setTextPadding(larguraRelogio);
+  tft.drawString(texto, tft.width() / 2, yRelogio(), 7);
+  tft.setTextPadding(0);
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(LED_PLACA, OUTPUT);
+  delay(400);  <span class="cmt">// da tempo ao monitor serial de abrir</span>
+
+  Serial.println();
+  Serial.println("==================================================");
+  Serial.println("  Etapa 2 - teste do display 2,4\" SPI 240x320");
+  Serial.println("==================================================");
+  Serial.printf("Driver compilado : %s\n", DRIVER);
+  Serial.printf("Barramento SPI   : %d MHz\n", SPI_FREQUENCY / 1000000);
+  Serial.printf("Pinos            : SCK=%d MOSI=%d CS=%d DC=%d RST=%d\n",
+                TFT_SCLK, TFT_MOSI, TFT_CS, TFT_DC, TFT_RST);
+
+  tft.init();
+  <span class="cmt">// 0 = retrato 240x320. Se a imagem sair de cabeca para baixo, troque por 2</span>
+  <span class="cmt">// (o mesmo retrato girado 180 graus). 1 e 3 sao as duas paisagens.</span>
+  tft.setRotation(0);
+
+  Serial.printf("Resolucao em uso : %d x %d\n", tft.width(), tft.height());
+  Serial.println("Hello World");
+  Serial.println("--------------------------------------------------");
+  Serial.println("Se a tela ficou branca ou embaralhada, troque o");
+  Serial.println("driver em platformio.ini (ST7789 &lt;-&gt; ILI9341).");
+  Serial.println("--------------------------------------------------");
+
+  larguraRelogio = tft.textWidth("00:00:00", 7);
+  telaFixa();
+}
+
+void loop() {
+  const uint32_t segundos = millis() / 1000;
+
+  if (segundos != segundoAnterior) {
+    segundoAnterior = segundos;
+
+    char relogio[16];
+    formataRelogio(segundos, relogio, sizeof relogio);
+
+    desenhaRelogio(relogio);
+    digitalWrite(LED_PLACA, segundos % 2);  <span class="cmt">// pisca a cada segundo</span>
+
+    Serial.printf("[%s] rodando · heap livre %u bytes\n",
+                  relogio, (unsigned)ESP.getFreeHeap());
+  }
+
+  delay(20);
+}
+</code></pre>
+  </section>
+
+  <section>
+    <h2>Como testar</h2>
+    <ol class="steps">
+      <li><div><b>Com a placa desligada, faça os oito fios.</b><small>Confira duas vezes o <code>VCC</code> e o <code>GND</code>: é a única troca que estraga alguma coisa.</small></div></li>
+      <li><div><b>Grave e abra o monitor.</b><small><code>pio run -t upload -t monitor</code> faz as duas coisas numa tacada.</small></div></li>
+      <li><div><b>Olhe primeiro o monitor, não a tela.</b><small>O cabeçalho sai mesmo com o display desligado. Se ele aparece e o relógio anda, o ESP32 está bem e o problema é só fiação ou driver.</small></div></li>
+      <li><div><b>Depois a tela.</b><small>Esperado: moldura cinza, <b>Hello World</b> em branco, relógio laranja em sete segmentos andando de segundo em segundo.</small></div></li>
+    </ol>
+    <div class="tbl"><table>
+      <thead><tr><th>Sintoma</th><th>Causa provável</th><th>O que fazer</th></tr></thead>
+      <tbody>
+        <tr><td>Tela apagada, monitor rodando</td><td><small>Luz de fundo sem alimentação</small></td><td><small>Confira o <code>BLK</code> no 3V3 e o <code>VCC</code>.</small></td></tr>
+        <tr><td>Tela branca acesa</td><td><small>Driver errado, ou <code>RES</code>/<code>DC</code>/<code>CS</code> trocados</small></td><td><small>Troque para <code>ILI9341_DRIVER</code> e reconfira esses três fios.</small></td></tr>
+        <tr><td>Imagem embaralhada ou listrada</td><td><small>SPI rápido demais para o cabo</small></td><td><small>Baixe <code>SPI_FREQUENCY</code> para <code>27000000</code>.</small></td></tr>
+        <tr><td>Cores invertidas</td><td><small>Painel de fábrica com inversão</small></td><td><small>Acrescente <code>-DTFT_INVERSION_ON=1</code>.</small></td></tr>
+        <tr><td>Imagem espelhada ou deitada</td><td><small>Rotação</small></td><td><small>Troque o <code>setRotation()</code> entre 0 e 3.</small></td></tr>
+        <tr><td>Monitor com lixo na tela</td><td><small>Velocidade diferente</small></td><td><small><code>monitor_speed</code> e <code>Serial.begin()</code> precisam bater em 115200.</small></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <p class="cap">Código já compilado para este chip: 304 KB de flash (23% do slot) e 21 KB de RAM. Falta a ligação física para fechar o teste.</p>
+
+</div>
+
+<script>
+// ===========================================================================
+// ABAS
+// ===========================================================================
+const abas = [...document.querySelectorAll(".tab")];
+abas.forEach((aba) => aba.addEventListener("click", () => {
+  abas.forEach((o) => {
+    const ativa = o === aba;
+    o.setAttribute("aria-selected", ativa);
+    document.getElementById(o.getAttribute("aria-controls")).hidden = !ativa;
+  });
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}));
+
+document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+  const txt = document.getElementById(b.dataset.copy).textContent;
+  try {
+    await navigator.clipboard.writeText(txt);
+    const antes = b.textContent;
+    b.textContent = "copiado";
+    setTimeout(() => (b.textContent = antes), 1400);
+  } catch (e) {
+    b.textContent = "falhou";
+  }
+}));
+
+// ===========================================================================
+// ETAPA 1 - PINAGEM (lida no silkscreen da placa)
+// ===========================================================================
+const CATS = {
+  pwr:   { cor:"var(--v33)",   nome:"Alimentação" },
+  gnd:   { cor:"var(--sig)",   nome:"Terra" },
+  gpio:  { cor:"var(--gpio)",  nome:"GPIO livre" },
+  in:    { cor:"var(--in)",    nome:"Somente entrada" },
+  boot:  { cor:"var(--accent)",nome:"Sensível ao boot" },
+  sys:   { cor:"var(--sys)",   nome:"Reservado ao sistema" },
+  flash: { cor:"var(--pwr)",   nome:"Flash · não usar" },
+};
+
+const ESQ = [
+  { l:"3V3", cat:"pwr", fn:"saída 3,3 V",
+    rec:"≈ 500 mA no limite", obs:"Saída do regulador de bordo, não entrada. Não aplique tensão aqui." },
+  { l:"EN", cat:"sys", fn:"reset do chip",
+    rec:"—", obs:"Reinicia o chip quando levado ao GND. Mesmo sinal do botão EN. É aqui que o RES do display pode entrar." },
+  { l:"SVP", g:36, cat:"in", fn:"ADC1_CH0",
+    rec:"ADC1_CH0 · sensor Hall", obs:"Só entrada, sem pull interno. O silkscreen escreve SVP, mas no código é o GPIO36." },
+  { l:"SVN", g:39, cat:"in", fn:"ADC1_CH3",
+    rec:"ADC1_CH3 · sensor Hall", obs:"Só entrada, sem pull interno. No código é o GPIO39." },
+  { l:"P34", g:34, cat:"in", fn:"ADC1_CH6",
+    rec:"ADC1_CH6", obs:"Só entrada, sem pull interno." },
+  { l:"P35", g:35, cat:"in", fn:"ADC1_CH7",
+    rec:"ADC1_CH7", obs:"Só entrada, sem pull interno." },
+  { l:"P32", g:32, cat:"gpio", fn:"ADC1 · touch",
+    rec:"ADC1_CH4 · Touch9 · PWM · XTAL 32k", obs:"Entrada e saída. ADC funciona com Wi-Fi ligado." },
+  { l:"P33", g:33, cat:"gpio", fn:"ADC1 · touch",
+    rec:"ADC1_CH5 · Touch8 · PWM · XTAL 32k", obs:"Entrada e saída. ADC funciona com Wi-Fi ligado." },
+  { l:"P25", g:25, cat:"gpio", fn:"DAC1",
+    rec:"DAC1 · ADC2_CH8 · PWM", obs:"Saída analógica real de 8 bits. Nível baixo no boot." },
+  { l:"P26", g:26, cat:"gpio", fn:"DAC2",
+    rec:"DAC2 · ADC2_CH9 · PWM", obs:"O segundo e último DAC. Nível baixo no boot." },
+  { l:"P27", g:27, cat:"gpio", fn:"ADC2 · touch",
+    rec:"ADC2_CH7 · Touch7 · PWM", obs:"Sem função no boot." },
+  { l:"P14", g:14, cat:"boot", fn:"HSPI CLK",
+    rec:"ADC2_CH6 · Touch6 · HSPI CLK · MTMS", obs:"Emite pulsos de PWM durante o boot." },
+  { l:"P12", g:12, cat:"boot", fn:"strapping",
+    rec:"ADC2_CH5 · Touch5 · HSPI MISO · MTDI", obs:"Define a tensão da flash. Em nível alto no boot, a placa não dá boot." },
+  { l:"GND", cat:"gnd", fn:"0 V",
+    rec:"—", obs:"Um dos três terras da placa." },
+  { l:"P13", g:13, cat:"gpio", fn:"HSPI MOSI",
+    rec:"ADC2_CH4 · Touch4 · HSPI MOSI · MTCK", obs:"Sem função no boot." },
+  { l:"SD2", g:9, cat:"flash", fn:"flash SPI",
+    rec:"—", obs:"Ligado à flash interna. Usar trava a placa." },
+  { l:"SD3", g:10, cat:"flash", fn:"flash SPI",
+    rec:"—", obs:"Ligado à flash interna. Usar trava a placa." },
+  { l:"CMD", g:11, cat:"flash", fn:"flash SPI",
+    rec:"—", obs:"Ligado à flash interna. Usar trava a placa." },
+  { l:"5V", cat:"pwr", fn:"5 V do USB",
+    rec:"—", obs:"Ligado direto ao USB. Serve para alimentar a placa por fora ou tirar 5 V para um módulo." },
+];
+
+const DIR = [
+  { l:"GND", cat:"gnd", fn:"0 V",
+    rec:"—", obs:"Um dos três terras da placa." },
+  { l:"P23", g:23, cat:"gpio", fn:"VSPI MOSI",
+    rec:"VSPI MOSI · PWM", obs:"Sem função no boot." },
+  { l:"P22", g:22, cat:"gpio", fn:"I2C SCL",
+    rec:"I2C SCL · PWM", obs:"Clock padrão do I2C na biblioteca Arduino." },
+  { l:"TX", g:1, cat:"sys", fn:"UART0 TX",
+    rec:"UART0 TX", obs:"Usado na gravação e no monitor serial. Emite dados no boot." },
+  { l:"RX", g:3, cat:"sys", fn:"UART0 RX",
+    rec:"UART0 RX", obs:"Usado na gravação e no monitor serial. Nível alto no boot." },
+  { l:"P21", g:21, cat:"gpio", fn:"I2C SDA",
+    rec:"I2C SDA · PWM", obs:"Dados padrão do I2C na biblioteca Arduino." },
+  { l:"GND", cat:"gnd", fn:"0 V",
+    rec:"—", obs:"Terra do meio, prático para quem liga sensor no P21 e P22." },
+  { l:"P19", g:19, cat:"gpio", fn:"VSPI MISO",
+    rec:"VSPI MISO · PWM", obs:"Sem função no boot." },
+  { l:"P18", g:18, cat:"gpio", fn:"VSPI CLK",
+    rec:"VSPI CLK · PWM", obs:"Sem função no boot." },
+  { l:"P5", g:5, cat:"boot", fn:"VSPI CS · strapping",
+    rec:"VSPI CS · PWM", obs:"Emite pulsos de PWM durante o boot." },
+  { l:"P17", g:17, cat:"gpio", fn:"UART2 TX",
+    rec:"UART2 TX · PWM", obs:"Segunda serial, livre para uso. Não conflita com o monitor." },
+  { l:"P16", g:16, cat:"gpio", fn:"UART2 RX",
+    rec:"UART2 RX · PWM", obs:"Segunda serial, livre para uso." },
+  { l:"P4", g:4, cat:"gpio", fn:"ADC2 · touch",
+    rec:"ADC2_CH0 · Touch0 · PWM", obs:"Sem função no boot. Aceita pull-up interno." },
+  { l:"P0", g:0, cat:"boot", fn:"botão BOOT · strapping",
+    rec:"ADC2_CH1 · Touch1", obs:"É o botão BOOT da placa. Em nível baixo no boot, o chip entra em modo de gravação. Não existia na placa de 30 pinos." },
+  { l:"P2", g:2, cat:"boot", fn:"LED · strapping",
+    rec:"ADC2_CH2 · Touch2 · LED azul", obs:"Ligado ao LED da placa. Precisa poder ir a nível baixo no boot." },
+  { l:"P15", g:15, cat:"boot", fn:"HSPI CS · strapping",
+    rec:"ADC2_CH3 · Touch3 · HSPI CS · MTDO", obs:"Emite pulsos no boot. Em nível baixo, suprime o log de boot." },
+  { l:"SD1", g:8, cat:"flash", fn:"flash SPI",
+    rec:"—", obs:"Ligado à flash interna. Usar trava a placa." },
+  { l:"SDO", g:7, cat:"flash", fn:"flash SPI",
+    rec:"—", obs:"Ligado à flash interna. Usar trava a placa. O silkscreen usa a letra O, mas é o GPIO7." },
+  { l:"CLK", g:6, cat:"flash", fn:"flash SPI",
+    rec:"—", obs:"Clock da flash interna. Usar trava a placa." },
+];
+
+const NS = "http://www.w3.org/2000/svg";
+
+function el(tag, attrs, texto) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (texto != null) n.textContent = texto;
+  return n;
+}
+
+const Y0 = 146, DY = 32;
+const alvo = document.getElementById("rows");
+
+function linha(p, i, esq) {
+  const y = Y0 + i * DY;
+  const cor = CATS[p.cat].cor;
+  const g = el("g");
+
+  g.appendChild(el("line", {
+    x1: esq ? 378 : 542, y1: y, x2: esq ? 330 : 590, y2: y,
+    stroke: cor, "stroke-width": 2,
+  }));
+  g.appendChild(el("circle", { cx: esq ? 330 : 590, cy: y, r: 3.5, fill: cor }));
+  g.appendChild(el("text", {
+    class: "t-b", x: esq ? 320 : 600, y: y - 3,
+    "text-anchor": esq ? "end" : "start",
+  }, p.l + (p.g != null ? "  (" + p.g + ")" : "")));
+  g.appendChild(el("text", {
+    class: "t-s t-mut", x: esq ? 320 : 600, y: y + 10,
+    "text-anchor": esq ? "end" : "start",
+  }, p.fn));
+
+  alvo.appendChild(g);
+}
+
+ESQ.forEach((p, i) => linha(p, i, true));
+DIR.forEach((p, i) => linha(p, i, false));
+
+document.getElementById("legend").innerHTML = Object.values(CATS)
+  .map((c) => `<span><i style="background:${c.cor}"></i>${c.nome}</span>`).join("");
+
+function corpo(lista, titulo) {
+  return `<tr class="grp"><td colspan="4">${titulo}</td></tr>` + lista.map((p) => `
+    <tr>
+      <td class="pin"><span class="chip" style="color:${CATS[p.cat].cor};border-color:${CATS[p.cat].cor}">${p.l}</span></td>
+      <td class="q">${p.g != null ? p.g : "—"}</td>
+      <td><small>${p.rec}</small></td>
+      <td>${p.obs}</td>
+    </tr>`).join("");
+}
+
+document.getElementById("pinrows").innerHTML =
+  corpo(ESQ, "Lado esquerdo · 19 pinos") +
+  corpo(DIR, "Lado direito · 19 pinos");
+
+const SPECS = [
+  ["Processador", "2 × LX6", "240 MHz", "Xtensa de 32 bits, revisão v3.0 do silício."],
+  ["Memória RAM", "367", "KB", "Sem PSRAM: o módulo é WROOM, não WROVER."],
+  ["Flash", "4", "MB", "Externa, fabricante 0xD8."],
+  ["GPIOs no header", "32", "de 34", "Seis deles são da flash e não podem ser usados."],
+  ["Wi-Fi", "2,4", "GHz", "802.11 b/g/n, modo station e access point."],
+  ["Bluetooth", "Clássico", "+ BLE", "Os dois rádios, no mesmo chip."],
+  ["Conversores", "18 ADC", "2 DAC", "ADC de 12 bits em dois blocos; DAC de 8 bits."],
+  ["PWM", "16", "canais", "Periférico LEDC, independente da CPU."],
+];
+
+document.getElementById("specs").innerHTML = SPECS.map(([t, n, u, p]) =>
+  `<div class="pw"><span class="eyebrow">${t}</span><div class="n">${n} <small>${u}</small></div><p>${p}</p></div>`
+).join("");
+
+const FONTES = {
+  med: ["medido", "var(--in)"],
+  chip: ["do chip", "var(--gpio)"],
+  conf: ["a confirmar", "var(--accent)"],
+};
+
+const MEM = [
+  ["Chip", "ESP32-D0WD-V3", "Revisão v3.0, a mais recente do ESP32 clássico.", "med"],
+  ["Flash", "4 MB", "Fabricante 0xD8, device 0x4016. Tensão fixada em 3,3 V por strapping.", "med"],
+  ["Cristal", "40 MHz", "Base de tempo do chip.", "med"],
+  ["MAC Wi-Fi", "C8:F0:9E:52:EC:FC", "Station. O access point, o Bluetooth e a Ethernet somam 1, 2 e 3 ao final.", "med"],
+  ["Wi-Fi", "802.11 b/g/n", "2,4 GHz. Antena em trilha na própria PCB.", "med"],
+  ["Bluetooth", "Clássico + BLE", "Os dois rádios no mesmo chip.", "med"],
+  ["Heap total", "≈ 367 KB", "RAM utilizável pelo seu código. Mesmo SoC da placa anterior, onde foi medido.", "chip"],
+  ["PSRAM", "nenhuma", "Módulo WROOM. Só a linha WROVER traz PSRAM.", "med"],
+  ["Espaço por firmware", "1,25 MB", "Em cada um dos dois slots de aplicação, na tabela padrão de 4 MB.", "conf"],
+  ["Tabela de partições", "padrão 4 MB", "Ainda não lida desta placa; precisa gravar o diagnóstico nela.", "conf"],
+];
+
+document.getElementById("memrows").innerHTML = MEM.map(([i, v, d, f]) => {
+  const [nome, cor] = FONTES[f];
+  return `<tr><td>${i}</td><td class="pin">${v}</td><td><small>${d}</small></td>
+    <td><span class="chip" style="color:${cor};border-color:${cor}">${nome}</span></td></tr>`;
+}).join("");
+
+const NOTAS = [
+  [1, "Seis pinos da flash estão expostos",
+   "<code>CLK</code>, <code>SDO</code>, <code>SD1</code>, <code>SD2</code>, <code>SD3</code> e <code>CMD</code> são os GPIOs 6 a 11 e ficam ligados à flash interna. Usar qualquer um trava a placa. Na de 30 pinos eles nem saíam; aqui parecem livres, e não são."],
+  [1, "ADC2 não funciona com o Wi-Fi ligado",
+   "O bloco ADC2 é requisitado pelo rádio. Com Wi-Fi ativo, sobram as entradas do ADC1: <code>P32</code>, <code>P33</code>, <code>P34</code>, <code>P35</code>, <code>SVP</code> e <code>SVN</code>."],
+  [1, "Quatro pinos são só entrada",
+   "<code>P34</code>, <code>P35</code>, <code>SVP</code> e <code>SVN</code> não acionam saída e não têm pull-up nem pull-down interno."],
+  [1, "Seis pinos mexem no boot",
+   "<code>P0</code>, <code>P2</code>, <code>P5</code>, <code>P12</code> e <code>P15</code> são de strapping, e <code>P14</code> emite pulsos ao energizar. O <code>P0</code> é o próprio botão BOOT."],
+  [0, "O silkscreen não é o número do GPIO",
+   "<code>SVP</code> é o GPIO36 e <code>SVN</code> é o GPIO39. Os demais <code>Pxx</code> batem com o número, mas esses dois enganam."],
+  [1, "O 3V3 é saída, não entrada",
+   "Alimente pelo <code>5V</code> ou pelo USB. Aplicar tensão no <code>3V3</code> passa por cima do regulador."],
+];
+
+document.getElementById("notes").innerHTML = NOTAS.map(([aviso, t, p]) =>
+  `<div class="note${aviso ? " warn" : ""}"><b>${t}</b><p>${p}</p></div>`).join("");
+
+const PARTS = [
+  ["nvs", "data", "0x009000", "20 KB", "Armazenamento chave-valor que sobrevive ao reset."],
+  ["otadata", "data", "0x00E000", "8 KB", "Marca qual slot de aplicação deve dar boot."],
+  ["app0", "app", "0x010000", "1280 KB", "Slot de firmware em execução."],
+  ["app1", "app", "0x150000", "1280 KB", "Segundo slot, para atualização pelo ar."],
+  ["spiffs", "data", "0x290000", "1408 KB", "Sistema de arquivos."],
+  ["coredump", "data", "0x3F0000", "64 KB", "Despejo de memória gravado quando o firmware trava."],
+];
+
+document.getElementById("partrows").innerHTML = PARTS.map(([n, t, e, s, c]) =>
+  `<tr><td class="pin">${n}</td><td>${t}</td><td class="q">${e}</td><td class="q">${s}</td><td><small>${c}</small></td></tr>`).join("");
+
+// ===========================================================================
+// ETAPA 2 - LIGACAO DO DISPLAY
+// ===========================================================================
+const SINAIS = {
+  pwr:  { cor:"var(--v33)",   nome:"Alimentação" },
+  gnd:  { cor:"var(--sig)",   nome:"Terra" },
+  spi:  { cor:"var(--gpio)",  nome:"Dados do SPI" },
+  ctrl: { cor:"var(--accent)",nome:"Controle" },
+};
+
+const FIOS = [
+  { esp:"3V3",  tela:"VCC",       tipo:"pwr",  sinal:"alimentação do painel",
+    obs:"Comece com 3,3 V. Só use 5 V se o silkscreen do módulo disser que aceita." },
+  { esp:"GND",  tela:"GND",       tipo:"gnd",  sinal:"referência 0 V",
+    obs:"A placa tem três terras; use o mais perto dos outros fios." },
+  { esp:"P18",  tela:"SCL / SCK", tipo:"spi",  sinal:"clock do SPI",
+    obs:"Clock do VSPI, por hardware. Livre no boot. É o GPIO18." },
+  { esp:"P23",  tela:"SDA / SDI", tipo:"spi",  sinal:"dados para o display",
+    obs:"MOSI do VSPI. O display só recebe; não há volta de dados." },
+  { esp:"P13",  tela:"CS",        tipo:"ctrl", sinal:"seleção do chip",
+    obs:"Escolhido no lugar do P5 usual, que é pino de strapping." },
+  { esp:"P27",  tela:"DC / RS",   tipo:"ctrl", sinal:"comando ou dado",
+    obs:"Diz ao painel se o byte é instrução ou pixel. Livre no boot." },
+  { esp:"P26",  tela:"RES / RST", tipo:"ctrl", sinal:"reset do painel",
+    obs:"Pode ir para o EN em vez de um GPIO, e aí o display reinicia junto com a placa." },
+  { esp:"3V3",  tela:"BLK / LED", tipo:"pwr",  sinal:"luz de fundo",
+    obs:"Fixa em 3,3 V. Sem a luz, a imagem existe mas não se vê nada." },
+];
+
+const alvo2 = document.getElementById("rows2");
+const Y2 = 104, DY2 = 34;
+
+FIOS.forEach((f, i) => {
+  const y = Y2 + i * DY2;
+  const cor = SINAIS[f.tipo].cor;
+  const g = el("g");
+
+  g.appendChild(el("line", { x1:230, y1:y, x2:690, y2:y, stroke:cor, "stroke-width":2 }));
+  g.appendChild(el("circle", { cx:230, cy:y, r:3.5, fill:cor }));
+  g.appendChild(el("circle", { cx:690, cy:y, r:3.5, fill:cor }));
+  g.appendChild(el("text", { class:"t-b", x:240, y:y - 7 }, f.esp));
+  g.appendChild(el("text", { class:"t-b", x:680, y:y - 7, "text-anchor":"end" }, f.tela));
+  g.appendChild(el("text", { class:"t-s t-mut", x:460, y:y + 14, "text-anchor":"middle" }, f.sinal));
+
+  alvo2.appendChild(g);
+});
+
+document.getElementById("legend2").innerHTML = Object.values(SINAIS)
+  .map((c) => `<span><i style="background:${c.cor}"></i>${c.nome}</span>`).join("");
+
+document.getElementById("wirerows").innerHTML = FIOS.map((f) => `
+  <tr>
+    <td class="pin"><span class="chip" style="color:${SINAIS[f.tipo].cor};border-color:${SINAIS[f.tipo].cor}">${f.esp}</span></td>
+    <td class="pin">${f.tela}</td>
+    <td><small>${f.sinal}</small></td>
+    <td>${f.obs}</td>
+  </tr>`).join("");
+</script>
+</body>
+</html>
