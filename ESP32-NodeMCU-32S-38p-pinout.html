@@ -8,22 +8,15 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Semi+Condensed:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 :root{
-  --bg:#f3f2ef; --surface:#ffffff; --fg:#26282b; --muted:#6b6e72; --line:#d9d7d2;
-  --accent:#e2681a; --accent-soft:#fbe7d8;
-  --pwr:#c8372d; --v33:#c98a12; --sig:#3c3f44; --gpio:#2f6fb3; --in:#2e8a57; --sys:#7a5cc0;
-  --board:#e9e4d8; --board-line:#bcb4a2; --code:#f7f6f3;
+  --bg:#000000; --surface:#000000; --fg:#ffffff; --muted:#b9bbbd; --line:#5a5d63;
+  --accent:#ff8a3d; --accent-soft:#3a2415;
+  --pwr:#ff6b5e; --v33:#f7c04a; --sig:#d8d8d8; --gpio:#6ab4ff; --in:#5fd99b; --sys:#b39bff;
+  --board:#000000; --board-line:#61646a; --code:#000000;
   --font-display:"Saira Semi Condensed","Arial Narrow",system-ui,sans-serif;
   --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
-  color-scheme:light;
-}
-@media (prefers-color-scheme:dark){:root{
-  --bg:#1c1d1f; --surface:#25272a; --fg:#ebe9e5; --muted:#a2a39f; --line:#3a3c40;
-  --accent:#f0832f; --accent-soft:#3d2a1c;
-  --pwr:#ef6a5f; --v33:#e2b04a; --sig:#cfcdc8; --gpio:#6aa6e6; --in:#5cc28a; --sys:#a68be6;
-  --board:#34322d; --board-line:#5c574c; --code:#1b1c1e;
   color-scheme:dark;
-}}
+}
 
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 var(--font-body)}
@@ -536,14 +529,16 @@ void loop() {
         <tr><td>Tela branca acesa</td><td><small>Driver errado, ou <code>RES</code>/<code>DC</code>/<code>CS</code> trocados</small></td><td><small>Troque para <code>ILI9341_DRIVER</code> e reconfira esses três fios.</small></td></tr>
         <tr><td>Imagem embaralhada ou listrada</td><td><small>SPI rápido demais para o cabo</small></td><td><small>Baixe <code>SPI_FREQUENCY</code> para <code>27000000</code>.</small></td></tr>
         <tr><td>Imagem tremendo, piscando junto</td><td><small>Regulador do módulo sem folga</small></td><td><small>Passe o <code>VCC</code> dos 3V3 para o <code>5V</code>. Foi o que aconteceu aqui.</small></td></tr>
-        <tr><td>Cores invertidas</td><td><small>Painel de fábrica com inversão</small></td><td><small>Acrescente <code>-DTFT_INVERSION_ON=1</code>.</small></td></tr>
+        <tr><td>Fundo branco em vez de preto</td><td><small>Inversão do painel, e o padrão engana</small></td><td><small>Acrescente <code>-DTFT_INVERSION_OFF=1</code>. Foi o que aconteceu aqui — veja a nota abaixo.</small></td></tr>
         <tr><td>Imagem espelhada ou deitada</td><td><small>Rotação</small></td><td><small>Troque o <code>setRotation()</code> entre 0 e 3.</small></td></tr>
         <tr><td>Monitor com lixo na tela</td><td><small>Velocidade diferente</small></td><td><small><code>monitor_speed</code> e <code>Serial.begin()</code> precisam bater em 115200.</small></td></tr>
       </tbody>
     </table></div>
   </section>
 
-  <p class="cap">Etapa fechada no hardware: painel aceso, relógio andando e tremor resolvido nos 5 V. O driver <b>ST7789V</b> era o certo — a aposta se confirmou.</p>
+  <div class="note warn"><b>O padrão da biblioteca inverte, e não avisa</b><p>A tela acendeu com <b>fundo branco</b> mesmo com <code>fillScreen(TFT_BLACK)</code>. A causa está no código da TFT_eSPI: a sequência de init do ST7789 manda <code>INVON</code> <b>sem condição nenhuma</b> (<code>TFT_Drivers/ST7789_Init.h</code>), e depois dela a biblioteca só aplica <code>INVON</code> ou <code>INVOFF</code> se um dos dois estiver definido. Sem nenhum dos dois, o painel fica invertido e o preto sai branco.</p><p>A maioria dos painéis IPS ST7789 precisa dessa inversão, e é por isso que ela vem ligada. Este não precisa, então é preciso <b>desligar de forma explícita</b> com <code>-DTFT_INVERSION_OFF=1</code> — não basta deixar de ligar. O firmware passou a imprimir o estado da inversão no cabeçalho do monitor, para isso não voltar a ser implícito.</p></div>
+
+  <p class="cap">Etapa fechada no hardware: painel aceso, relógio andando, tremor resolvido nos 5 V e inversão desligada. O driver <b>ST7789V</b> era o certo — a aposta se confirmou.</p>
 
 </div>
 
@@ -554,7 +549,7 @@ void loop() {
 
   <div class="spec">
     <span>sensor <b>BME280</b></span>
-    <span>mede <b>temp · umidade · pressão</b></span>
+    <span>lê <b>temperatura · umidade</b></span>
     <span>interface <b>I²C</b></span>
     <span>endereço <b>0x76 ou 0x77</b></span>
     <span>biblioteca <b>Adafruit BME280</b></span>
@@ -562,17 +557,17 @@ void loop() {
 
   <section>
     <h2>O sensor</h2>
-    <p>Um único chip da Bosch que entrega as três grandezas que interessam aqui:
-    temperatura, umidade relativa e pressão barométrica. Fala por I²C, que gasta
-    só dois GPIOs e não disputa nada com o display — ele é SPI.</p>
+    <p>Um único chip da Bosch que entrega as duas grandezas que interessam aqui:
+    temperatura e umidade relativa. Fala por I²C, que gasta só dois GPIOs e não
+    disputa nada com o display — ele é SPI.</p>
     <div class="tbl"><table>
       <thead><tr><th>Grandeza</th><th>Faixa</th><th>Precisão típica</th><th>Resolução</th></tr></thead>
       <tbody>
         <tr><td class="pin">Temperatura</td><td>−40 a +85 °C</td><td>±1,0 °C</td><td>0,01 °C</td></tr>
         <tr><td class="pin">Umidade relativa</td><td>0 a 100 %</td><td>±3 %</td><td>0,008 %</td></tr>
-        <tr><td class="pin">Pressão</td><td>300 a 1100 hPa</td><td>±1 hPa</td><td>0,18 Pa</td></tr>
       </tbody>
     </table></div>
+    <div class="note"><b>Pressão desligada no sensor, não só na tela</b><p>O BME280 também mede pressão barométrica, e isso não tem uso numa estufa. Em vez de ler e descartar, o canal fica desligado na configuração: <code>SAMPLING_NONE</code> para pressão. Uma conversão a menos por leitura e um registrador a menos para buscar no barramento.</p></div>
     <div class="notes">
       <div class="note warn"><b>BME280 ou BMP280?</b><p>São quase gêmeos e o silkscreen às vezes não ajuda: o <b>BMP</b>280 <b>não mede umidade</b>. O jeito certo de saber é o chip ID — <code>0x60</code> é BME280, <code>0x58</code> é BMP280. O firmware lê esse registrador e avisa no monitor, em vez de deixar a umidade sair como valor inválido sem explicação.</p></div>
       <div class="note warn"><b>Alimente com 3,3 V</b><p>Mesma lição do display, com final diferente: os módulos pequenos de 6 pinos normalmente <b>não têm</b> regulador, e o chip é 3,3 V. Procure um regulador de três pernas na traseira. <b>Não achou? Use o <code>3V3</code>.</b> O sensor puxa microamperes, então aqui não há problema de folga.</p></div>
@@ -665,6 +660,15 @@ build_flags =
   -DTFT_WIDTH=240
   -DTFT_HEIGHT=320
 
+  <span class="cmt">; --- inversao de cor ------------------------------------------------------</span>
+  <span class="cmt">; A sequencia de init do ST7789 na TFT_eSPI manda INVON sem condicao</span>
+  <span class="cmt">; (TFT_Drivers/ST7789_Init.h). Depois dela a biblioteca so aplica INVON ou</span>
+  <span class="cmt">; INVOFF se um dos dois estiver definido aqui. Sem nenhum, o painel fica</span>
+  <span class="cmt">; invertido e fillScreen(TFT_BLACK) pinta branco. A maioria dos IPS precisa</span>
+  <span class="cmt">; da inversao; este painel nao, entao desligamos de forma explicita.</span>
+  <span class="cmt">; Se as cores sairem trocadas, troque por -DTFT_INVERSION_ON=1.</span>
+  -DTFT_INVERSION_OFF=1
+
   <span class="cmt">; --- ligacao ao ESP32 ---------------------------------------------------</span>
   <span class="cmt">; Pinos escolhidos para nao cair em pino de strapping nem de boot.</span>
   -DTFT_MOSI=23
@@ -687,17 +691,33 @@ build_flags =
 
   <section>
     <h2>Código</h2>
-    <p>Mantém o relógio da etapa anterior e acrescenta as três leituras,
-    atualizadas a cada 2 segundos, na tela e no monitor.</p>
+    <p>Cada grandeza ganha um anel: a barra enche da base esquerda, sobe pela
+    esquerda, cruza o topo e desce pela direita — de um lado ao outro — e o
+    valor fica em negrito no centro. O relógio e o LED piscando da etapa
+    anterior saíram: eram prova de vida enquanto a tela não funcionava, e agora
+    a própria leitura é a prova.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Decisão</th><th>Valor</th><th>Por quê</th></tr></thead>
+      <tbody>
+        <tr><td class="pin">Negrito</td><td><code>FreeSansBold18pt</code></td><td><small>As fontes embutidas da TFT_eSPI não têm versão negrito. Essa é uma <i>free font</i> do Adafruit GFX, já disponível porque <code>LOAD_GFXFF</code> está ligado.</small></td></tr>
+        <tr><td class="pin">Abertura do arco</td><td><small>270°, de 45° a 315°</small></td><td><small>Na TFT_eSPI o ângulo 0 fica às 6 horas e cresce no sentido horário, passando pelas 9. Começando em 45° a barra sai da base esquerda e termina na base direita, deixando a abertura embaixo — onde cabe o rótulo.</small></td></tr>
+        <tr><td class="pin">Escalas</td><td><small>0–60 °C · 0–100 %</small></td><td><small>Fixas, não automáticas. Escala automática faria uma oscilação de décimo de grau encher meio anel e mudaria o significado da mesma barra a cada leitura — impossível comparar uma hora com a outra.</small></td></tr>
+        <tr><td class="pin"><code>drawArc</code>, não <code>drawSmoothArc</code></td><td><small>pontas sem suavização</small></td><td><small>A própria biblioteca diz que as pontas sem anti-aliasing existem <i>"para permitir mudança dinâmica de comprimento com junção limpa entre segmentos"</i>. Com as pontas suavizadas cada emenda deixaria costura visível.</small></td></tr>
+        <tr><td class="pin">Raio interno</td><td><code>48 px</code>, não 46</td><td><small>O retângulo que o <i>padding</i> do valor apaga mede 78×42 px — medido nos glifos da fonte, não estimado — e o canto dele fica a 44,3 px do centro. Com raio 46 sobravam 1,7 px e o número encostava no anel.</small></td></tr>
+        <tr><td class="pin">Uma casa decimal</td><td><small>até 99,9</small></td><td><small>A partir de 100 o valor perde a decimal (<code>100</code>, não <code>100.0</code>). Assim o texto nunca passa de quatro dígitos e cabe dentro do anel sem reduzir a fonte.</small></td></tr>
+        <tr><td class="pin">Grau desenhado</td><td><small>dois círculos</small></td><td><small>Só o símbolo da grandeza aparece sob cada anel: <b>°C</b> e <b>%</b>. O grau não existe nas fontes da TFT_eSPI, que cobrem <code>0x20</code> a <code>0x7E</code> — então é desenhado como dois círculos concêntricos, que é exatamente o que ele é, e assim acompanha a cor da série.</small></td></tr>
+      </tbody>
+    </table></div>
     <div class="codehead">
       <span class="eyebrow">src/main.cpp</span>
       <button class="copy" data-copy="c-cpp3">copiar</button>
     </div>
     <pre><code id="c-cpp3"><span class="cmt">// ---------------------------------------------------------------------------</span>
-<span class="cmt">// Etapa 3 - display + BME280 (temperatura, umidade e pressao)</span>
+<span class="cmt">// Etapa 3 - display + BME280 (temperatura e umidade)</span>
 <span class="cmt">//</span>
-<span class="cmt">// Le o sensor por I2C e mostra na tela junto com o relogio da etapa anterior.</span>
-<span class="cmt">// Os mesmos valores saem no monitor serial, para conferir sem olhar a tela.</span>
+<span class="cmt">// Cada grandeza aparece num anel: a barra enche da esquerda para a direita,</span>
+<span class="cmt">// passando por cima, e o valor fica em negrito no centro. Os mesmos valores</span>
+<span class="cmt">// saem no monitor serial.</span>
 <span class="cmt">//</span>
 <span class="cmt">// Ligacao do display (os pinos ficam em platformio.ini, nao aqui):</span>
 <span class="cmt">//   VCC -&gt; 5V         SCL/SCK  -&gt; GPIO18        RES -&gt; GPIO26</span>
@@ -729,44 +749,72 @@ static const char *DRIVER = "ILI9341";
 static const char *DRIVER = "nao definido";
 #endif
 
+<span class="cmt">// O init do ST7789 manda INVON sem condicao, e a biblioteca so o desfaz se</span>
+<span class="cmt">// um destes estiver definido. Sem nenhum, o preto sai branco na tela.</span>
+#if defined(TFT_INVERSION_OFF)
+static const char *INVERSAO = "desligada (INVOFF)";
+#elif defined(TFT_INVERSION_ON)
+static const char *INVERSAO = "ligada (INVON)";
+#else
+static const char *INVERSAO = "nao definida - o preto pode sair branco";
+#endif
+
 static const uint8_t PIN_SDA = 21;
 static const uint8_t PIN_SCL = 22;
-static const uint8_t LED_PLACA = 2;  <span class="cmt">// LED azul de bordo, prova de vida</span>
 
 <span class="cmt">// O modulo responde em 0x76 ou 0x77, conforme o resistor de endereco da placa.</span>
 static const uint8_t ENDERECOS[] = {0x76, 0x77};
 
-static const uint32_t INTERVALO_LEITURA = 2000;  <span class="cmt">// ms entre leituras</span>
+static const uint32_t INTERVALO_LEITURA = 2000;      <span class="cmt">// ms entre leituras</span>
 static const uint32_t INTERVALO_RETENTATIVA = 5000;  <span class="cmt">// ms entre buscas do sensor</span>
 
-static const char *ROTULOS[] = {"Temperatura", "Umidade", "Pressao"};
-static const uint8_t N_LINHAS = 3;
+<span class="cmt">// Cores escolhidas para nao apagarem no fundo preto.</span>
+static const uint16_t COR_TEMP  = TFT_ORANGE;
+static const uint16_t COR_UMID  = TFT_CYAN;
+static const uint16_t COR_TEXTO = TFT_WHITE;
+static const uint16_t COR_TRILHA = 0x4208;  <span class="cmt">// cinza, o anel vazio por tras</span>
+
+<span class="cmt">// ---------------------------------------------------------------------------</span>
+<span class="cmt">// Geometria dos aneis</span>
+<span class="cmt">//</span>
+<span class="cmt">// Na TFT_eSPI o angulo 0 fica as 6 horas e cresce no sentido horario, ou seja</span>
+<span class="cmt">// passando pelas 9. Comecando em 45 e varrendo 270 graus, a barra sai da base</span>
+<span class="cmt">// esquerda, sobe pela esquerda, cruza o topo e desce pela direita -- de um</span>
+<span class="cmt">// lado ao outro, com a abertura embaixo. Nessa abertura cabe o rotulo.</span>
+<span class="cmt">// ---------------------------------------------------------------------------</span>
+
+static const int16_t ANEL_CX = 120;
+static const int16_t ANEL_CY[2] = {88, 228};
+<span class="cmt">// Raio interno 48 e nao 46: o retangulo que o padding do valor apaga mede</span>
+<span class="cmt">// 78x42 px (medido nos glifos da FreeSansBold18pt), e o canto dele fica a</span>
+<span class="cmt">// 44,3 px do centro. Com 46 sobrava 1,7 px e o texto encostava no anel.</span>
+static const int16_t ANEL_RE = 64;  <span class="cmt">// raio externo</span>
+static const int16_t ANEL_RI = 48;  <span class="cmt">// raio interno</span>
+static const int16_t DESLOC_ROTULO = 52;
+
+static const uint16_t ANG_INICIO = 45;
+static const uint16_t ANG_VARRIDO = 270;
+
+struct Serie {
+  const char *simbolo;
+  bool grau;  <span class="cmt">// desenha o anelzinho do grau antes do simbolo</span>
+  float minimo, maximo;
+  uint16_t cor;
+};
+
+<span class="cmt">// Escalas fixas, nao automaticas. Escala automatica faria qualquer oscilacao</span>
+<span class="cmt">// de decimo de grau encher meio anel e mudaria o significado da mesma barra</span>
+<span class="cmt">// a cada leitura - impossivel comparar uma hora com a outra.</span>
+static const Serie SERIES[2] = {
+  {"C", true,  0.0f,  60.0f, COR_TEMP},
+  {"%", false, 0.0f, 100.0f, COR_UMID},
+};
 
 static bool     sensorOk = false;
 static uint8_t  enderecoSensor = 0;
 static uint32_t ultimaLeitura = 0;
-static uint32_t segundoAnterior = UINT32_MAX;
-static int16_t  larguraRelogio = 0;  <span class="cmt">// para apagar o valor antigo sem piscar</span>
 static int16_t  larguraValor = 0;
-
-<span class="cmt">// ---------------------------------------------------------------------------</span>
-<span class="cmt">// Layout</span>
-<span class="cmt">//</span>
-<span class="cmt">// Calculado a partir da altura real da tela em vez de fixo, para continuar</span>
-<span class="cmt">// legivel se a rotacao mudar (retrato 240x320 ou paisagem 320x240).</span>
-<span class="cmt">// ---------------------------------------------------------------------------</span>
-
-static int16_t yLegenda() { return 26; }
-static int16_t yRelogio() { return 70; }
-static int16_t ySeparador() { return 108; }
-static int16_t yRodape() { return tft.height() - 18; }
-
-<span class="cmt">// As tres linhas dividem igualmente o que sobra entre o separador e o rodape.</span>
-static int16_t yLinha(uint8_t i) {
-  const int16_t topo = ySeparador() + 12;
-  const int16_t passo = (yRodape() - 16 - topo) / N_LINHAS;
-  return topo + passo * i + passo / 2;
-}
+static uint16_t varrido[2] = {0, 0};  <span class="cmt">// graus ja pintados em cada anel</span>
 
 <span class="cmt">// ---------------------------------------------------------------------------</span>
 <span class="cmt">// Sensor</span>
@@ -815,7 +863,7 @@ static bool iniciaSensor() {
     <span class="cmt">// depois, e justamente temperatura e o que mais importa aqui.</span>
     bme.setSampling(Adafruit_BME280::MODE_FORCED,
                     Adafruit_BME280::SAMPLING_X1,   <span class="cmt">// temperatura</span>
-                    Adafruit_BME280::SAMPLING_X1,   <span class="cmt">// pressao</span>
+                    Adafruit_BME280::SAMPLING_NONE, <span class="cmt">// pressao: nao interessa</span>
                     Adafruit_BME280::SAMPLING_X1,   <span class="cmt">// umidade</span>
                     Adafruit_BME280::FILTER_OFF);
     return true;
@@ -823,96 +871,131 @@ static bool iniciaSensor() {
   return false;
 }
 
-static bool leSensor(float &amp;temperatura, float &amp;umidade, float &amp;pressao) {
+static bool leSensor(float &amp;temperatura, float &amp;umidade) {
   if (!bme.takeForcedMeasurement()) return false;
 
   temperatura = bme.readTemperature();
   umidade     = bme.readHumidity();
-  pressao     = bme.readPressure() / 100.0f;  <span class="cmt">// Pa -&gt; hPa</span>
 
-  return !isnan(temperatura) &amp;&amp; !isnan(umidade) &amp;&amp; !isnan(pressao);
+  return !isnan(temperatura) &amp;&amp; !isnan(umidade);
+}
+
+<span class="cmt">// ---------------------------------------------------------------------------</span>
+<span class="cmt">// Aneis</span>
+<span class="cmt">// ---------------------------------------------------------------------------</span>
+
+<span class="cmt">// Pinta somente o trecho que mudou: o que cresceu sai na cor da serie, o que</span>
+<span class="cmt">// recuou volta para a cor da trilha. O anel nunca e repintado inteiro, entao</span>
+<span class="cmt">// nao ha o piscar de apagar e redesenhar.</span>
+<span class="cmt">//</span>
+<span class="cmt">// drawArc (e nao drawSmoothArc) de proposito: a propria biblioteca diz que as</span>
+<span class="cmt">// pontas sem anti-aliasing existem para permitir mudanca dinamica de</span>
+<span class="cmt">// comprimento com juncao limpa entre segmentos. Com drawSmoothArc as pontas</span>
+<span class="cmt">// suavizadas deixariam costura visivel a cada emenda.</span>
+static void desenhaAnel(uint8_t i, float valor) {
+  const Serie &amp;s = SERIES[i];
+
+  float fracao = (valor - s.minimo) / (s.maximo - s.minimo);
+  fracao = constrain(fracao, 0.0f, 1.0f);
+  const uint16_t alvo = (uint16_t)(ANG_VARRIDO * fracao + 0.5f);
+
+  if (alvo &gt; varrido[i]) {
+    tft.drawArc(ANEL_CX, ANEL_CY[i], ANEL_RE, ANEL_RI,
+                ANG_INICIO + varrido[i], ANG_INICIO + alvo, s.cor, TFT_BLACK);
+  } else if (alvo &lt; varrido[i]) {
+    tft.drawArc(ANEL_CX, ANEL_CY[i], ANEL_RE, ANEL_RI,
+                ANG_INICIO + alvo, ANG_INICIO + varrido[i], COR_TRILHA,
+                TFT_BLACK);
+  }
+
+  varrido[i] = alvo;
+}
+
+static void esvaziaAnel(uint8_t i) {
+  if (varrido[i] == 0) return;
+  tft.drawArc(ANEL_CX, ANEL_CY[i], ANEL_RE, ANEL_RI,
+              ANG_INICIO, ANG_INICIO + varrido[i], COR_TRILHA, TFT_BLACK);
+  varrido[i] = 0;
 }
 
 <span class="cmt">// ---------------------------------------------------------------------------</span>
 <span class="cmt">// Tela</span>
 <span class="cmt">// ---------------------------------------------------------------------------</span>
 
-static void formataRelogio(uint32_t total, char *buf, size_t n) {
-  snprintf(buf, n, "%02u:%02u:%02u",
-           (unsigned)((total / 3600) % 100),
-           (unsigned)((total / 60) % 60),
-           (unsigned)(total % 60));
-}
+<span class="cmt">// Simbolo da grandeza, na abertura de baixo do anel.</span>
+<span class="cmt">//</span>
+<span class="cmt">// O grau nao existe nas fontes da TFT_eSPI: elas cobrem 0x20 a 0x7E e o</span>
+<span class="cmt">// caractere ficaria fora. Desenhado como dois circulos concentricos, que e</span>
+<span class="cmt">// exatamente o que o simbolo e - e assim ele acompanha a cor da serie.</span>
+static void desenhaSimbolo(uint8_t i) {
+  const Serie &amp;s = SERIES[i];
+  const int16_t y = ANEL_CY[i] + DESLOC_ROTULO;
 
-<span class="cmt">// Desenha o que nao muda: moldura, rotulos, separador e rodape.</span>
-static void telaFixa() {
-  tft.fillScreen(TFT_BLACK);
-  tft.drawRoundRect(4, 4, tft.width() - 8, tft.height() - 8, 6, TFT_DARKGREY);
+  tft.setTextColor(s.cor, TFT_BLACK);
 
-  tft.setTextDatum(MC_DATUM);
-  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  tft.drawString("ligado ha", tft.width() / 2, yLegenda(), 2);
+  if (!s.grau) {
+    tft.setTextDatum(MC_DATUM);
+    tft.drawString(s.simbolo, ANEL_CX, y, 4);
+    return;
+  }
 
-  tft.drawFastHLine(16, ySeparador(), tft.width() - 32, TFT_DARKGREY);
+  const int16_t largura = tft.textWidth(s.simbolo, 4);
+  const int16_t x0 = ANEL_CX - (largura + 9) / 2;
+
+  tft.drawCircle(x0 + 3, y - 7, 3, s.cor);
+  tft.drawCircle(x0 + 3, y - 7, 2, s.cor);
 
   tft.setTextDatum(ML_DATUM);
-  for (uint8_t i = 0; i &lt; N_LINHAS; i++) {
-    tft.drawString(ROTULOS[i], 16, yLinha(i), 2);
-  }
-
-  char rodape[64];
-  if (sensorOk) {
-    snprintf(rodape, sizeof rodape, "%s  %dx%d  BME280 0x%02X",
-             DRIVER, tft.width(), tft.height(), enderecoSensor);
-  } else {
-    snprintf(rodape, sizeof rodape, "%s  %dx%d  sem sensor",
-             DRIVER, tft.width(), tft.height());
-  }
-
-  <span class="cmt">// Em retrato a tela e estreita: cai para a fonte menor se nao couber.</span>
-  const uint8_t fonte = tft.textWidth(rodape, 2) &lt;= tft.width() - 16 ? 2 : 1;
-  tft.setTextDatum(MC_DATUM);
-  tft.drawString(rodape, tft.width() / 2, yRodape(), fonte);
+  tft.drawString(s.simbolo, x0 + 9, y, 4);
 }
 
-<span class="cmt">// Redesenha so o relogio. O padding apaga o valor anterior, evitando piscada.</span>
-static void desenhaRelogio(const char *texto) {
-  tft.setTextDatum(MC_DATUM);
-  tft.setTextColor(TFT_ORANGE, TFT_BLACK);
-  tft.setTextPadding(larguraRelogio);
-  tft.drawString(texto, tft.width() / 2, yRelogio(), 7);
-  tft.setTextPadding(0);
+<span class="cmt">// Desenha o que nao muda: a trilha dos dois aneis e os simbolos.</span>
+static void telaFixa() {
+  tft.fillScreen(TFT_BLACK);
+
+  for (uint8_t i = 0; i &lt; 2; i++) {
+    tft.drawArc(ANEL_CX, ANEL_CY[i], ANEL_RE, ANEL_RI,
+                ANG_INICIO, ANG_INICIO + ANG_VARRIDO, COR_TRILHA, TFT_BLACK);
+    varrido[i] = 0;
+    desenhaSimbolo(i);
+  }
 }
 
-<span class="cmt">// Valor alinhado a direita, pelo mesmo motivo: numero que encurta de 100.0</span>
-<span class="cmt">// para 99.9 nao deixa digito orfao atras.</span>
+<span class="cmt">// Uma casa decimal, menos a partir de 100: assim o texto nunca passa de</span>
+<span class="cmt">// quatro digitos e cabe com folga dentro do anel.</span>
+static void formataValor(float valor, char *buf, size_t n) {
+  if (valor &gt;= 100.0f || valor &lt;= -100.0f) snprintf(buf, n, "%.0f", valor);
+  else                                     snprintf(buf, n, "%.1f", valor);
+}
+
+<span class="cmt">// Numero em negrito no centro do anel. O padding apaga a area inteira: um</span>
+<span class="cmt">// valor que encurta de 100 para 99.9 nao deixa digito orfao atras.</span>
 static void desenhaValor(uint8_t i, const char *texto, uint16_t cor) {
-  tft.setTextDatum(MR_DATUM);
+  tft.setFreeFont(&amp;FreeSansBold18pt7b);
+  tft.setTextDatum(MC_DATUM);
   tft.setTextColor(cor, TFT_BLACK);
   tft.setTextPadding(larguraValor);
-  tft.drawString(texto, tft.width() - 16, yLinha(i), 4);
+  tft.drawString(texto, ANEL_CX, ANEL_CY[i]);
   tft.setTextPadding(0);
 }
 
-static void mostraLeitura(float temperatura, float umidade, float pressao) {
-  char buf[24];
+static void mostraLeitura(float temperatura, float umidade) {
+  const float valores[2] = {temperatura, umidade};
+  char buf[16];
 
-  snprintf(buf, sizeof buf, "%.1f C", temperatura);
-  desenhaValor(0, buf, TFT_WHITE);
+  for (uint8_t i = 0; i &lt; 2; i++) {
+    formataValor(valores[i], buf, sizeof buf);
+    desenhaValor(i, buf, COR_TEXTO);
+    desenhaAnel(i, valores[i]);
+  }
 
-  snprintf(buf, sizeof buf, "%.1f %%", umidade);
-  desenhaValor(1, buf, TFT_CYAN);
-
-  snprintf(buf, sizeof buf, "%.0f hPa", pressao);
-  desenhaValor(2, buf, TFT_GREENYELLOW);
-
-  Serial.printf("temperatura %.2f C | umidade %.2f %% | pressao %.2f hPa\n",
-                temperatura, umidade, pressao);
+  Serial.printf("temperatura %.2f C | umidade %.2f %%\n", temperatura, umidade);
 }
 
 static void mostraSemSensor() {
-  for (uint8_t i = 0; i &lt; N_LINHAS; i++) {
+  for (uint8_t i = 0; i &lt; 2; i++) {
     desenhaValor(i, "--", TFT_RED);
+    esvaziaAnel(i);
   }
 }
 
@@ -920,7 +1003,6 @@ static void mostraSemSensor() {
 
 void setup() {
   Serial.begin(115200);
-  pinMode(LED_PLACA, OUTPUT);
   delay(400);  <span class="cmt">// da tempo ao monitor serial de abrir</span>
 
   Serial.println();
@@ -928,6 +1010,7 @@ void setup() {
   Serial.println("  Etapa 3 - display + BME280");
   Serial.println("==================================================");
   Serial.printf("Driver da tela   : %s\n", DRIVER);
+  Serial.printf("Inversao de cor  : %s\n", INVERSAO);
   Serial.printf("Barramento SPI   : %d MHz\n", SPI_FREQUENCY / 1000000);
   Serial.printf("Pinos da tela    : SCK=%d MOSI=%d CS=%d DC=%d RST=%d\n",
                 TFT_SCLK, TFT_MOSI, TFT_CS, TFT_DC, TFT_RST);
@@ -955,10 +1038,13 @@ void setup() {
   tft.setRotation(0);
 
   Serial.printf("Resolucao em uso : %d x %d\n", tft.width(), tft.height());
-  Serial.println("--------------------------------------------------");
 
-  larguraRelogio = tft.textWidth("00:00:00", 7);
-  larguraValor   = tft.textWidth("1013 hPa", 4);  <span class="cmt">// a maior das tres linhas</span>
+  tft.setFreeFont(&amp;FreeSansBold18pt7b);
+  larguraValor = tft.textWidth("-99.9");  <span class="cmt">// o texto mais largo possivel</span>
+  Serial.printf("Aneis            : raio %d-%d, %d graus; valor com %d px "
+                "dentro de %d px livres\n",
+                ANEL_RI, ANEL_RE, ANG_VARRIDO, larguraValor, ANEL_RI * 2);
+  Serial.println("--------------------------------------------------");
 
   telaFixa();
   if (!sensorOk) mostraSemSensor();
@@ -966,31 +1052,19 @@ void setup() {
 
 void loop() {
   const uint32_t agora = millis();
-  const uint32_t segundos = agora / 1000;
-
-  if (segundos != segundoAnterior) {
-    segundoAnterior = segundos;
-
-    char relogio[16];
-    formataRelogio(segundos, relogio, sizeof relogio);
-    desenhaRelogio(relogio);
-
-    digitalWrite(LED_PLACA, segundos % 2);  <span class="cmt">// pisca a cada segundo</span>
-  }
 
   if (sensorOk) {
     if (agora - ultimaLeitura &gt;= INTERVALO_LEITURA) {
       ultimaLeitura = agora;
 
-      float temperatura, umidade, pressao;
-      if (leSensor(temperatura, umidade, pressao)) {
-        mostraLeitura(temperatura, umidade, pressao);
+      float temperatura, umidade;
+      if (leSensor(temperatura, umidade)) {
+        mostraLeitura(temperatura, umidade);
       } else {
         <span class="cmt">// Parou de responder: cabo solto, provavelmente. Volta a procurar</span>
         <span class="cmt">// em vez de repetir o ultimo valor, que pareceria um sensor travado.</span>
         Serial.println("Sensor parou de responder - voltando a procurar");
         sensorOk = false;
-        telaFixa();
         mostraSemSensor();
       }
     }
@@ -1000,7 +1074,6 @@ void loop() {
     if (iniciaSensor()) {
       sensorOk = true;
       Serial.printf("Sensor apareceu em 0x%02X\n", enderecoSensor);
-      telaFixa();
     }
   }
 
@@ -1009,8 +1082,9 @@ void loop() {
 </code></pre>
     <div class="notes">
       <div class="note"><b>Varredura de I²C no boot</b><p>Antes de tentar o sensor, o firmware pergunta a todos os 126 endereços quem responde e lista no monitor. Isso separa dois problemas que se parecem: <i>ninguém respondeu</i> é fiação ou alimentação; <i>respondeu num endereço inesperado</i> é só endereço.</p></div>
-      <div class="note"><b>Sem sensor não trava</b><p>Se o BME280 não aparece, a tela continua funcionando com o relógio e as três linhas mostram <code>--</code> em vermelho. O firmware volta a procurar a cada 5 segundos. Fio solto no meio da execução também cai nesse caminho, em vez de congelar o último valor na tela — valor parado parece leitura válida, e isso enganaria.</p></div>
-      <div class="note"><b>Valores alinhados à direita</b><p>Detalhe pequeno com motivo: quando a umidade cai de <code>100.0</code> para <code>99.9</code>, o texto encurta. Alinhado à esquerda sobraria um dígito órfão atrás; à direita, com <i>padding</i>, a área é apagada inteira.</p></div>
+      <div class="note"><b>Sem sensor não trava</b><p>Se o BME280 não aparece, as duas linhas mostram <code>--</code> em vermelho e o firmware volta a procurar a cada 5 segundos. Fio solto no meio da execução também cai nesse caminho, em vez de congelar o último valor na tela — valor parado parece leitura válida, e isso enganaria.</p></div>
+      <div class="note"><b>Só o pedaço que mudou é repintado</b><p>O anel inteiro nunca é redesenhado. O firmware guarda quantos graus já estão pintados: se o valor sobe, desenha só o trecho que cresceu na cor da série; se cai, devolve o trecho que recuou para a cor da trilha. Repintar o anel todo apagaria e redesenharia a cada leitura, e isso pisca — o mesmo cuidado que resolveu o tremor na Etapa 2, por outro motivo.</p></div>
+      <div class="note"><b>Nada de sprite, e isso é economia</b><p>Um gráfico de linha precisaria de um <i>buffer</i> fora da tela para não piscar: 74 KB de <i>heap</i>. Desenhando o anel por segmentos o problema desaparece na origem, sem buffer nenhum. A RAM caiu de 7,4% para 6,8%.</p></div>
     </div>
   </section>
 
@@ -1021,7 +1095,7 @@ void loop() {
       <li><div><b>Grave e abra o monitor.</b><small><code>pio run -t upload -t monitor</code>.</small></div></li>
       <li><div><b>Leia a varredura de I²C primeiro.</b><small>Esperado: uma linha <code>0x76 respondeu</code> ou <code>0x77 respondeu</code>. É o teste de fiação, antes de qualquer leitura.</small></div></li>
       <li><div><b>Confira o chip ID.</b><small><code>chip ID 0x60 (BME280)</code> confirma que é o sensor com umidade.</small></div></li>
-      <li><div><b>Compare com o ambiente.</b><small>Pressão perto de 1013 hPa ao nível do mar, menos em altitude. Temperatura e umidade plausíveis para o seu quarto. Bafejar perto do sensor deve subir a umidade em segundos — é o teste mais rápido de que está medindo de verdade.</small></div></li>
+      <li><div><b>Compare com o ambiente.</b><small>Temperatura e umidade plausíveis para o seu quarto. Bafejar perto do sensor deve subir a umidade em segundos — é o teste mais rápido de que está medindo de verdade, e a barra do anel de umidade avança na hora.</small></div></li>
     </ol>
     <div class="tbl"><table>
       <thead><tr><th>Sintoma</th><th>Causa provável</th><th>O que fazer</th></tr></thead>
@@ -1036,7 +1110,7 @@ void loop() {
     </table></div>
   </section>
 
-  <p class="cap">Compilado para este chip: 328 KB de flash (25% do slot) e 21 KB de RAM. Falta a ligação física para fechar a etapa.</p>
+  <p class="cap">Compilado para este chip: 339 KB de flash (26% do slot) e 22 KB de RAM, sem buffer extra de <i>heap</i>. Falta a ligação física para fechar a etapa.</p>
 
 </div>
 
