@@ -84,6 +84,7 @@ td small{color:var(--muted)}
 @media (max-width:760px){.notes{grid-template-columns:1fr}}
 .note{border-left:3px solid var(--accent);background:var(--surface);padding:12px 14px;border-radius:0 6px 6px 0;min-width:0}
 .note.warn{border-left-color:var(--pwr)}
+.note.ok{border-left-color:var(--in)}
 .note b{display:block;margin-bottom:3px}
 .note p{font-size:14px;color:var(--muted)}
 .note code{background:var(--bg)}
@@ -119,6 +120,7 @@ pre code{font:400 12.5px/1.65 var(--font-mono);background:none;border:none;paddi
 <div class="tabs" role="tablist">
   <button class="tab" role="tab" id="t1" aria-controls="p1" aria-selected="true"><small>Etapa 1</small>A placa</button>
   <button class="tab" role="tab" id="t2" aria-controls="p2" aria-selected="false"><small>Etapa 2</small>Display TFT</button>
+  <button class="tab" role="tab" id="t3" aria-controls="p3" aria-selected="false"><small>Etapa 3</small>Sensor BME280</button>
 </div>
 
 <!-- =================================================================== -->
@@ -252,7 +254,7 @@ pre code{font:400 12.5px/1.65 var(--font-mono);background:none;border:none;paddi
     <span>módulo <b>GMT024-10 v2.1</b></span>
     <span>tela <b>2,4" · 240×320</b></span>
     <span>interface <b>SPI 4 fios</b></span>
-    <span>driver <b>ST7789V (a confirmar)</b></span>
+    <span>driver <b>ST7789V ✓</b></span>
     <span>biblioteca <b>TFT_eSPI</b></span>
   </div>
 
@@ -263,7 +265,9 @@ pre code{font:400 12.5px/1.65 var(--font-mono);background:none;border:none;paddi
     barramento VSPI.</p>
     <div class="notes">
       <div class="note warn"><b>Confira o silkscreen antes de ligar</b><p>Não achei a folha de dados do <code>GMT024-10 v2.1</code> em nenhuma fonte. O que achei: na mesma família da GoldenMorning, o <code>GMT024-08</code> é 2,4" 240×320 SPI com <b>ST7789V</b> e 8 pinos. Por isso o projeto começa com esse driver. Os nomes dos pinos abaixo são os usuais; compare um por um com o seu módulo.</p></div>
-      <div class="note warn"><b>Alimente com 3,3 V</b><p>O ESP32 fala em 3,3 V. Se o módulo não tiver regulador, 5 V no <code>VCC</code> pode queimar o painel. Comece pelo <code>3V3</code> da placa: se o módulo aceita os dois, 3,3 V funciona igual.</p></div>
+      <div class="note ok"><b>Resolvido: <code>VCC</code> nos 5 V</b><p>Na traseira do módulo, junto ao <code>VCC</code>, há um regulador <code>6206-3.3</code> — um XC6206, LDO de 3,3 V que aceita até 6 V na entrada. Com ele, os 5 V do USB são a ligação correta. <b>Só o <code>VCC</code>:</b> o <code>BLK</code> fica nos 3V3, porque a luz de fundo costuma vir por fora do regulador, com resistor dimensionado para 3,3 V.</p></div>
+      <div class="note warn"><b>Por que 3,3 V fazia a tela tremer</b><p>O XC6206 tem <i>dropout</i> de uns 250 mV: precisa da entrada acima de 3,55 V para entregar 3,3 V. Alimentado com 3,3 V ele recebia exatamente o que devia entregar — impossível. Saturava em ~3,0 V e deixava de regular, repassando ao painel qualquer oscilação do trilho. Daí o tremor. Nos 5 V ele ganha folga e isola o display do resto da placa.</p></div>
+      <div class="note"><b>Sinal continua em 3,3 V</b><p>Esse regulador alimenta o painel; não é tradutor de nível. <code>SCL</code>, <code>SDA</code>, <code>CS</code>, <code>DC</code> e <code>RES</code> seguem em 3,3 V, que é o que o ESP32 entrega. Nunca 5 V num pino de sinal.</p></div>
     </div>
   </section>
 
@@ -382,8 +386,9 @@ build_flags =
     contando desde o boot. O mesmo relógio sai no monitor serial, junto da memória
     livre, e o LED azul da placa pisca no mesmo ritmo. Se os três andarem juntos,
     a ligação está certa.</p>
+    <div class="note"><b>Mora em <code>extras/</code>, não em <code>src/</code></b><p>Este teste já cumpriu o papel, e o <code>src/main.cpp</code> seguiu para a Etapa 3. O arquivo fica guardado porque a PlatformIO compila tudo que está em <code>src/</code> — dois <code>setup()</code> no mesmo binário não linkam. Para rodar de novo, copie sobre o <code>src/main.cpp</code>.</p></div>
     <div class="codehead">
-      <span class="eyebrow">src/main.cpp</span>
+      <span class="eyebrow">extras/teste_display.cpp</span>
       <button class="copy" data-copy="c-cpp">copiar</button>
     </div>
     <pre><code id="c-cpp"><span class="cmt">// ---------------------------------------------------------------------------</span>
@@ -530,6 +535,7 @@ void loop() {
         <tr><td>Tela apagada, monitor rodando</td><td><small>Luz de fundo sem alimentação</small></td><td><small>Confira o <code>BLK</code> no 3V3 e o <code>VCC</code>.</small></td></tr>
         <tr><td>Tela branca acesa</td><td><small>Driver errado, ou <code>RES</code>/<code>DC</code>/<code>CS</code> trocados</small></td><td><small>Troque para <code>ILI9341_DRIVER</code> e reconfira esses três fios.</small></td></tr>
         <tr><td>Imagem embaralhada ou listrada</td><td><small>SPI rápido demais para o cabo</small></td><td><small>Baixe <code>SPI_FREQUENCY</code> para <code>27000000</code>.</small></td></tr>
+        <tr><td>Imagem tremendo, piscando junto</td><td><small>Regulador do módulo sem folga</small></td><td><small>Passe o <code>VCC</code> dos 3V3 para o <code>5V</code>. Foi o que aconteceu aqui.</small></td></tr>
         <tr><td>Cores invertidas</td><td><small>Painel de fábrica com inversão</small></td><td><small>Acrescente <code>-DTFT_INVERSION_ON=1</code>.</small></td></tr>
         <tr><td>Imagem espelhada ou deitada</td><td><small>Rotação</small></td><td><small>Troque o <code>setRotation()</code> entre 0 e 3.</small></td></tr>
         <tr><td>Monitor com lixo na tela</td><td><small>Velocidade diferente</small></td><td><small><code>monitor_speed</code> e <code>Serial.begin()</code> precisam bater em 115200.</small></td></tr>
@@ -537,9 +543,504 @@ void loop() {
     </table></div>
   </section>
 
-  <p class="cap">Código já compilado para este chip: 304 KB de flash (23% do slot) e 21 KB de RAM. Falta a ligação física para fechar o teste.</p>
+  <p class="cap">Etapa fechada no hardware: painel aceso, relógio andando e tremor resolvido nos 5 V. O driver <b>ST7789V</b> era o certo — a aposta se confirmou.</p>
 
 </div>
+
+<!-- =================================================================== -->
+<!-- ETAPA 3                                                             -->
+<!-- =================================================================== -->
+<div class="panel" id="p3" role="tabpanel" aria-labelledby="t3" hidden>
+
+  <div class="spec">
+    <span>sensor <b>BME280</b></span>
+    <span>mede <b>temp · umidade · pressão</b></span>
+    <span>interface <b>I²C</b></span>
+    <span>endereço <b>0x76 ou 0x77</b></span>
+    <span>biblioteca <b>Adafruit BME280</b></span>
+  </div>
+
+  <section>
+    <h2>O sensor</h2>
+    <p>Um único chip da Bosch que entrega as três grandezas que interessam aqui:
+    temperatura, umidade relativa e pressão barométrica. Fala por I²C, que gasta
+    só dois GPIOs e não disputa nada com o display — ele é SPI.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Grandeza</th><th>Faixa</th><th>Precisão típica</th><th>Resolução</th></tr></thead>
+      <tbody>
+        <tr><td class="pin">Temperatura</td><td>−40 a +85 °C</td><td>±1,0 °C</td><td>0,01 °C</td></tr>
+        <tr><td class="pin">Umidade relativa</td><td>0 a 100 %</td><td>±3 %</td><td>0,008 %</td></tr>
+        <tr><td class="pin">Pressão</td><td>300 a 1100 hPa</td><td>±1 hPa</td><td>0,18 Pa</td></tr>
+      </tbody>
+    </table></div>
+    <div class="notes">
+      <div class="note warn"><b>BME280 ou BMP280?</b><p>São quase gêmeos e o silkscreen às vezes não ajuda: o <b>BMP</b>280 <b>não mede umidade</b>. O jeito certo de saber é o chip ID — <code>0x60</code> é BME280, <code>0x58</code> é BMP280. O firmware lê esse registrador e avisa no monitor, em vez de deixar a umidade sair como valor inválido sem explicação.</p></div>
+      <div class="note warn"><b>Alimente com 3,3 V</b><p>Mesma lição do display, com final diferente: os módulos pequenos de 6 pinos normalmente <b>não têm</b> regulador, e o chip é 3,3 V. Procure um regulador de três pernas na traseira. <b>Não achou? Use o <code>3V3</code>.</b> O sensor puxa microamperes, então aqui não há problema de folga.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Ligações</h2>
+    <p>Quatro fios, dos quais dois ocupam GPIO. Os escolhidos são
+    <code>P21</code> e <code>P22</code>, o par de I²C padrão do ESP32 — livres no
+    boot e fora dos reservados à flash.</p>
+    <div class="legend" id="legend3"></div>
+    <div class="fig">
+      <svg id="ligacao3" viewBox="0 0 920 270" role="img"
+           aria-label="Ligação da NodeMCU ESP-32S ao sensor BME280 por I2C, quatro fios">
+        <rect x="60" y="66" width="170" height="180" rx="6" class="box"/>
+        <text x="145" y="232" text-anchor="middle" class="t-b" style="font-size:16px">NodeMCU</text>
+        <text x="145" y="88" text-anchor="middle" class="t-s t-mut">ESP-32S · 38p</text>
+
+        <rect x="690" y="66" width="180" height="180" rx="6" class="box"/>
+        <rect x="740" y="108" width="80" height="54" rx="3" fill="var(--board)" stroke="var(--board-line)" stroke-width="1.2"/>
+        <text x="780" y="140" text-anchor="middle" class="t-s t-mut">BME280</text>
+        <text x="780" y="222" text-anchor="middle" class="t-b" style="font-size:15px">GY-BME280</text>
+        <text x="780" y="88" text-anchor="middle" class="t-s t-mut">I²C</text>
+
+        <g id="rows3"></g>
+      </svg>
+    </div>
+    <div class="tbl"><table>
+      <thead><tr><th>Pino da placa</th><th>Pino do módulo</th><th>Sinal</th><th>Observação</th></tr></thead>
+      <tbody id="wirerows3"></tbody>
+    </table></div>
+    <div class="notes">
+      <div class="note"><b>Se o módulo tiver 6 pinos</b><p>Além de <code>VCC</code>, <code>GND</code>, <code>SCL</code> e <code>SDA</code>, aparecem <code>CSB</code> e <code>SDO</code>. Para I²C, <b>deixe os dois sem ligar</b>: a placa já tem resistores que põem o <code>CSB</code> em alto (escolhendo I²C em vez de SPI) e o <code>SDO</code> num nível que define o endereço. <code>SDO</code> no terra dá <code>0x76</code>; no 3,3 V dá <code>0x77</code>. O firmware tenta os dois, então não precisa saber de antemão.</p></div>
+      <div class="note"><b>Resistores de <i>pull-up</i></b><p>O I²C precisa de resistores puxando <code>SDA</code> e <code>SCL</code> para o 3,3 V. Praticamente todo módulo GY-BME280 já traz os dois na placa, e o ESP32 também liga os internos. Só vale conferir se o barramento não subir de jeito nenhum.</p></div>
+      <div class="note"><b>Dois barramentos, zero conflito</b><p>Display em SPI (<code>P18</code>, <code>P23</code>, <code>P13</code>, <code>P27</code>, <code>P26</code>), sensor em I²C (<code>P21</code>, <code>P22</code>). Protocolos e pinos diferentes, sem precisar coordenar acesso entre os dois nem compartilhar clock.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Modo forçado, e por que isso importa</h2>
+    <p>O BME280 sabe medir sozinho, continuamente. O firmware <b>não</b> usa esse
+    modo — e essa é a decisão menos óbvia desta etapa.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Modo</th><th>Como funciona</th><th>Efeito na temperatura</th></tr></thead>
+      <tbody>
+        <tr><td class="pin">NORMAL</td><td><small>Mede sem parar, no ritmo dele.</small></td><td><small>O próprio chip se aquece e empurra a leitura para cima alguns décimos de grau.</small></td></tr>
+        <tr><td class="pin">FORCED</td><td><small>Dorme. Mede uma vez quando mandam, volta a dormir.</small></td><td><small>Praticamente sem autoaquecimento. É o usado aqui.</small></td></tr>
+      </tbody>
+    </table></div>
+    <div class="note warn"><b>Erro que não dá para corrigir depois</b><p>Autoaquecimento não é ruído — é desvio sistemático, sempre para cima. Não sai na média nem em filtro. Numa estufa de filamento, temperatura é justamente a grandeza que vai comandar o aquecedor: medir alguns décimos acima significa desligar antes da hora, sempre. Custa duas linhas de configuração evitar isso agora.</p></div>
+  </section>
+
+  <section>
+    <h2>Configuração do projeto</h2>
+    <p>Uma linha nova em <code>lib_deps</code>. O sensor não precisa de
+    <code>build_flags</code> como o display: os pinos de I²C são passados em
+    tempo de execução, no <code>Wire.begin()</code>.</p>
+    <div class="codehead">
+      <span class="eyebrow">platformio.ini</span>
+      <button class="copy" data-copy="c-ini3">copiar</button>
+    </div>
+    <pre><code id="c-ini3">[env:esp32doit-devkit-v1]
+platform = espressif32
+board = esp32doit-devkit-v1
+framework = arduino
+
+<span class="cmt">; Chip confirmado via esptool: ESP32-D0WD-V3 rev v3.0, dual core, flash 4MB.</span>
+monitor_speed = 115200
+monitor_filters = esp32_exception_decoder, time
+
+lib_deps =
+  bodmer/TFT_eSPI@^2.5.43
+  <span class="cmt">; Puxa sozinha a Adafruit Unified Sensor e a Adafruit BusIO.</span>
+  adafruit/Adafruit BME280 Library@^2.2.4
+
+<span class="cmt">; A TFT_eSPI e configurada por aqui, sem editar arquivos da biblioteca.</span>
+<span class="cmt">; USER_SETUP_LOADED desliga o User_Setup.h dela e faz valer o que esta abaixo.</span>
+build_flags =
+  -DUSER_SETUP_LOADED=1
+
+  <span class="cmt">; --- driver do painel ---------------------------------------------------</span>
+  <span class="cmt">; O GMT024-08 da GoldenMorning (mesma familia, 2,4" 240x320 SPI) usa</span>
+  <span class="cmt">; ST7789V. Se a tela acender branca ou embaralhada, comente a linha do</span>
+  <span class="cmt">; ST7789 e descomente a do ILI9341: sao os dois controladores usados</span>
+  <span class="cmt">; nesse tamanho de painel.</span>
+  -DST7789_DRIVER=1
+  <span class="cmt">; -DILI9341_DRIVER=1</span>
+
+  -DTFT_WIDTH=240
+  -DTFT_HEIGHT=320
+
+  <span class="cmt">; --- ligacao ao ESP32 ---------------------------------------------------</span>
+  <span class="cmt">; Pinos escolhidos para nao cair em pino de strapping nem de boot.</span>
+  -DTFT_MOSI=23
+  -DTFT_SCLK=18
+  -DTFT_CS=13
+  -DTFT_DC=27
+  -DTFT_RST=26
+
+  <span class="cmt">; --- fontes embutidas ---------------------------------------------------</span>
+  -DLOAD_GLCD=1
+  -DLOAD_FONT2=1
+  -DLOAD_FONT4=1
+  -DLOAD_FONT6=1
+  -DLOAD_FONT7=1
+  -DLOAD_GFXFF=1
+
+  -DSPI_FREQUENCY=40000000</code></pre>
+    <div class="note"><b>Dependências</b><p><code>adafruit/Adafruit BME280 Library</code> traz atrás de si a <b>Adafruit Unified Sensor</b> e a <b>Adafruit BusIO</b>, sem precisar declarar: a PlatformIO lê o <code>library.json</code> dela e baixa as duas. A <code>Wire</code> já vem com o core.</p></div>
+  </section>
+
+  <section>
+    <h2>Código</h2>
+    <p>Mantém o relógio da etapa anterior e acrescenta as três leituras,
+    atualizadas a cada 2 segundos, na tela e no monitor.</p>
+    <div class="codehead">
+      <span class="eyebrow">src/main.cpp</span>
+      <button class="copy" data-copy="c-cpp3">copiar</button>
+    </div>
+    <pre><code id="c-cpp3"><span class="cmt">// ---------------------------------------------------------------------------</span>
+<span class="cmt">// Etapa 3 - display + BME280 (temperatura, umidade e pressao)</span>
+<span class="cmt">//</span>
+<span class="cmt">// Le o sensor por I2C e mostra na tela junto com o relogio da etapa anterior.</span>
+<span class="cmt">// Os mesmos valores saem no monitor serial, para conferir sem olhar a tela.</span>
+<span class="cmt">//</span>
+<span class="cmt">// Ligacao do display (os pinos ficam em platformio.ini, nao aqui):</span>
+<span class="cmt">//   VCC -&gt; 5V         SCL/SCK  -&gt; GPIO18        RES -&gt; GPIO26</span>
+<span class="cmt">//   GND -&gt; GND        SDA/MOSI -&gt; GPIO23        CS  -&gt; GPIO13</span>
+<span class="cmt">//   BLK -&gt; 3V3                                  DC  -&gt; GPIO27</span>
+<span class="cmt">//</span>
+<span class="cmt">// Ligacao do BME280 (I2C, pinos declarados abaixo):</span>
+<span class="cmt">//   VIN -&gt; 3V3        SCL -&gt; GPIO22</span>
+<span class="cmt">//   GND -&gt; GND        SDA -&gt; GPIO21</span>
+<span class="cmt">//</span>
+<span class="cmt">// O display e SPI e o sensor e I2C: barramentos diferentes, sem disputa de</span>
+<span class="cmt">// pino e sem precisar coordenar acesso entre os dois.</span>
+<span class="cmt">// ---------------------------------------------------------------------------</span>
+
+#include &lt;Arduino.h&gt;
+#include &lt;TFT_eSPI.h&gt;
+#include &lt;Wire.h&gt;
+#include &lt;Adafruit_BME280.h&gt;
+
+TFT_eSPI tft = TFT_eSPI();
+Adafruit_BME280 bme;
+
+<span class="cmt">// Qual driver de tela foi compilado. Se nao acender, troque em platformio.ini.</span>
+#if defined(ST7789_DRIVER)
+static const char *DRIVER = "ST7789V";
+#elif defined(ILI9341_DRIVER)
+static const char *DRIVER = "ILI9341";
+#else
+static const char *DRIVER = "nao definido";
+#endif
+
+static const uint8_t PIN_SDA = 21;
+static const uint8_t PIN_SCL = 22;
+static const uint8_t LED_PLACA = 2;  <span class="cmt">// LED azul de bordo, prova de vida</span>
+
+<span class="cmt">// O modulo responde em 0x76 ou 0x77, conforme o resistor de endereco da placa.</span>
+static const uint8_t ENDERECOS[] = {0x76, 0x77};
+
+static const uint32_t INTERVALO_LEITURA = 2000;  <span class="cmt">// ms entre leituras</span>
+static const uint32_t INTERVALO_RETENTATIVA = 5000;  <span class="cmt">// ms entre buscas do sensor</span>
+
+static const char *ROTULOS[] = {"Temperatura", "Umidade", "Pressao"};
+static const uint8_t N_LINHAS = 3;
+
+static bool     sensorOk = false;
+static uint8_t  enderecoSensor = 0;
+static uint32_t ultimaLeitura = 0;
+static uint32_t segundoAnterior = UINT32_MAX;
+static int16_t  larguraRelogio = 0;  <span class="cmt">// para apagar o valor antigo sem piscar</span>
+static int16_t  larguraValor = 0;
+
+<span class="cmt">// ---------------------------------------------------------------------------</span>
+<span class="cmt">// Layout</span>
+<span class="cmt">//</span>
+<span class="cmt">// Calculado a partir da altura real da tela em vez de fixo, para continuar</span>
+<span class="cmt">// legivel se a rotacao mudar (retrato 240x320 ou paisagem 320x240).</span>
+<span class="cmt">// ---------------------------------------------------------------------------</span>
+
+static int16_t yLegenda() { return 26; }
+static int16_t yRelogio() { return 70; }
+static int16_t ySeparador() { return 108; }
+static int16_t yRodape() { return tft.height() - 18; }
+
+<span class="cmt">// As tres linhas dividem igualmente o que sobra entre o separador e o rodape.</span>
+static int16_t yLinha(uint8_t i) {
+  const int16_t topo = ySeparador() + 12;
+  const int16_t passo = (yRodape() - 16 - topo) / N_LINHAS;
+  return topo + passo * i + passo / 2;
+}
+
+<span class="cmt">// ---------------------------------------------------------------------------</span>
+<span class="cmt">// Sensor</span>
+<span class="cmt">// ---------------------------------------------------------------------------</span>
+
+<span class="cmt">// Traduz o chip ID lido do sensor. Serve para pegar o caso em que chegou um</span>
+<span class="cmt">// BMP280 no lugar do BME280: sao quase identicos, mas o BMP nao tem umidade.</span>
+static const char *nomeChip(uint8_t id) {
+  switch (id) {
+    case 0x60: return "BME280";
+    case 0x58: return "BMP280 - NAO mede umidade";
+    case 0x56:
+    case 0x57: return "BMP280 (amostra de engenharia)";
+    default:   return "desconhecido";
+  }
+}
+
+<span class="cmt">// Lista quem responde no barramento. Se o sensor nao aparecer, isso separa</span>
+<span class="cmt">// "ligacao errada" de "endereco diferente do esperado".</span>
+static void varreI2C() {
+  Serial.println("Varredura I2C:");
+  uint8_t achados = 0;
+
+  for (uint8_t endereco = 1; endereco &lt; 127; endereco++) {
+    Wire.beginTransmission(endereco);
+    if (Wire.endTransmission() == 0) {
+      Serial.printf("  0x%02X respondeu\n", endereco);
+      achados++;
+    }
+  }
+
+  if (achados == 0) {
+    Serial.println("  ninguem respondeu - confira SDA, SCL, GND e os 3V3");
+  }
+}
+
+static bool iniciaSensor() {
+  for (uint8_t endereco : ENDERECOS) {
+    if (!bme.begin(endereco, &amp;Wire)) continue;
+
+    enderecoSensor = endereco;
+
+    <span class="cmt">// MODO FORCADO em vez de continuo: o sensor dorme entre as leituras e</span>
+    <span class="cmt">// nao se aquece. Em modo continuo o proprio chip esquenta e puxa a</span>
+    <span class="cmt">// temperatura para cima alguns decimos - erro que nao da para corrigir</span>
+    <span class="cmt">// depois, e justamente temperatura e o que mais importa aqui.</span>
+    bme.setSampling(Adafruit_BME280::MODE_FORCED,
+                    Adafruit_BME280::SAMPLING_X1,   <span class="cmt">// temperatura</span>
+                    Adafruit_BME280::SAMPLING_X1,   <span class="cmt">// pressao</span>
+                    Adafruit_BME280::SAMPLING_X1,   <span class="cmt">// umidade</span>
+                    Adafruit_BME280::FILTER_OFF);
+    return true;
+  }
+  return false;
+}
+
+static bool leSensor(float &amp;temperatura, float &amp;umidade, float &amp;pressao) {
+  if (!bme.takeForcedMeasurement()) return false;
+
+  temperatura = bme.readTemperature();
+  umidade     = bme.readHumidity();
+  pressao     = bme.readPressure() / 100.0f;  <span class="cmt">// Pa -&gt; hPa</span>
+
+  return !isnan(temperatura) &amp;&amp; !isnan(umidade) &amp;&amp; !isnan(pressao);
+}
+
+<span class="cmt">// ---------------------------------------------------------------------------</span>
+<span class="cmt">// Tela</span>
+<span class="cmt">// ---------------------------------------------------------------------------</span>
+
+static void formataRelogio(uint32_t total, char *buf, size_t n) {
+  snprintf(buf, n, "%02u:%02u:%02u",
+           (unsigned)((total / 3600) % 100),
+           (unsigned)((total / 60) % 60),
+           (unsigned)(total % 60));
+}
+
+<span class="cmt">// Desenha o que nao muda: moldura, rotulos, separador e rodape.</span>
+static void telaFixa() {
+  tft.fillScreen(TFT_BLACK);
+  tft.drawRoundRect(4, 4, tft.width() - 8, tft.height() - 8, 6, TFT_DARKGREY);
+
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  tft.drawString("ligado ha", tft.width() / 2, yLegenda(), 2);
+
+  tft.drawFastHLine(16, ySeparador(), tft.width() - 32, TFT_DARKGREY);
+
+  tft.setTextDatum(ML_DATUM);
+  for (uint8_t i = 0; i &lt; N_LINHAS; i++) {
+    tft.drawString(ROTULOS[i], 16, yLinha(i), 2);
+  }
+
+  char rodape[64];
+  if (sensorOk) {
+    snprintf(rodape, sizeof rodape, "%s  %dx%d  BME280 0x%02X",
+             DRIVER, tft.width(), tft.height(), enderecoSensor);
+  } else {
+    snprintf(rodape, sizeof rodape, "%s  %dx%d  sem sensor",
+             DRIVER, tft.width(), tft.height());
+  }
+
+  <span class="cmt">// Em retrato a tela e estreita: cai para a fonte menor se nao couber.</span>
+  const uint8_t fonte = tft.textWidth(rodape, 2) &lt;= tft.width() - 16 ? 2 : 1;
+  tft.setTextDatum(MC_DATUM);
+  tft.drawString(rodape, tft.width() / 2, yRodape(), fonte);
+}
+
+<span class="cmt">// Redesenha so o relogio. O padding apaga o valor anterior, evitando piscada.</span>
+static void desenhaRelogio(const char *texto) {
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextColor(TFT_ORANGE, TFT_BLACK);
+  tft.setTextPadding(larguraRelogio);
+  tft.drawString(texto, tft.width() / 2, yRelogio(), 7);
+  tft.setTextPadding(0);
+}
+
+<span class="cmt">// Valor alinhado a direita, pelo mesmo motivo: numero que encurta de 100.0</span>
+<span class="cmt">// para 99.9 nao deixa digito orfao atras.</span>
+static void desenhaValor(uint8_t i, const char *texto, uint16_t cor) {
+  tft.setTextDatum(MR_DATUM);
+  tft.setTextColor(cor, TFT_BLACK);
+  tft.setTextPadding(larguraValor);
+  tft.drawString(texto, tft.width() - 16, yLinha(i), 4);
+  tft.setTextPadding(0);
+}
+
+static void mostraLeitura(float temperatura, float umidade, float pressao) {
+  char buf[24];
+
+  snprintf(buf, sizeof buf, "%.1f C", temperatura);
+  desenhaValor(0, buf, TFT_WHITE);
+
+  snprintf(buf, sizeof buf, "%.1f %%", umidade);
+  desenhaValor(1, buf, TFT_CYAN);
+
+  snprintf(buf, sizeof buf, "%.0f hPa", pressao);
+  desenhaValor(2, buf, TFT_GREENYELLOW);
+
+  Serial.printf("temperatura %.2f C | umidade %.2f %% | pressao %.2f hPa\n",
+                temperatura, umidade, pressao);
+}
+
+static void mostraSemSensor() {
+  for (uint8_t i = 0; i &lt; N_LINHAS; i++) {
+    desenhaValor(i, "--", TFT_RED);
+  }
+}
+
+<span class="cmt">// ---------------------------------------------------------------------------</span>
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(LED_PLACA, OUTPUT);
+  delay(400);  <span class="cmt">// da tempo ao monitor serial de abrir</span>
+
+  Serial.println();
+  Serial.println("==================================================");
+  Serial.println("  Etapa 3 - display + BME280");
+  Serial.println("==================================================");
+  Serial.printf("Driver da tela   : %s\n", DRIVER);
+  Serial.printf("Barramento SPI   : %d MHz\n", SPI_FREQUENCY / 1000000);
+  Serial.printf("Pinos da tela    : SCK=%d MOSI=%d CS=%d DC=%d RST=%d\n",
+                TFT_SCLK, TFT_MOSI, TFT_CS, TFT_DC, TFT_RST);
+  Serial.printf("Pinos do sensor  : SDA=%d SCL=%d\n", PIN_SDA, PIN_SCL);
+
+  Wire.begin(PIN_SDA, PIN_SCL);
+  varreI2C();
+
+  sensorOk = iniciaSensor();
+  if (sensorOk) {
+    const uint8_t id = bme.sensorID();
+    Serial.printf("Sensor           : 0x%02X, chip ID 0x%02X (%s)\n",
+                  enderecoSensor, id, nomeChip(id));
+    if (id != 0x60) {
+      Serial.println("ATENCAO: nao e um BME280. A umidade vai sair invalida.");
+    }
+  } else {
+    Serial.println("Sensor           : NAO encontrado em 0x76 nem 0x77");
+    Serial.println("                   seguindo sem ele, tentando de novo a cada 5 s");
+  }
+
+  tft.init();
+  <span class="cmt">// 0 = retrato 240x320. Se a imagem sair de cabeca para baixo, troque por 2</span>
+  <span class="cmt">// (o mesmo retrato girado 180 graus). 1 e 3 sao as duas paisagens.</span>
+  tft.setRotation(0);
+
+  Serial.printf("Resolucao em uso : %d x %d\n", tft.width(), tft.height());
+  Serial.println("--------------------------------------------------");
+
+  larguraRelogio = tft.textWidth("00:00:00", 7);
+  larguraValor   = tft.textWidth("1013 hPa", 4);  <span class="cmt">// a maior das tres linhas</span>
+
+  telaFixa();
+  if (!sensorOk) mostraSemSensor();
+}
+
+void loop() {
+  const uint32_t agora = millis();
+  const uint32_t segundos = agora / 1000;
+
+  if (segundos != segundoAnterior) {
+    segundoAnterior = segundos;
+
+    char relogio[16];
+    formataRelogio(segundos, relogio, sizeof relogio);
+    desenhaRelogio(relogio);
+
+    digitalWrite(LED_PLACA, segundos % 2);  <span class="cmt">// pisca a cada segundo</span>
+  }
+
+  if (sensorOk) {
+    if (agora - ultimaLeitura &gt;= INTERVALO_LEITURA) {
+      ultimaLeitura = agora;
+
+      float temperatura, umidade, pressao;
+      if (leSensor(temperatura, umidade, pressao)) {
+        mostraLeitura(temperatura, umidade, pressao);
+      } else {
+        <span class="cmt">// Parou de responder: cabo solto, provavelmente. Volta a procurar</span>
+        <span class="cmt">// em vez de repetir o ultimo valor, que pareceria um sensor travado.</span>
+        Serial.println("Sensor parou de responder - voltando a procurar");
+        sensorOk = false;
+        telaFixa();
+        mostraSemSensor();
+      }
+    }
+  } else if (agora - ultimaLeitura &gt;= INTERVALO_RETENTATIVA) {
+    ultimaLeitura = agora;
+
+    if (iniciaSensor()) {
+      sensorOk = true;
+      Serial.printf("Sensor apareceu em 0x%02X\n", enderecoSensor);
+      telaFixa();
+    }
+  }
+
+  delay(20);
+}
+</code></pre>
+    <div class="notes">
+      <div class="note"><b>Varredura de I²C no boot</b><p>Antes de tentar o sensor, o firmware pergunta a todos os 126 endereços quem responde e lista no monitor. Isso separa dois problemas que se parecem: <i>ninguém respondeu</i> é fiação ou alimentação; <i>respondeu num endereço inesperado</i> é só endereço.</p></div>
+      <div class="note"><b>Sem sensor não trava</b><p>Se o BME280 não aparece, a tela continua funcionando com o relógio e as três linhas mostram <code>--</code> em vermelho. O firmware volta a procurar a cada 5 segundos. Fio solto no meio da execução também cai nesse caminho, em vez de congelar o último valor na tela — valor parado parece leitura válida, e isso enganaria.</p></div>
+      <div class="note"><b>Valores alinhados à direita</b><p>Detalhe pequeno com motivo: quando a umidade cai de <code>100.0</code> para <code>99.9</code>, o texto encurta. Alinhado à esquerda sobraria um dígito órfão atrás; à direita, com <i>padding</i>, a área é apagada inteira.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Como testar</h2>
+    <ol class="steps">
+      <li><div><b>Com a placa desligada, faça os quatro fios.</b><small><code>VIN</code> no <code>3V3</code>, <code>GND</code> no <code>GND</code>, <code>SDA</code> no <code>P21</code>, <code>SCL</code> no <code>P22</code>.</small></div></li>
+      <li><div><b>Grave e abra o monitor.</b><small><code>pio run -t upload -t monitor</code>.</small></div></li>
+      <li><div><b>Leia a varredura de I²C primeiro.</b><small>Esperado: uma linha <code>0x76 respondeu</code> ou <code>0x77 respondeu</code>. É o teste de fiação, antes de qualquer leitura.</small></div></li>
+      <li><div><b>Confira o chip ID.</b><small><code>chip ID 0x60 (BME280)</code> confirma que é o sensor com umidade.</small></div></li>
+      <li><div><b>Compare com o ambiente.</b><small>Pressão perto de 1013 hPa ao nível do mar, menos em altitude. Temperatura e umidade plausíveis para o seu quarto. Bafejar perto do sensor deve subir a umidade em segundos — é o teste mais rápido de que está medindo de verdade.</small></div></li>
+    </ol>
+    <div class="tbl"><table>
+      <thead><tr><th>Sintoma</th><th>Causa provável</th><th>O que fazer</th></tr></thead>
+      <tbody>
+        <tr><td>Varredura vazia</td><td><small>Fiação, alimentação ou <code>SDA</code>/<code>SCL</code> trocados</small></td><td><small>Confira os quatro fios. Trocar <code>SDA</code> com <code>SCL</code> dá exatamente este sintoma.</small></td></tr>
+        <tr><td>Respondeu, mas não inicia</td><td><small>Endereço fora de 0x76/0x77</small></td><td><small>Anote o endereço da varredura e acrescente à lista <code>ENDERECOS</code>.</small></td></tr>
+        <tr><td><code>chip ID 0x58</code></td><td><small>É um BMP280</small></td><td><small>Mede temperatura e pressão, mas não umidade. Precisa trocar o módulo.</small></td></tr>
+        <tr><td>Umidade sempre 0 ou 100</td><td><small>BMP280 passando por BME280</small></td><td><small>Mesmo caso acima; confirme pelo chip ID no monitor.</small></td></tr>
+        <tr><td>Temperatura uns graus acima</td><td><small>Calor da própria placa chegando ao sensor</small></td><td><small>Afaste o módulo do regulador e do ESP32. O modo forçado resolve o autoaquecimento do chip, não o do vizinho.</small></td></tr>
+        <tr><td>Valores saltando</td><td><small><i>Pull-up</i> fraco ou fio longo</small></td><td><small>Encurte os fios do I²C; se persistir, 4,7 kΩ de <code>SDA</code> e <code>SCL</code> para o 3,3 V.</small></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <p class="cap">Compilado para este chip: 328 KB de flash (25% do slot) e 21 KB de RAM. Falta a ligação física para fechar a etapa.</p>
+
+</div>
+
+</div><!-- .wrap -->
 
 <script>
 // ===========================================================================
@@ -797,8 +1298,8 @@ const SINAIS = {
 };
 
 const FIOS = [
-  { esp:"3V3",  tela:"VCC",       tipo:"pwr",  sinal:"alimentação do painel",
-    obs:"Comece com 3,3 V. Só use 5 V se o silkscreen do módulo disser que aceita." },
+  { esp:"5V",   tela:"VCC",       tipo:"pwr",  sinal:"alimentação do painel",
+    obs:"O módulo tem regulador próprio (XC6206-3.3), conferido na traseira. Nos 3V3 ele fica sem folga e a imagem treme." },
   { esp:"GND",  tela:"GND",       tipo:"gnd",  sinal:"referência 0 V",
     obs:"A placa tem três terras; use o mais perto dos outros fios." },
   { esp:"P18",  tela:"SCL / SCK", tipo:"spi",  sinal:"clock do SPI",
@@ -840,6 +1341,55 @@ document.getElementById("wirerows").innerHTML = FIOS.map((f) => `
   <tr>
     <td class="pin"><span class="chip" style="color:${SINAIS[f.tipo].cor};border-color:${SINAIS[f.tipo].cor}">${f.esp}</span></td>
     <td class="pin">${f.tela}</td>
+    <td><small>${f.sinal}</small></td>
+    <td>${f.obs}</td>
+  </tr>`).join("");
+
+// ===========================================================================
+// ETAPA 3 - LIGACAO DO BME280
+// ===========================================================================
+const SINAIS3 = {
+  pwr: { cor:"var(--v33)", nome:"Alimentação" },
+  gnd: { cor:"var(--sig)", nome:"Terra" },
+  i2c: { cor:"var(--sys)", nome:"Barramento I²C" },
+};
+
+const FIOS3 = [
+  { esp:"3V3", mod:"VIN / VCC",  tipo:"pwr", sinal:"alimentação do sensor",
+    obs:"O chip é 3,3 V e os módulos pequenos não têm regulador. Diferente do display: aqui o consumo é mínimo e não falta folga." },
+  { esp:"GND", mod:"GND",        tipo:"gnd", sinal:"referência 0 V",
+    obs:"Mesmo terra do display. O I²C mede nível de tensão: sem terra comum, não há referência." },
+  { esp:"P21", mod:"SDA / SDI",  tipo:"i2c", sinal:"dados, nos dois sentidos",
+    obs:"SDA padrão do ESP32. Ao contrário do SPI, o mesmo fio vai e volta. É o GPIO21." },
+  { esp:"P22", mod:"SCL / SCK",  tipo:"i2c", sinal:"clock do I²C",
+    obs:"SCL padrão. Quem gera o clock é o ESP32. É o GPIO22." },
+];
+
+const alvo3 = document.getElementById("rows3");
+const Y3 = 104, DY3 = 34;
+
+FIOS3.forEach((f, i) => {
+  const y = Y3 + i * DY3;
+  const cor = SINAIS3[f.tipo].cor;
+  const g = el("g");
+
+  g.appendChild(el("line", { x1:230, y1:y, x2:690, y2:y, stroke:cor, "stroke-width":2 }));
+  g.appendChild(el("circle", { cx:230, cy:y, r:3.5, fill:cor }));
+  g.appendChild(el("circle", { cx:690, cy:y, r:3.5, fill:cor }));
+  g.appendChild(el("text", { class:"t-b", x:240, y:y - 7 }, f.esp));
+  g.appendChild(el("text", { class:"t-b", x:680, y:y - 7, "text-anchor":"end" }, f.mod));
+  g.appendChild(el("text", { class:"t-s t-mut", x:460, y:y + 14, "text-anchor":"middle" }, f.sinal));
+
+  alvo3.appendChild(g);
+});
+
+document.getElementById("legend3").innerHTML = Object.values(SINAIS3)
+  .map((c) => `<span><i style="background:${c.cor}"></i>${c.nome}</span>`).join("");
+
+document.getElementById("wirerows3").innerHTML = FIOS3.map((f) => `
+  <tr>
+    <td class="pin"><span class="chip" style="color:${SINAIS3[f.tipo].cor};border-color:${SINAIS3[f.tipo].cor}">${f.esp}</span></td>
+    <td class="pin">${f.mod}</td>
     <td><small>${f.sinal}</small></td>
     <td>${f.obs}</td>
   </tr>`).join("");
