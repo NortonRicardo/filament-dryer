@@ -1,0 +1,519 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>DryBox ESP32</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Semi+Condensed:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: ficha técnica em coluna única — modelo na geladeira, peças, ligações, observações */
+:root{
+  --bg:#f3f2ef; --surface:#ffffff; --fg:#26282b; --muted:#6b6e72; --line:#d9d7d2;
+  --accent:#e2681a; --accent-soft:#fbe7d8;
+  --pwr:#c8372d; --i2c:#2f6fb3; --v33:#c98a12; --sig:#3c3f44; --ok:#2e8a57; --opt:#7a5cc0; --out:#9a9a9a;
+  --wall:#e9e4d8; --wall-line:#bcb4a2;
+  --font-display:"Saira Semi Condensed","Arial Narrow",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#1c1d1f; --surface:#25272a; --fg:#ebe9e5; --muted:#a2a39f; --line:#3a3c40;
+  --accent:#f0832f; --accent-soft:#3d2a1c;
+  --pwr:#ef6a5f; --i2c:#6aa6e6; --v33:#e2b04a; --sig:#cfcdc8; --ok:#5cc28a; --opt:#a68be6; --out:#7b7c7e;
+  --wall:#34322d; --wall-line:#5c574c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#1c1d1f; --surface:#25272a; --fg:#ebe9e5; --muted:#a2a39f; --line:#3a3c40;
+  --accent:#f0832f; --accent-soft:#3d2a1c;
+  --pwr:#ef6a5f; --i2c:#6aa6e6; --v33:#e2b04a; --sig:#cfcdc8; --ok:#5cc28a; --opt:#a68be6; --out:#7b7c7e;
+  --wall:#34322d; --wall-line:#5c574c; color-scheme:dark}
+
+body{background:var(--bg);color:var(--fg);font:15px/1.55 var(--font-body)}
+.wrap{max-width:1040px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 56px;display:flex;flex-direction:column;gap:40px}
+h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0;line-height:1.15}
+h1{font-size:clamp(30px,5vw,44px);font-weight:700;letter-spacing:.3px}
+h1 span{color:var(--accent)}
+h2{font-size:24px;font-weight:700;display:flex;align-items:baseline;gap:10px}
+h3{font-size:17px;font-weight:700}
+p{margin:0;max-width:68ch}
+.eyebrow{font:500 12px/1 var(--font-mono);text-transform:uppercase;letter-spacing:1.4px;color:var(--muted)}
+.lead{color:var(--muted);font-size:16px}
+header{display:flex;flex-direction:column;gap:10px;border-bottom:2px solid var(--fg);padding-bottom:20px}
+.spec{display:flex;flex-wrap:wrap;gap:8px 22px;font:13px var(--font-mono);color:var(--muted)}
+.spec b{color:var(--fg);font-weight:500}
+section{display:flex;flex-direction:column;gap:16px}
+.fig{background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow-x:auto}
+.fig svg{display:block;min-width:760px;width:100%;height:auto}
+.cap{font-size:13px;color:var(--muted)}
+
+/* SVG */
+svg text{font-family:var(--font-mono);fill:var(--fg)}
+.t-s{font-size:11px}.t-m{font-size:12.5px}.t-b{font-size:13px;font-weight:500}.t-mut{fill:var(--muted)}
+.box{fill:var(--surface);stroke:var(--fg);stroke-width:1.4}
+.box-new{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.6}
+.box-opt{fill:var(--surface);stroke:var(--opt);stroke-width:1.4;stroke-dasharray:5 3}
+.w-pwr{stroke:var(--pwr);stroke-width:2.2;fill:none}
+.w-i2c{stroke:var(--i2c);stroke-width:2;fill:none}
+.w-33{stroke:var(--v33);stroke-width:2;fill:none}
+.w-sig{stroke:var(--sig);stroke-width:1.6;fill:none}
+.w-air{stroke:var(--accent);stroke-width:2;fill:none;stroke-dasharray:6 5}
+.dot-i2c{fill:var(--i2c)}.dot-33{fill:var(--v33)}
+.wall{fill:var(--wall);stroke:var(--wall-line);stroke-width:1.2}
+.inner{fill:var(--bg);stroke:var(--wall-line)}
+.spool{fill:var(--surface);stroke:var(--fg);stroke-width:1.2}
+.spool-f{fill:var(--accent);opacity:.55}
+.metal{fill:var(--line);stroke:var(--fg);stroke-width:1}
+.lead-l{stroke:var(--muted);stroke-width:1;fill:none}
+.gnd{stroke:var(--fg);stroke-width:1.4;fill:none}
+.tag-pwr{fill:var(--pwr)}.tag-pwr-t{fill:#fff;font-size:10.5px;font-weight:500}
+.arrowhead{fill:var(--accent)}
+
+/* Mudanças */
+.cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+@media (max-width:760px){.cols{grid-template-columns:1fr}}
+.col{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.col ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.col li{font-size:14px}
+.col li small{color:var(--muted)}
+.col h3{display:flex;align-items:center;gap:8px}
+.sw{width:10px;height:10px;border-radius:2px;display:inline-block}
+
+/* Tabelas */
+.tbl{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:6px}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:500 11.5px var(--font-mono);text-transform:uppercase;letter-spacing:1px;color:var(--muted);background:var(--bg)}
+tr.grp td{font:700 14px var(--font-display);letter-spacing:.4px;background:var(--bg);color:var(--fg);padding-top:12px}
+td.q{font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+td.pin{font-family:var(--font-mono);font-weight:500;white-space:nowrap}
+td small{color:var(--muted)}
+.chip{display:inline-block;font:500 11px/1 var(--font-mono);padding:4px 7px;border-radius:3px;white-space:nowrap;border:1px solid}
+.c-keep{color:var(--ok);border-color:var(--ok)}
+.c-new{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+.c-opt{color:var(--opt);border-color:var(--opt)}
+.c-have{color:var(--ok);border-color:var(--ok);background:transparent}
+.c-buy{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+.c-out{color:var(--out);border-color:var(--out);text-decoration:line-through}
+
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;font:12.5px var(--font-mono);color:var(--muted)}
+.legend i{display:inline-block;width:22px;height:3px;vertical-align:middle;margin-right:6px;border-radius:2px}
+
+.notes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (max-width:760px){.notes{grid-template-columns:1fr}}
+.note{border-left:3px solid var(--accent);background:var(--surface);padding:12px 14px;border-radius:0 6px 6px 0;min-width:0}
+.note.warn{border-left-color:var(--pwr)}
+.note b{display:block;margin-bottom:3px}
+.note p{font-size:14px;color:var(--muted)}
+
+.power{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:760px){.power{grid-template-columns:1fr}}
+.pw{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px;display:flex;flex-direction:column;gap:4px}
+.pw .n{font:700 28px var(--font-display);font-variant-numeric:tabular-nums}
+.pw .n small{font-size:15px;color:var(--muted);font-weight:500}
+.pw p{font-size:13.5px;color:var(--muted)}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin:6px 0 2px}
+.bar span{display:block;height:100%;background:var(--accent)}
+.bar span.bad{background:var(--pwr)}
+
+ol.q{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px}
+ol.q li{font-size:15px}
+ol.q li span{color:var(--muted);font-size:14px}
+
+.callout{display:flex;gap:14px;align-items:flex-start;background:var(--surface);border:2px solid var(--accent);border-radius:8px;padding:16px}
+.callout svg{flex:none}
+.callout p{color:var(--muted);font-size:14.5px}
+.stages{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+@media (max-width:760px){.stages{grid-template-columns:1fr}}
+.stage{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.stage .tag{font:500 11px/1 var(--font-mono);letter-spacing:1px;text-transform:uppercase;color:var(--accent)}
+.stage ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;font-size:14px}
+.stage ul small{color:var(--muted)}
+.c-way{color:var(--i2c);border-color:var(--i2c)}
+.c-later{color:var(--out);border-color:var(--out)}
+.fig.narrow svg{min-width:640px}
+</style>
+
+<div class="wrap">
+
+<header>
+  <span class="eyebrow">N4 Design · projeto em montagem</span>
+  <h1>Dry<span>Box</span> ESP32</h1>
+  <p class="lead">A Dry Fila Box v2 do Marlon Nardi montada numa geladeira, com ESP32, tela I2C e dois BME280. A montagem vai em duas etapas: primeiro os sensores e o painel; depois o aquecedor e os coolers, quando as peças chegarem.</p>
+  <div class="spec">
+    <span>gabinete <b>geladeira desligada</b></span>
+    <span>aquecimento <b>cartucho 12 V 50 W no dissipador Intel</b></span>
+    <span>ar <b>cooler Intel 3 fios + cooler 2 fios</b></span>
+    <span>controle <b>ESP32 + PID</b></span>
+  </div>
+</header>
+
+<div class="callout" role="note">
+  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+  <div><b>Regra principal: o aquecedor nunca liga sozinho</b>
+  <p>Ao ligar ou reiniciar o ESP32, o aquecedor começa bloqueado. No máximo o cooler de circulação gira. O aquecimento só começa depois de autorizado no painel web. Se faltar energia no meio da secagem, ele volta bloqueado e mostra o aviso.</p></div>
+</div>
+
+<!-- ============ ETAPAS ============ -->
+<section>
+  <h2>As duas etapas</h2>
+  <div class="stages">
+    <div class="stage">
+      <span class="tag">Etapa 1 · agora</span>
+      <h3>Sensores, tela e painel</h3>
+      <ul>
+        <li>ESP32 alimentado pelo USB (carregador de celular)</li>
+        <li>Tela I2C e os dois BME280 no mesmo par de fios</li>
+        <li>Painel web: leituras, gráficos de 10 min a 24 h, desenho da geladeira com os sensores</li>
+        <li>WiFi, nomes, correções dos sensores e tela salvos no ESP32</li>
+        <li>Atualização de firmware pelo navegador: a etapa 2 entra sem precisar do cabo USB</li>
+      </ul>
+    </div>
+    <div class="stage">
+      <span class="tag">Etapa 2 · quando as peças chegarem</span>
+      <h3>Aquecedor e coolers</h3>
+      <ul>
+        <li>Fonte 12 V → LM2596 (5 V) → ESP32</li>
+        <li>Cartucho controlado pelo IRLB8721</li>
+        <li>Cooler Intel direto no 12 V, com leitura de rotação</li>
+        <li>Cooler de circulação pelo 2N2222</li>
+        <li>PID, presets por filamento, timer e autorização pelo painel</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MODELO ============ -->
+<section>
+  <h2>Como fica o modelo</h2>
+  <p>Corte lateral. O dissipador Intel com o bloco do hotend fica embaixo, no fundo, e o ar quente sobe pela parede de trás. O cooler de circulação, no alto perto da porta, empurra o ar para baixo pela frente, fechando o circuito pelos rolos.</p>
+  <div class="fig">
+  <svg viewBox="0 0 900 470" role="img" aria-label="Corte lateral da geladeira com aquecedor no fundo, cooler de circulação na frente, dois sensores e eletrônica em cima">
+    <defs>
+      <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" class="arrowhead"/></marker>
+    </defs>
+    <rect x="150" y="70" width="340" height="370" rx="10" class="wall"/>
+    <rect x="174" y="94" width="292" height="322" class="inner"/>
+    <rect x="128" y="74" width="24" height="362" rx="6" class="wall"/>
+    <text x="40" y="250" class="t-s t-mut">porta</text>
+    <path d="M76 246 L126 246" class="lead-l"/>
+
+    <line x1="174" y1="214" x2="466" y2="214" stroke="var(--fg)" stroke-width="2" stroke-dasharray="8 4"/>
+    <line x1="174" y1="330" x2="466" y2="330" stroke="var(--fg)" stroke-width="2" stroke-dasharray="8 4"/>
+    <g>
+      <rect x="240" y="110" width="46" height="104" rx="6" class="spool"/><rect x="247" y="120" width="32" height="84" rx="4" class="spool-f"/>
+      <rect x="294" y="110" width="46" height="104" rx="6" class="spool"/><rect x="301" y="120" width="32" height="84" rx="4" class="spool-f"/>
+      <rect x="348" y="110" width="46" height="104" rx="6" class="spool"/><rect x="355" y="120" width="32" height="84" rx="4" class="spool-f"/>
+      <rect x="240" y="226" width="46" height="104" rx="6" class="spool"/><rect x="247" y="236" width="32" height="84" rx="4" class="spool-f"/>
+      <rect x="294" y="226" width="46" height="104" rx="6" class="spool"/><rect x="301" y="236" width="32" height="84" rx="4" class="spool-f"/>
+      <rect x="348" y="226" width="46" height="104" rx="6" class="spool"/><rect x="355" y="236" width="32" height="84" rx="4" class="spool-f"/>
+    </g>
+
+    <!-- dissipador Intel + bloco -->
+    <g>
+      <rect x="372" y="372" width="78" height="10" class="metal"/>
+      <g stroke="var(--fg)" stroke-width="1">
+        <line x1="378" y1="372" x2="378" y2="356"/><line x1="390" y1="372" x2="390" y2="356"/><line x1="402" y1="372" x2="402" y2="356"/><line x1="414" y1="372" x2="414" y2="356"/><line x1="426" y1="372" x2="426" y2="356"/><line x1="438" y1="372" x2="438" y2="356"/><line x1="448" y1="372" x2="448" y2="356"/>
+      </g>
+      <rect x="372" y="340" width="78" height="16" rx="3" class="box"/>
+      <circle cx="411" cy="348" r="6" fill="none" stroke="var(--fg)"/>
+      <rect x="394" y="382" width="34" height="14" class="metal"/>
+      <rect x="402" y="396" width="18" height="8" fill="var(--pwr)" stroke="var(--fg)"/>
+    </g>
+
+    <!-- cooler de circulação -->
+    <rect x="184" y="100" width="44" height="26" rx="3" class="box-new"/>
+    <circle cx="206" cy="113" r="9" fill="none" stroke="var(--accent)"/>
+
+    <!-- ar -->
+    <path d="M444 334 L456 300 L456 120" class="w-air" marker-end="url(#ah)"/>
+    <path d="M448 104 L300 100 L236 106" class="w-air" marker-end="url(#ah)"/>
+    <path d="M200 132 L200 380 L360 392" class="w-air" marker-end="url(#ah)"/>
+
+    <!-- sensores -->
+    <rect x="182" y="150" width="44" height="22" rx="2" class="box-new"/><text x="188" y="165" class="t-s">BME</text>
+    <rect x="182" y="262" width="44" height="22" rx="2" class="box-new"/><text x="188" y="277" class="t-s">BME</text>
+    <rect x="226" y="372" width="60" height="34" rx="3" class="box"/><text x="236" y="393" class="t-s">sílica</text>
+
+    <!-- cabos -->
+    <path d="M182 161 L166 161 L166 104 L140 82 L140 40 L200 40" class="w-i2c"/>
+    <path d="M182 273 L166 273 L166 161" class="w-i2c"/>
+    <circle cx="478" cy="404" r="5" fill="var(--bg)" stroke="var(--fg)"/>
+    <path d="M450 388 L478 404 L506 404 L506 50 L380 50" class="w-pwr"/>
+    <path d="M206 100 L206 90 L166 90" class="w-pwr" style="stroke-dasharray:3 2"/>
+
+    <!-- eletrônica em cima e fonte -->
+    <rect x="200" y="8" width="180" height="58" rx="5" class="box-new"/>
+    <rect x="210" y="16" width="60" height="34" rx="2" fill="var(--fg)"/>
+    <text x="215" y="31" class="t-s" style="fill:var(--bg)">45.0°C</text>
+    <text x="215" y="45" class="t-s" style="fill:var(--bg)">UR 11%</text>
+    <text x="280" y="30" class="t-s">ESP32 · LM2596</text>
+    <text x="280" y="46" class="t-s">IRLB8721 · 2N2222</text>
+    <rect x="560" y="12" width="150" height="50" rx="4" class="box"/>
+    <text x="572" y="34" class="t-b">Fonte 12 V 5 A</text>
+    <text x="572" y="51" class="t-s t-mut">fora da geladeira</text>
+    <path d="M560 37 L380 37" class="w-pwr"/>
+
+    <!-- rótulos -->
+    <text x="560" y="110" class="t-m">Cooler de circulação · 2 fios</text>
+    <text x="560" y="126" class="t-s t-mut">alto, perto da porta, soprando para baixo</text>
+    <text x="560" y="168" class="t-m">BME280 topo · 0x76</text>
+    <text x="560" y="184" class="t-s t-mut">na frente, fora do jato quente · controla o PID</text>
+    <text x="560" y="250" class="t-m">BME280 meio · 0x77</text>
+    <text x="560" y="266" class="t-s t-mut">altura dos rolos · confere se o calor está uniforme</text>
+    <text x="560" y="336" class="t-m">Dissipador Intel + bloco do hotend</text>
+    <text x="560" y="352" class="t-s t-mut">cooler Intel 3 fios · cartucho 50 W · em cantoneira,</text>
+    <text x="560" y="366" class="t-s t-mut">sem encostar no plástico</text>
+    <path d="M556 346 L452 352" class="lead-l"/>
+    <text x="560" y="418" class="t-m">Furo do dreno</text>
+    <text x="560" y="434" class="t-s t-mut">fios de 12 V do aquecedor e coolers</text>
+    <path d="M556 414 L484 406" class="lead-l"/>
+    <text x="20" y="54" class="t-s t-mut">I2C pela</text>
+    <text x="20" y="68" class="t-s t-mut">borracha da porta</text>
+  </svg>
+  </div>
+  <p class="cap">Tracejado laranja: circulação do ar. Azul: cabo I2C dos sensores. Vermelho: fios de 12 V.</p>
+</section>
+
+<!-- ============ PEÇAS ============ -->
+<section>
+  <h2>Peças</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Peça</th><th>Qtd</th><th>Para quê</th><th>Etapa</th><th>Situação</th></tr></thead>
+    <tbody>
+      <tr class="grp"><td colspan="5">Já tem</td></tr>
+      <tr><td>ESP32 DevKit</td><td class="q">1</td><td>Controle, WiFi, painel</td><td class="q">1</td><td><span class="chip c-have">tem</span></td></tr>
+      <tr><td>BME280 <small>(confira se é BME e não BMP)</small></td><td class="q">2</td><td>Temperatura e umidade, topo e meio</td><td class="q">1</td><td><span class="chip c-have">tem</span></td></tr>
+      <tr><td>Tela I2C <small>(0,96" ou 1,3"; escolhe no painel)</small></td><td class="q">1</td><td>Mostrador local</td><td class="q">1</td><td><span class="chip c-have">tem</span></td></tr>
+      <tr><td>Caixa impressa para a eletrônica</td><td class="q">1</td><td>Fica em cima da geladeira</td><td class="q">1</td><td><span class="chip c-have">tem</span></td></tr>
+      <tr><td>Geladeira ou frigobar fora de uso</td><td class="q">1</td><td>Gabinete isolado</td><td class="q">1</td><td><span class="chip c-have">tem</span></td></tr>
+      <tr><td>Pote de sílica indicadora</td><td class="q">1</td><td>Segura a umidade para guardar</td><td class="q">1</td><td><span class="chip c-have">tem</span></td></tr>
+      <tr><td>Fonte 12 V 5 A</td><td class="q">1</td><td>Alimentação geral</td><td class="q">2</td><td><span class="chip c-have">tem</span></td></tr>
+      <tr><td>Cartucho 12 V 50 W + bloco do hotend</td><td class="q">1</td><td>Aquecedor, já montado no dissipador Intel</td><td class="q">2</td><td><span class="chip c-have">tem</span></td></tr>
+      <tr><td>Cooler de processador Intel <small>(3 fios)</small></td><td class="q">1</td><td>Dissipador do aquecedor; o fio de rotação vigia se ele parou</td><td class="q">2</td><td><span class="chip c-have">tem</span></td></tr>
+      <tr><td>Cooler 12 V <small>(2 fios)</small></td><td class="q">1</td><td>Circulação do ar</td><td class="q">2</td><td><span class="chip c-have">tem</span></td></tr>
+
+      <tr class="grp"><td colspan="5">Comprado, a caminho</td></tr>
+      <tr><td>Step down LM2596</td><td class="q">1</td><td>12 V → 5 V para o ESP32 <small>(ajuste para 5,0 V antes de ligar)</small></td><td class="q">2</td><td><span class="chip c-way">a caminho</span></td></tr>
+      <tr><td>MOSFET IRLB8721</td><td class="q">1</td><td>Liga o cartucho com os 3,3 V do ESP32</td><td class="q">2</td><td><span class="chip c-way">a caminho</span></td></tr>
+      <tr><td>Transistor 2N2222 <small>(pacote com 10)</small></td><td class="q">1</td><td>Liga o cooler de circulação</td><td class="q">2</td><td><span class="chip c-way">a caminho</span></td></tr>
+
+      <tr class="grp"><td colspan="5">Ainda falta (pecinhas)</td></tr>
+      <tr><td>Resistores: 100 Ω, 1k e 2× 10k</td><td class="q">—</td><td>Gate do MOSFET, base do 2N2222, pull-down do gate e pull-up do fio de rotação</td><td class="q">2</td><td><span class="chip c-buy">falta</span></td></tr>
+      <tr><td>Diodo 1N4007</td><td class="q">1</td><td>Em paralelo com o cooler de 2 fios</td><td class="q">2</td><td><span class="chip c-buy">falta</span></td></tr>
+      <tr><td>Capacitor 470–1000 µF / 25 V</td><td class="q">1</td><td>Filtro no 12 V, perto do IRLB8721</td><td class="q">2</td><td><span class="chip c-buy">falta</span></td></tr>
+      <tr><td>Capacitor 100–470 µF / 16 V + cerâmico 100 nF</td><td class="q">1</td><td>Filtro no 5 V, perto do ESP32</td><td class="q">2</td><td><span class="chip c-buy">falta</span></td></tr>
+      <tr><td>Cabo de 4 vias <small>(I2C)</small> e fio 1 mm² <small>(aquecedor)</small></td><td class="q">—</td><td>Ligações</td><td class="q">1–2</td><td><span class="chip c-buy">separar</span></td></tr>
+
+      <tr class="grp"><td colspan="5">Para depois</td></tr>
+      <tr><td>Porta-fusível + fusível 7,5 A</td><td class="q">1</td><td>Protege a linha do cartucho</td><td class="q">—</td><td><span class="chip c-later">depois</span></td></tr>
+      <tr><td>Termostato KSD301 NF 70 °C</td><td class="q">1</td><td>Corte físico se o MOSFET entrar em curto</td><td class="q">—</td><td><span class="chip c-later">depois</span></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============ ETAPA 1 LIGAÇÕES ============ -->
+<section>
+  <h2>Etapa 1 · ligações</h2>
+  <p>Quatro fios saem do ESP32 e vão para os três módulos, todos em paralelo: 3V3, GND, SDA e SCL. A alimentação é pelo USB.</p>
+  <div class="legend">
+    <span><i style="background:var(--v33)"></i>3,3 V</span>
+    <span><i style="background:var(--sig)"></i>GND</span>
+    <span><i style="background:var(--i2c)"></i>SDA / SCL</span>
+  </div>
+  <div class="fig narrow">
+  <svg viewBox="0 0 900 310" role="img" aria-label="Ligação da etapa 1: ESP32 com tela e dois BME280 no I2C">
+    <rect x="20" y="120" width="130" height="50" rx="4" class="box"/>
+    <text x="32" y="141" class="t-m">Carregador USB</text>
+    <text x="32" y="158" class="t-s t-mut">5 V do celular</text>
+    <path d="M150 145 L200 145" class="w-pwr"/>
+    <rect x="200" y="60" width="160" height="200" rx="6" class="box"/>
+    <text x="236" y="230" class="t-b" style="font-size:18px">ESP32</text>
+    <text x="206" y="149" class="t-s t-mut">USB</text>
+    <g class="t-s"><text x="318" y="94">3V3</text><text x="318" y="124">GND</text><text x="300" y="154">GPIO21</text><text x="300" y="184">GPIO22</text></g>
+    <path d="M360 90 L880 90" class="w-33"/>
+    <path d="M360 120 L880 120" class="w-sig"/>
+    <path d="M360 150 L880 150" class="w-i2c"/>
+    <path d="M360 180 L880 180" class="w-i2c"/>
+    <text x="368" y="84" class="t-s">3V3</text><text x="368" y="114" class="t-s">GND</text><text x="368" y="144" class="t-s">SDA</text><text x="368" y="174" class="t-s">SCL</text>
+
+    <g>
+      <rect x="420" y="210" width="120" height="76" rx="3" class="box"/>
+      <text x="430" y="232" class="t-m">Tela I2C</text><text x="430" y="248" class="t-s t-mut">0x3C</text>
+      <path d="M436 210 L436 90" class="w-33"/><circle cx="436" cy="90" r="3.5" class="dot-33"/>
+      <path d="M462 210 L462 120" class="w-sig"/><circle cx="462" cy="120" r="3.5" fill="var(--sig)"/>
+      <path d="M488 210 L488 150" class="w-i2c"/><circle cx="488" cy="150" r="3.5" class="dot-i2c"/>
+      <path d="M514 210 L514 180" class="w-i2c"/><circle cx="514" cy="180" r="3.5" class="dot-i2c"/>
+      <text x="430" y="278" class="t-s t-mut">VCC GND SDA SCL</text>
+    </g>
+    <g>
+      <rect x="580" y="210" width="130" height="76" rx="3" class="box-new"/>
+      <text x="590" y="232" class="t-m">BME280 topo</text><text x="590" y="248" class="t-s t-mut">0x76 · SDO→GND</text><text x="590" y="262" class="t-s t-mut">CSB→3V3</text>
+      <path d="M596 210 L596 90" class="w-33"/><circle cx="596" cy="90" r="3.5" class="dot-33"/>
+      <path d="M622 210 L622 120" class="w-sig"/><circle cx="622" cy="120" r="3.5" fill="var(--sig)"/>
+      <path d="M648 210 L648 150" class="w-i2c"/><circle cx="648" cy="150" r="3.5" class="dot-i2c"/>
+      <path d="M674 210 L674 180" class="w-i2c"/><circle cx="674" cy="180" r="3.5" class="dot-i2c"/>
+    </g>
+    <g>
+      <rect x="750" y="210" width="130" height="76" rx="3" class="box-new"/>
+      <text x="760" y="232" class="t-m">BME280 meio</text><text x="760" y="248" class="t-s t-mut">0x77 · SDO→3V3</text><text x="760" y="262" class="t-s t-mut">CSB→3V3</text>
+      <path d="M766 210 L766 90" class="w-33"/><circle cx="766" cy="90" r="3.5" class="dot-33"/>
+      <path d="M792 210 L792 120" class="w-sig"/><circle cx="792" cy="120" r="3.5" fill="var(--sig)"/>
+      <path d="M818 210 L818 150" class="w-i2c"/><circle cx="818" cy="150" r="3.5" class="dot-i2c"/>
+      <path d="M844 210 L844 180" class="w-i2c"/><circle cx="844" cy="180" r="3.5" class="dot-i2c"/>
+    </g>
+  </svg>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Pino ESP32</th><th>Liga em</th><th>Observação</th></tr></thead>
+    <tbody>
+      <tr><td class="pin">3V3</td><td>VCC da tela e dos dois BME280</td><td>Não use o pino de 5 V nos sensores</td></tr>
+      <tr><td class="pin">GND</td><td>GND dos três módulos</td><td></td></tr>
+      <tr><td class="pin">GPIO21</td><td>SDA dos três módulos</td><td>I2C a 50 kHz por causa do cabo comprido</td></tr>
+      <tr><td class="pin">GPIO22</td><td>SCL dos três módulos</td><td></td></tr>
+    </tbody>
+  </table></div>
+  <div class="notes">
+    <div class="note"><b>Endereço dos BME280</b><p>Um com SDO no GND (0x76, topo), outro com SDO no 3V3 (0x77, meio). Se o módulo tiver o pino CSB, ligue no 3V3. Em alguns módulos o endereço muda numa ponte de solda no verso.</p></div>
+    <div class="note"><b>Conferência pelo painel</b><p>Em Sistema, o painel lista o que achou no I2C. O esperado é 0x3c, 0x76 e 0x77. Se aparecer "BMP280", o sensor não mede umidade.</p></div>
+  </div>
+</section>
+
+<!-- ============ ETAPA 2 LIGAÇÕES ============ -->
+<section>
+  <h2>Etapa 2 · ligações</h2>
+  <p>A parte de potência. O I2C da etapa 1 continua igual; o USB sai e o ESP32 passa a ser alimentado pelo LM2596.</p>
+  <div class="legend">
+    <span><i style="background:var(--pwr)"></i>12 V</span>
+    <span><i style="background:var(--sig)"></i>GND e sinais</span>
+    <span><i style="background:var(--v33)"></i>3,3 V / 5 V</span>
+  </div>
+  <div class="fig">
+  <svg viewBox="0 0 920 520" role="img" aria-label="Ligação da etapa 2: fonte, LM2596, cartucho com IRLB8721, cooler Intel, cooler de circulação com 2N2222 e ESP32">
+    <!-- fonte -->
+    <rect x="740" y="14" width="160" height="58" rx="4" class="box"/>
+    <text x="752" y="36" class="t-b">Fonte 12 V 5 A</text>
+    <text x="752" y="54" class="t-s t-mut">+12V · GND</text>
+    <!-- trilhos -->
+    <path d="M740 40 L720 40 L720 100 L40 100" class="w-pwr"/>
+    <text x="48" y="94" class="t-s">+12V</text>
+    <path d="M880 72 L880 350 L40 350" class="w-sig"/>
+    <text x="48" y="344" class="t-s">GND</text>
+
+    <!-- LM2596 -->
+    <path d="M100 100 L100 150" class="w-pwr"/><circle cx="100" cy="100" r="3.5" fill="var(--pwr)"/>
+    <rect x="40" y="150" width="140" height="50" rx="3" class="box"/>
+    <text x="50" y="170" class="t-m">LM2596</text><text x="50" y="188" class="t-s t-mut">saída 5,0 V</text>
+    <path d="M160 200 L160 350" class="w-sig"/><circle cx="160" cy="350" r="3.5" fill="var(--sig)"/>
+    <path d="M70 200 L70 400 L330 400 L330 420" class="w-33"/>
+    <text x="78" y="394" class="t-s">5 V</text>
+
+    <!-- cartucho + IRLB8721 -->
+    <path d="M280 100 L280 140" class="w-pwr"/><circle cx="280" cy="100" r="3.5" fill="var(--pwr)"/>
+    <rect x="220" y="140" width="120" height="40" rx="3" class="box"/>
+    <text x="230" y="164" class="t-m">Cartucho 50 W</text>
+    <path d="M280 180 L280 250" class="w-pwr"/>
+    <text x="288" y="220" class="t-s t-mut">D</text>
+    <rect x="220" y="250" width="120" height="50" rx="3" class="box-new"/>
+    <text x="230" y="270" class="t-m">IRLB8721</text><text x="230" y="288" class="t-s t-mut">G – D – S</text>
+    <path d="M300 300 L300 350" class="w-sig"/><circle cx="300" cy="350" r="3.5" fill="var(--sig)"/>
+    <text x="306" y="326" class="t-s t-mut">S</text>
+    <path d="M240 300 L240 385 L440 385 L440 420" class="w-sig"/>
+    <text x="246" y="378" class="t-s t-mut">G · 100 Ω · 10k G→GND</text>
+
+    <!-- cooler Intel -->
+    <path d="M420 100 L420 150" class="w-pwr"/><circle cx="420" cy="100" r="3.5" fill="var(--pwr)"/>
+    <rect x="380" y="150" width="150" height="50" rx="3" class="box"/>
+    <text x="390" y="170" class="t-m">Cooler Intel</text><text x="390" y="188" class="t-s t-mut">pino 1 GND · 2 +12V · 3 rot.</text>
+    <path d="M460 200 L460 350" class="w-sig"/><circle cx="460" cy="350" r="3.5" fill="var(--sig)"/>
+    <path d="M510 200 L510 420" class="w-sig"/>
+    <text x="516" y="240" class="t-s t-mut">rotação</text>
+    <text x="516" y="254" class="t-s t-mut">10k → 3V3</text>
+
+    <!-- cooler 2 fios + 2N2222 -->
+    <path d="M620 100 L620 140" class="w-pwr"/><circle cx="620" cy="100" r="3.5" fill="var(--pwr)"/>
+    <rect x="570" y="140" width="130" height="40" rx="3" class="box"/>
+    <text x="580" y="164" class="t-m">Cooler 2 fios</text>
+    <text x="706" y="164" class="t-s t-mut">1N4007</text>
+    <path d="M620 180 L620 250" class="w-sig"/>
+    <text x="626" y="220" class="t-s t-mut">C</text>
+    <rect x="570" y="250" width="130" height="50" rx="3" class="box-new"/>
+    <text x="580" y="270" class="t-m">2N2222</text><text x="580" y="288" class="t-s t-mut">E – B – C</text>
+    <path d="M660 300 L660 350" class="w-sig"/><circle cx="660" cy="350" r="3.5" fill="var(--sig)"/>
+    <text x="666" y="326" class="t-s t-mut">E</text>
+    <path d="M600 300 L600 390 L570 390 L570 420" class="w-sig"/>
+    <text x="606" y="384" class="t-s t-mut">B · 1k</text>
+
+    <!-- ESP32 -->
+    <rect x="300" y="420" width="320" height="80" rx="6" class="box"/>
+    <text x="420" y="486" class="t-b" style="font-size:18px">ESP32</text>
+    <g class="t-s">
+      <text x="316" y="440">VIN</text><text x="378" y="440">GND</text><text x="424" y="440">25</text><text x="496" y="440">27</text><text x="556" y="440">26</text>
+    </g>
+    <path d="M390 420 L390 350" class="w-sig"/><circle cx="390" cy="350" r="3.5" fill="var(--sig)"/>
+    <path d="M620 460 L700 460" class="w-i2c"/>
+    <text x="706" y="456" class="t-s">I2C da etapa 1</text>
+    <text x="706" y="470" class="t-s t-mut">(tela + 2 BME280)</text>
+  </svg>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Pino ESP32</th><th>Liga em</th><th>Observação</th></tr></thead>
+    <tbody>
+      <tr><td class="pin">VIN</td><td>Saída do LM2596</td><td>Ajuste o LM2596 para 5,0 V com o multímetro antes de ligar</td></tr>
+      <tr><td class="pin">GND</td><td>GND comum</td><td>Fonte, LM2596, IRLB8721, 2N2222, coolers e sensores</td></tr>
+      <tr><td class="pin">GPIO25</td><td>Gate do IRLB8721 via 100 Ω</td><td>10k do gate ao GND: aquecedor desligado enquanto o ESP32 liga</td></tr>
+      <tr><td class="pin">GPIO27</td><td>Fio de rotação do cooler Intel</td><td>10k do fio ao 3V3. Sem rotação, o aquecedor não liga</td></tr>
+      <tr><td class="pin">GPIO26</td><td>Base do 2N2222 via 1k</td><td>Liga e regula o cooler de circulação</td></tr>
+    </tbody>
+  </table></div>
+  <div class="notes">
+    <div class="note"><b>Cooler Intel direto no 12 V</b><p>Ele gira sempre que a fonte estiver ligada, então o dissipador nunca fica parado com o aquecedor ligado. Coolers Intel podem puxar mais corrente do que o 2N2222 aguenta. As cores dos fios variam; vale a ordem dos pinos no conector: 1 GND, 2 +12V, 3 rotação.</p></div>
+    <div class="note"><b>Cooler de 2 fios no 2N2222</b><p>Vermelho no +12V, preto no coletor. Emissor no GND, base no GPIO26 por 1k. 1N4007 entre o +12V e o coletor, com a listra no +12V.</p></div>
+    <div class="note"><b>Capacitores</b><p>470–1000 µF / 25 V entre +12V e GND perto do IRLB8721. 100–470 µF / 16 V e 100 nF entre 5 V e GND perto do ESP32.</p></div>
+    <div class="note"><b>Teste do IRLB8721</b><p>Com o aquecedor a 100%, meça entre dreno e source: deve dar bem menos de 0,1 V. A aba de metal é o dreno; isole se parafusar em metal.</p></div>
+  </div>
+</section>
+
+<!-- ============ PROTEÇÕES ============ -->
+<section>
+  <h2>Proteções da etapa 2</h2>
+  <p>Sem fusível e sem termostato por enquanto, a proteção fica no firmware. O aquecedor desliga, ou nem liga, quando:</p>
+  <div class="notes">
+    <div class="note warn"><b>Não foi autorizado</b><p>Toda secagem começa por um botão no painel. Reinício ou queda de energia voltam para bloqueado.</p></div>
+    <div class="note warn"><b>Cooler Intel parado</b><p>Sem sinal de rotação, o aquecedor não liga, ou desliga na hora.</p></div>
+    <div class="note"><b>Um sensor some ou discorda</b><p>Sem leitura válida, ou com mais de 10 °C de diferença entre topo e meio.</p></div>
+    <div class="note"><b>Passou do teto ou não esquenta</b><p>Qualquer sensor acima do limite (60 °C), ou aquecedor no máximo por muito tempo sem a temperatura subir.</p></div>
+  </div>
+</section>
+
+<!-- ============ GELADEIRA ============ -->
+<section>
+  <h2>Cuidados com a geladeira</h2>
+  <div class="notes">
+    <div class="note warn"><b>Não fure as paredes</b><p>Os tubos do gás passam por dentro da espuma. Use o furo do dreno para os fios de 12 V e a borracha da porta para o cabo I2C.</p></div>
+    <div class="note warn"><b>Compressor desligado</b><p>A geladeira fica fora da tomada. Só a fonte 12 V vai na tomada, do lado de fora.</p></div>
+    <div class="note"><b>Plástico interno até 60 °C</b><p>Dissipador em cantoneira metálica, sem encostar no plástico. Peças impressas lá dentro em PETG, ABS ou ASA; PLA amolece.</p></div>
+    <div class="note"><b>Cabo I2C curto</b><p>Até uns 2 m funciona a 50 kHz. Deixe a caixa da eletrônica perto da borracha da porta, no alto.</p></div>
+  </div>
+</section>
+
+<!-- ============ POTÊNCIA ============ -->
+<section>
+  <h2>50 W dá conta?</h2>
+  <p>Estimativa com ambiente a 25 °C:</p>
+  <div class="power">
+    <div class="pw"><span class="eyebrow">Frigobar ~120 L</span><div class="n">~50 °C <small>máx.</small></div><div class="bar"><span style="width:100%"></span></div><p>Faz PLA (45 °C) com folga. PETG (60 °C) não chega.</p></div>
+    <div class="pw"><span class="eyebrow">Geladeira ~300 L</span><div class="n">~37 °C <small>máx.</small></div><div class="bar"><span class="bad" style="width:100%"></span></div><p>Só serve para guardar. Para secar, precisa de 2 cartuchos ou de usar só uma parte dela.</p></div>
+    <div class="pw"><span class="eyebrow">Teto do plástico</span><div class="n">60 °C</div><div class="bar"><span style="width:100%;background:var(--muted)"></span></div><p>Limite de segurança do firmware.</p></div>
+  </div>
+</section>
+
+<!-- ============ FUTURO ============ -->
+<section>
+  <h2>Para depois</h2>
+  <ol class="q">
+    <li>Fusível de 7,5 A na saída da fonte. <span>Protege contra curto na fiação.</span></li>
+    <li>Termostato KSD301 NF 70 °C no ar, no topo, em série com o cartucho. <span>Única proteção física se o MOSFET entrar em curto.</span></li>
+    <li>Segundo cartucho de 50 W. <span>Para geladeira grande ou para PETG.</span></li>
+  </ol>
+</section>
+
+</div>
+
+</body></html>
