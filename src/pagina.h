@@ -6,6 +6,22 @@
 // e uma fonte de CDN nao carregaria.
 //
 // Sem framework, sem CDN e sem arquivo externo: um GET entrega tudo.
+//
+// Convencoes da pagina:
+//   - O corpo so mostra; configurar e nos modais. Tocar num cartao com "›"
+//     abre a configuracao dele.
+//   - Liga/desliga: o texto ao lado diz o estado; o botao diz a ACAO. Ligado
+//     mostra a acao de desligar em vermelho; desligado, a de ligar em verde.
+//   - Campos salvam sozinhos ao sair deles (evento change). Cada campo manda
+//     so a propria chave, nunca o formulario inteiro.
+//   - Campos sao texto com teclado numerico, nao type=number: so assim da
+//     para por o cursor no fim do valor ao tocar.
+//
+// Feito para o celular (testado como iPhone 11, 414 px de largura):
+//   - campos com fonte de 16 px: abaixo disso o iOS da zoom ao focar;
+//   - alvos de toque com 44 px ou mais, a medida minima da Apple;
+//   - margens do notch e da barra inferior (env(safe-area-inset-*));
+//   - pagina travada atras do modal aberto, para nao rolar junto.
 // ---------------------------------------------------------------------------
 
 #pragma once
@@ -15,38 +31,57 @@
 static const char PAGINA[] PROGMEM = R"HTML(<!doctype html>
 <html lang="pt-BR">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#080b10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Estufa">
 <title>Estufa de filamento</title>
 <style>
 :root{
   --bg:#080b10; --card:#111720; --borda:#202b38; --texto:#f3f6fa;
   --mudo:#8290a1; --ciano:#42d7f5; --azul:#6197ff; --laranja:#ff9b52;
-  --verde:#55e0a0; --roxo:#a78bfa; --rodape:#586575;
+  --verde:#55e0a0; --roxo:#a78bfa; --vermelho:#ff6b6b; --rodape:#586575;
+  --turquesa:#5eead4;
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
-*{box-sizing:border-box}
-body{margin:0 auto;max-width:430px;padding:14px 14px 28px;background:var(--bg);
-  color:var(--texto);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
-.grade{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
-.cartao{border:1px solid var(--borda);border-radius:14px;background:var(--card);
-  padding:15px 10px 13px;text-align:center;min-height:120px;
-  display:flex;flex-direction:column;justify-content:center}
-.cartao.larga{grid-column:1/-1;min-height:132px}
-.rotulo{color:var(--mudo);font:800 9px var(--mono);letter-spacing:1.5px;
-  text-transform:uppercase;margin-bottom:12px}
-.valor{font-size:34px;font-weight:750;line-height:1;letter-spacing:-1.2px;
-  font-variant-numeric:tabular-nums;color:var(--mudo)}
-.cartao.larga .valor{font-size:42px}
-.valor u{font-size:14px;font-weight:600;color:var(--mudo);margin-left:3px;
-  letter-spacing:0;text-decoration:none}
-.detalhe{color:var(--mudo);font:650 9px var(--mono);letter-spacing:1px;
-  margin-top:11px}
-.vivo .valor{color:var(--cor)}
-#c-t{--cor:var(--laranja)} #c-u{--cor:var(--ciano)}
-#c-f1{--cor:var(--azul)} #c-f2{--cor:var(--roxo)} #c-h{--cor:var(--laranja)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%}
+html.travado,html.travado body{overflow:hidden}
+body{margin:0 auto;max-width:440px;background:var(--bg);color:var(--texto);
+  font:15px/1.5 -apple-system,system-ui,"Segoe UI",sans-serif;
+  padding:calc(12px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right))
+          calc(24px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left))}
+button,.clicavel,input{touch-action:manipulation}
 
-.fig{border:1px solid var(--borda);border-radius:14px;background:var(--card);
+.grade{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.cartao{border:1px solid var(--borda);border-radius:16px;background:var(--card);
+  padding:16px 10px 14px;text-align:center;min-height:124px;
+  display:flex;flex-direction:column;justify-content:center;align-items:center}
+.clicavel{cursor:pointer;position:relative;user-select:none;-webkit-user-select:none;
+  transition:transform .12s,border-color .12s}
+.clicavel:active{transform:scale(.98);border-color:#2d3b4d}
+.clicavel::after{content:"›";position:absolute;right:12px;top:50%;
+  transform:translateY(-50%);font:300 26px -apple-system,system-ui;color:var(--rodape)}
+.rotulo{color:var(--mudo);font:800 9.5px var(--mono);letter-spacing:1.5px;
+  text-transform:uppercase;margin-bottom:12px}
+.valor{font-size:36px;font-weight:750;line-height:1;letter-spacing:-1.2px;
+  font-variant-numeric:tabular-nums;color:var(--mudo)}
+.valor u{font-size:15px;font-weight:600;color:var(--mudo);margin-left:3px;
+  letter-spacing:0;text-decoration:none}
+.detalhe{color:var(--mudo);font:650 9.5px var(--mono);letter-spacing:1px;margin-top:11px}
+.detalhe b{color:var(--texto);font-weight:800}
+.detalhe.cfg,.detalhe.cfg b{color:var(--verde)}
+.vivo .valor{color:var(--cor)}
+#c-t{--cor:var(--laranja)} #c-u{--cor:var(--ciano)} #c-ua{--cor:var(--turquesa)}
+#c-f1{--cor:var(--azul)} #c-f2{--cor:var(--roxo)} #c-h{--cor:var(--laranja)}
+/* No cartao do aquecedor, meia largura: estado em cima, botao embaixo */
+.rodape-cartao{display:flex;flex-direction:column;align-items:center;gap:7px;margin-top:10px}
+.rodape-cartao .estado{font-size:10px}
+.rodape-cartao button{min-height:36px;padding:7px 12px;font-size:10px;min-width:0}
+
+.fig{border:1px solid var(--borda);border-radius:16px;background:var(--card);
   padding:12px 10px 9px}
 svg{display:block;width:100%;height:auto}
 .eixo,.leg{display:flex;justify-content:space-between;padding:0 3px;
@@ -56,48 +91,102 @@ svg{display:block;width:100%;height:auto}
 .leg span{display:flex;align-items:center;gap:5px}
 .leg s{width:12px;height:3px;border-radius:2px;text-decoration:none}
 
-.painel{margin-top:10px;border:1px solid var(--borda);border-radius:14px;
-  background:var(--card);padding:13px 14px;display:flex;align-items:center;
-  justify-content:space-between;gap:12px}
-.painel{flex-wrap:wrap}
-.brilho{flex:1 1 100%;display:flex;align-items:center;gap:10px;
-  border-top:1px solid var(--borda);padding-top:12px;margin-top:2px}
-.brilho input{flex:1;accent-color:var(--ciano)}
-.brilho b{white-space:nowrap}
-.painel b{display:block;color:var(--mudo);font:800 9px var(--mono);
-  letter-spacing:1.5px;text-transform:uppercase}
-.painel small{color:var(--rodape);font:650 10px var(--mono)}
-button{appearance:none;border:1px solid var(--borda);background:var(--bg);
-  color:var(--texto);font:800 11px var(--mono);letter-spacing:1.2px;
-  padding:10px 16px;border-radius:9px;cursor:pointer;min-width:96px}
-button[data-on="1"]{border-color:var(--verde);color:var(--verde)}
+.bloco{margin-top:10px;border:1px solid var(--borda);border-radius:16px;
+  background:var(--card);padding:14px}
+.bloco > b,.topo b{display:block;color:var(--mudo);font:800 9.5px var(--mono);
+  letter-spacing:1.5px;text-transform:uppercase;margin-bottom:11px}
+.linha{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.linha label{flex:1;font-size:13.5px;line-height:1.3;color:var(--mudo)}
+.linha label small{display:block;font-size:11px;color:var(--rodape)}
+/* 16 px: com menos o iOS da zoom na pagina ao focar o campo */
+.linha input{width:96px;min-height:44px;background:var(--bg);color:var(--texto);
+  border:1px solid var(--borda);border-radius:10px;padding:8px 11px;
+  font:700 16px var(--mono);text-align:right;-webkit-appearance:none;appearance:none}
+.linha input:focus{outline:none;border-color:var(--ciano)}
+.chave{display:flex;align-items:center;gap:12px;justify-content:space-between;
+  margin-bottom:14px}
+.chave button{flex:none}
+.estado{font:800 11.5px var(--mono);letter-spacing:1.4px;color:var(--mudo)}
+.estado.on{color:var(--verde)} .estado.quente{color:var(--laranja)}
+.estado.falha{color:var(--vermelho)}
+.chave small,.nota{display:block;color:var(--rodape);font:650 10.5px var(--mono);
+  margin-top:3px}
+button{-webkit-appearance:none;appearance:none;border:1px solid var(--borda);
+  background:var(--bg);color:var(--texto);font:800 11.5px var(--mono);
+  letter-spacing:1.2px;min-height:44px;padding:10px 16px;border-radius:11px;
+  cursor:pointer;min-width:104px}
+button:active{opacity:.7}
+button.verde{border-color:var(--verde);color:var(--verde)}
+button.vermelho{border-color:var(--vermelho);color:var(--vermelho)}
 button:disabled{opacity:.45;cursor:default}
+
+/* Controle de brilho: trilho fino, botao grande para o dedo */
+.brilho{display:flex;align-items:center;gap:12px;margin-top:14px;
+  padding-top:14px;border-top:1px solid var(--borda)}
+.brilho label{font-size:13.5px;color:var(--mudo)}
+.brilho output{width:46px;text-align:right;font:700 14px var(--mono)}
+input[type=range]{flex:1;height:44px;margin:0;background:transparent;
+  -webkit-appearance:none;appearance:none}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;
+  background:linear-gradient(90deg,var(--ciano) var(--p,60%),var(--borda) var(--p,60%))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;height:30px;
+  margin-top:-12px;border-radius:50%;background:var(--texto);
+  box-shadow:0 1px 6px rgba(0,0,0,.5)}
+input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--borda)}
+input[type=range]::-moz-range-progress{height:6px;border-radius:3px;background:var(--ciano)}
+input[type=range]::-moz-range-thumb{width:28px;height:28px;border:0;border-radius:50%;
+  background:var(--texto)}
+
+/* Modal: sobe de baixo, como uma folha do iOS */
+.fundo{position:fixed;inset:0;z-index:10;background:rgba(0,0,0,.62);
+  display:flex;align-items:flex-end;justify-content:center}
+.fundo[hidden]{display:none}
+.modal{width:100%;max-width:440px;max-height:88vh;max-height:88dvh;overflow:auto;
+  -webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  background:var(--card);border:1px solid var(--borda);border-bottom:0;
+  border-radius:20px 20px 0 0;animation:sobe .2s ease-out;
+  padding:8px calc(16px + env(safe-area-inset-right))
+          calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left))}
+.modal::before{content:"";display:block;width:38px;height:5px;border-radius:3px;
+  background:var(--borda);margin:0 auto 10px}
+@keyframes sobe{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+.topo{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.topo b{margin:0}
+.topo button{min-width:0;padding:8px 14px}
 
 footer{margin-top:16px;text-align:center;color:var(--rodape);
   font:700 10px var(--mono);letter-spacing:1.2px}
 footer.ruim{color:var(--laranja)}
 </style>
 
+<!-- Mesma ordem do display: as duas umidades, temperatura e aquecedor, ventiladores. -->
 <div class="grade">
-  <div class="cartao" id="c-t"><div class="rotulo">Temperatura</div>
-    <div class="valor"><span id="t">--</span><u>°C</u></div>
-    <div class="detalhe">AMBIENTE</div></div>
-
-  <div class="cartao" id="c-u"><div class="rotulo">Umidade</div>
+  <div class="cartao" id="c-u"><div class="rotulo">Umidade relativa</div>
     <div class="valor"><span id="u">--</span><u>%</u></div>
-    <div class="detalhe">RELATIVA</div></div>
+    <div class="detalhe">CAI SÓ DE AQUECER</div></div>
 
-  <div class="cartao" id="c-f1"><div class="rotulo">Fan 01</div>
-    <div class="valor"><span>--</span><u>%</u></div>
-    <div class="detalhe">12V · PWM</div></div>
+  <div class="cartao" id="c-ua"><div class="rotulo">Umidade absoluta</div>
+    <div class="valor"><span id="ua">--</span><u>g/m³</u></div>
+    <div class="detalhe">ÁGUA REAL NO AR</div></div>
 
-  <div class="cartao" id="c-f2"><div class="rotulo">Fan 02</div>
-    <div class="valor"><span>--</span><u>%</u></div>
-    <div class="detalhe">12V · PWM</div></div>
+  <div class="cartao clicavel" id="c-t" data-abre="m-t"><div class="rotulo">Temperatura</div>
+    <div class="valor"><span id="t">--</span><u>°C</u></div>
+    <div class="detalhe" id="tmaxCard">MÁX <b>--</b></div></div>
 
-  <div class="cartao larga" id="c-h"><div class="rotulo">Hotend · Potência</div>
-    <div class="valor"><span>--</span><u>W</u></div>
-    <div class="detalhe">PWM</div></div>
+  <div class="cartao clicavel" id="c-h" data-abre="m-h"><div class="rotulo">Aquecedor · alvo</div>
+    <div class="valor"><span id="alvoCard">--</span><u>°C</u></div>
+    <div class="rodape-cartao">
+      <span class="estado" data-estado-aq>—</span>
+      <button data-autoriza disabled>—</button>
+    </div></div>
+
+  <div class="cartao clicavel" id="c-f1" data-abre="m-f1"><div class="rotulo">Fan 01 · hotend</div>
+    <div class="valor"><span id="f1">--</span><u>%</u></div>
+    <div class="detalhe">AUTOMÁTICO</div></div>
+
+  <div class="cartao clicavel" id="c-f2" data-abre="m-f2"><div class="rotulo">Fan 02 · circulação</div>
+    <div class="valor"><span id="f2">--</span><u>%</u></div>
+    <div class="detalhe" id="f2faixa">12V · PWM</div></div>
 </div>
 
 <div class="fig">
@@ -115,21 +204,66 @@ footer.ruim{color:var(--laranja)}
   </div>
 </div>
 
-<div class="painel">
-  <div><b>Painel do aparelho</b><small id="aviso">a luz de fundo não tem pino próprio</small></div>
-  <button id="btn" disabled>—</button>
-
+<div class="bloco">
+  <b>Imagem do display</b>
+  <div class="chave" style="margin:0">
+    <div><span id="estadoTela" class="estado">—</span><small>apagar desliga também a luz de fundo</small></div>
+    <button id="btnTela" disabled>—</button>
+  </div>
   <div class="brilho">
-    <b>Brilho</b>
-    <input type="range" id="bri" min="0" max="255" value="255">
-    <small id="bri-v">255</small>
+    <label for="bri">Brilho</label>
+    <input type="range" id="bri" min="5" max="100" step="5" value="60">
+    <output id="briV">--</output>
   </div>
 </div>
 
 <footer id="estado">carregando…</footer>
 
+<!-- ======================= Modais. Abrem ao tocar no cartao. ======================= -->
+<div class="fundo" id="m-t" hidden><div class="modal">
+  <div class="topo"><b>Temperatura</b><button data-fecha>FECHAR</button></div>
+  <div class="linha"><label>Temperatura máxima · °C<small id="tmaxFaixa"></small></label><input id="tmax" inputmode="decimal" placeholder="--"></div>
+  <small class="nota">Aparece em verde embaixo da temperatura. Salva ao sair do campo.</small>
+</div></div>
+
+<div class="fundo" id="m-h" hidden><div class="modal">
+  <div class="topo"><b>Aquecedor</b><button data-fecha>FECHAR</button></div>
+  <div class="chave">
+    <div><span class="estado" data-estado-aq>—</span><small id="motivo"></small></div>
+    <button data-autoriza disabled>—</button>
+  </div>
+  <div class="linha"><label>Alvo · °C<small>PETG: 55, o máximo da caixa</small></label><input data-k="alvo" inputmode="decimal"></div>
+  <div class="linha"><label>Histerese · °C<small>quanto cai abaixo do alvo antes de religar</small></label><input data-k="hist" inputmode="decimal"></div>
+  <small class="nota">Nunca liga sozinho: começa bloqueado a cada boot. Salva ao sair do campo.</small>
+</div></div>
+
+<div class="fundo" id="m-f2" hidden><div class="modal">
+  <div class="topo"><b>Fan 02 · circulação</b><button data-fecha>FECHAR</button></div>
+  <div class="chave">
+    <div><span id="estadoF2" class="estado">—</span><small id="f2agora"></small></div>
+    <button id="btnF2" disabled>—</button>
+  </div>
+  <div class="linha"><label>Máxima · %<small>com o aquecedor ligado</small></label><input data-k="f2max" inputmode="numeric"></div>
+  <div class="linha"><label>Mínima · %<small>com o aquecedor desligado</small></label><input data-k="f2min" inputmode="numeric"></div>
+  <div class="linha"><label>Piso de PWM · %<small>vale para os dois ventiladores</small></label><input data-k="pwmin" inputmode="numeric"></div>
+  <small class="nota">Cada campo salva ao sair dele.</small>
+</div></div>
+
+<div class="fundo" id="m-f1" hidden><div class="modal">
+  <div class="topo"><b>Fan 01 · hotend</b><button data-fecha>FECHAR</button></div>
+  <div class="chave">
+    <div><span id="estadoF1" class="estado">—</span><small>automático: segue o aquecedor</small></div>
+  </div>
+  <div class="linha"><label>A 100% depois de desligar · min<small>o bloco ainda está quente</small></label><input data-k="pos1" data-esc="60" inputmode="decimal"></div>
+  <div class="linha"><label>Rampa até parar · min</label><input data-k="rmp1" data-esc="60" inputmode="decimal"></div>
+  <div class="linha"><label>Piso de PWM · %<small>vale para os dois ventiladores</small></label><input data-k="pwmin" inputmode="numeric"></div>
+  <small class="nota">100% enquanto aquece. Cada campo salva ao sair dele.</small>
+</div></div>
+
 <script>
 var L = 320, A = 150;
+function $(id) { return document.getElementById(id); }
+function todos(sel) { return document.querySelectorAll(sel); }
 
 function pontos(v, min, max) {
   if (!v || v.length < 2) return "";
@@ -141,56 +275,196 @@ function pontos(v, min, max) {
   return s;
 }
 
-function marcaTela(ligada) {
-  var b = document.getElementById("btn");
-  b.disabled = false;
-  b.dataset.on = ligada ? "1" : "0";
-  b.textContent = ligada ? "LIGADO" : "DESLIGADO";
+// POST que mostra o motivo quando a placa recusa (faixa invalida etc.).
+// Depois de cada envio atualiza na hora, sem esperar o ciclo de 2 s.
+function envia(url) {
+  return fetch(url, { method: "POST" }).then(function (r) {
+    if (!r.ok) return r.text().then(function (t) { alert(t); });
+  }).catch(function () {}).then(ciclo);
 }
 
-document.getElementById("btn").addEventListener("click", function () {
-  var b = this;
-  b.disabled = true;
-  fetch("tela?estado=alterna", { method: "POST" })
-    .then(function (r) { return r.json(); })
-    .then(function (d) { marcaTela(d.tela); })
-    .catch(function () { b.disabled = false; });
+// Aceita virgula: no iPhone em portugues o teclado decimal da virgula.
+function numero(txt) { return parseFloat(String(txt).replace(",", ".")); }
+
+// Botao de liga/desliga: mostra a acao, nao o estado.
+function chave(b, ligado, txtDesliga, txtLiga) {
+  b.disabled = false;
+  b.dataset.on = ligado ? "1" : "0";
+  b.textContent = ligado ? txtDesliga : txtLiga;
+  b.className = ligado ? "vermelho" : "verde";
+}
+
+function marca(span, texto, classe) {
+  span.textContent = texto;
+  span.className = "estado " + classe;
+}
+
+// --- campos -----------------------------------------------------------------
+
+// Cursor no fim ao tocar, em todos os campos de texto. O iOS posiciona o
+// cursor onde o dedo tocou, em momentos diferentes conforme a versao - as
+// vezes depois do foco, as vezes depois do clique. Por isso o ajuste se
+// repete por ~300 ms apos o toque. Para assim que a pessoa digita.
+function vaiProFim(e) {
+  var n = e.value.length;
+  try { e.setSelectionRange(n, n); } catch (x) {}
+}
+function insiste(el) {
+  [0, 40, 100, 200, 320].forEach(function (t) {
+    setTimeout(function () {
+      if (el._fim && document.activeElement === el) vaiProFim(el);
+    }, t);
+  });
+  clearTimeout(el._fimT);
+  el._fimT = setTimeout(function () { el._fim = false; }, 360);
+}
+todos("input:not([type=range])").forEach(function (e) {
+  e.autocomplete = "off";
+  e.addEventListener("focus", function () { this._fim = true; insiste(this); });
+  e.addEventListener("click", function () { if (this._fim) insiste(this); });
+  e.addEventListener("touchend", function () { if (this._fim) insiste(this); });
+  e.addEventListener("keydown", function () { this._fim = false; });
+  e.addEventListener("input", function () { this._fim = false; });
 });
 
-var bri = document.getElementById("bri");
-bri.addEventListener("input", function () {
-  document.getElementById("bri-v").textContent = this.value;
+// Campos de configuracao: data-k e a chave em /config; data-esc converte a
+// unidade da tela para a da placa (minutos na tela, segundos na placa).
+todos("input[data-k]").forEach(function (e) {
+  e.addEventListener("change", function () {
+    var v = numero(this.value);
+    if (isNaN(v)) return;
+    var esc = Number(this.dataset.esc || 1);
+    envia("config?" + this.dataset.k + "=" + (esc > 1 ? Math.round(v * esc) : v));
+  });
 });
+
+$("tmax").addEventListener("change", function () {
+  var v = numero(this.value);
+  if (!isNaN(v)) envia("tmax?v=" + v);
+});
+
+// --- chaves -----------------------------------------------------------------
+// O botao de autorizar existe no cartao e no modal. O do cartao nao pode
+// abrir o modal: o clique para nele.
+todos("[data-autoriza]").forEach(function (b) {
+  b.addEventListener("click", function (ev) {
+    ev.stopPropagation();
+    this.disabled = true;
+    envia("autorizar?v=" + (this.dataset.on === "1" ? 0 : 1));
+  });
+});
+$("btnF2").addEventListener("click", function () {
+  this.disabled = true;
+  envia("config?f2on=" + (this.dataset.on === "1" ? 0 : 1));
+});
+$("btnTela").addEventListener("click", function () {
+  this.disabled = true;
+  envia("tela?estado=" + (this.dataset.on === "1" ? "off" : "on"));
+});
+
+// Brilho: o trilho pinta ate o ponto escolhido; envia ao soltar.
+var bri = $("bri");
+function pintaBrilho(v) {
+  $("briV").textContent = v + "%";
+  bri.style.setProperty("--p", ((v - 5) / 95 * 100) + "%");
+}
+// No Safari do iPhone o controle nem sempre ganha foco ao ser arrastado:
+// por isso a marca _mexendo, que impede o ciclo de puxa-lo de volta no meio
+// do gesto.
+bri.addEventListener("input", function () { this._mexendo = true; pintaBrilho(this.value); });
 bri.addEventListener("change", function () {
-  fetch("brilho?v=" + this.value, { method: "POST" }).catch(function () {});
+  this._mexendo = false;
+  envia("brilho?v=" + this.value);
 });
 
+// --- modais -----------------------------------------------------------------
+function fecha() {
+  // Tira o foco antes de esconder: garante o change do campo em edicao.
+  if (document.activeElement) document.activeElement.blur();
+  todos(".fundo").forEach(function (m) { m.hidden = true; });
+  document.documentElement.classList.remove("travado");
+}
+todos("[data-abre]").forEach(function (c) {
+  c.addEventListener("click", function () {
+    $(this.dataset.abre).hidden = false;
+    document.documentElement.classList.add("travado");
+  });
+});
+todos("[data-fecha]").forEach(function (b) { b.addEventListener("click", fecha); });
+todos(".fundo").forEach(function (m) {
+  m.addEventListener("click", function (ev) { if (ev.target === m) fecha(); });
+});
+document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") fecha(); });
+
+// --- atualizacao ------------------------------------------------------------
 function ciclo() {
-  fetch("dados", { cache: "no-store" }).then(function (r) {
+  return fetch("dados", { cache: "no-store" }).then(function (r) {
     return r.json();
   }).then(function (d) {
-    var e = document.getElementById("estado");
+    var e = $("estado");
 
-    document.getElementById("c-t").classList.toggle("vivo", d.sensor);
-    document.getElementById("c-u").classList.toggle("vivo", d.sensor);
-    document.getElementById("t").textContent = d.sensor ? d.t.toFixed(1) : "--";
-    document.getElementById("u").textContent = d.sensor ? d.u.toFixed(1) : "--";
+    $("c-t").classList.toggle("vivo", d.sensor);
+    $("c-u").classList.toggle("vivo", d.sensor);
+    $("c-ua").classList.toggle("vivo", d.sensor);
+    $("t").textContent = d.sensor ? d.t.toFixed(1) : "--";
+    $("u").textContent = d.sensor ? d.u.toFixed(1) : "--";
+    $("ua").textContent = d.sensor ? d.ua.toFixed(1) : "--";
 
     e.textContent = d.sensor
       ? "SENSOR OK · " + d.n + " AMOSTRAS · LIGADO HÁ " + Math.floor(d.ligado / 60) + " MIN"
       : "SENSOR NÃO ENCONTRADO";
     e.className = d.sensor ? "" : "ruim";
 
-    document.getElementById("lt").setAttribute("points", pontos(d.hist.t, 0, 60));
-    document.getElementById("lu").setAttribute("points", pontos(d.hist.u, 0, 100));
+    $("lt").setAttribute("points", pontos(d.hist.t, 0, 60));
+    $("lu").setAttribute("points", pontos(d.hist.u, 0, 100));
 
-    marcaTela(d.tela);
-    if (document.activeElement !== bri) {
+    // Aquecedor: o estado e o botao aparecem no cartao e no modal.
+    var classeAq = d.estado === "PROTECAO" ? "falha" : d.aquecendo ? "quente" : "";
+    todos("[data-estado-aq]").forEach(function (s) { marca(s, d.estado, classeAq); });
+    todos("[data-autoriza]").forEach(function (b) { chave(b, d.autorizado, "BLOQUEAR", "AUTORIZAR"); });
+    $("motivo").textContent = d.motivo || "";
+    $("c-h").classList.toggle("vivo", d.aquecendo);
+    $("alvoCard").textContent = d.cfg.alvo.toFixed(0);
+
+    // Campos: nao sobrescreve o que esta sendo digitado.
+    todos("input[data-k]").forEach(function (i) {
+      if (document.activeElement === i) return;
+      var esc = Number(i.dataset.esc || 1);
+      var v = d.cfg[i.dataset.k];
+      i.value = esc > 1 ? String(Math.round(v / esc * 10) / 10) : v;
+    });
+
+    // Temperatura maxima: verde quando definida, como no display.
+    var tm = $("tmaxCard"), temTmax = d.tmax !== null;
+    tm.className = "detalhe" + (temTmax ? " cfg" : "");
+    tm.innerHTML = "MÁX <b>" + (temTmax ? d.tmax.toFixed(1) : "--") + "</b>" + (temTmax ? " °C" : "");
+    if (document.activeElement !== $("tmax")) $("tmax").value = temTmax ? d.tmax : "";
+    $("tmaxFaixa").textContent = "de " + d.tmaxMin + " a " + d.teto + " °C";
+
+    // Ventiladores
+    $("c-f1").classList.toggle("vivo", d.fan1 > 0);
+    $("c-f2").classList.toggle("vivo", d.fan2 > 0);
+    $("f1").textContent = d.fan1;
+    $("f2").textContent = d.fan2;
+    marca($("estadoF1"), d.fan1 > 0 ? "GIRANDO · " + d.fan1 + " %" : "PARADO", d.fan1 > 0 ? "on" : "");
+
+    var f2 = d.cfg.f2on;
+    marca($("estadoF2"), f2 ? "LIGADO · " + d.fan2 + " %" : "DESLIGADO", f2 ? "on" : "");
+    $("f2agora").textContent = f2
+      ? (d.aquecendo ? "na máxima: aquecedor ligado" : "na mínima: aquecedor desligado")
+      : "parado até ser ligado aqui";
+    chave($("btnF2"), f2, "DESLIGAR", "LIGAR");
+    $("f2faixa").textContent = f2 ? "MÍN " + d.cfg.f2min + " · MÁX " + d.cfg.f2max : "DESLIGADO";
+
+    // Imagem do display e brilho
+    marca($("estadoTela"), d.tela ? "LIGADA" : "APAGADA", d.tela ? "on" : "");
+    chave($("btnTela"), d.tela, "APAGAR", "LIGAR");
+    if (!bri._mexendo && document.activeElement !== bri) {
       bri.value = d.brilho;
-      document.getElementById("bri-v").textContent = d.brilho;
+      pintaBrilho(d.brilho);
     }
   }).catch(function () {
-    var e = document.getElementById("estado");
+    var e = $("estado");
     e.textContent = "SEM RESPOSTA DA PLACA";
     e.className = "ruim";
   });

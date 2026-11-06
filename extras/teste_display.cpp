@@ -1,14 +1,16 @@
 // ---------------------------------------------------------------------------
-// Etapa 2 - teste do display 2,4" SPI 240x320 (GMT024-10 v2.1)
+// Etapa 2 - teste do display 4" SPI 480x320 (ST7796S, header de 14 pinos)
 //
 // Mostra "Hello World" e um relogio que anda de segundo em segundo, tanto na
 // tela quanto no monitor serial. Serve para provar tres coisas de uma vez:
 // a ligacao esta certa, o driver escolhido e o correto, e o ESP32 esta vivo.
 //
 // Ligacao (configurada em platformio.ini, nao aqui):
-//   VCC -> 5V         SCL/SCK -> GPIO18        RES -> GPIO26
-//   GND -> GND        SDA/MOSI -> GPIO23       CS  -> GPIO13
-//                                              DC  -> GPIO27
+//   VCC       -> 5V          SCK       -> GPIO18      RESET -> GPIO26
+//   GND       -> GND         SDI(MOSI) -> GPIO23      CS    -> GPIO13
+//   LED       -> 3V3                                  DC/RS -> GPIO27
+//
+// SDO(MISO) e os cinco T_ do touch ficam sem ligar neste teste.
 // ---------------------------------------------------------------------------
 
 #include <Arduino.h>
@@ -17,10 +19,10 @@
 TFT_eSPI tft = TFT_eSPI();
 
 // Qual driver foi compilado. Se a tela nao acender, troque em platformio.ini.
-#if defined(ST7789_DRIVER)
-static const char *DRIVER = "ST7789V";
-#elif defined(ILI9341_DRIVER)
-static const char *DRIVER = "ILI9341";
+#if defined(ST7796_DRIVER)
+static const char *DRIVER = "ST7796S";
+#elif defined(ILI9488_DRIVER)
+static const char *DRIVER = "ILI9488";
 #else
 static const char *DRIVER = "nao definido";
 #endif
@@ -39,8 +41,8 @@ static void formataRelogio(uint32_t total, char *buf, size_t n) {
 }
 
 // Alturas calculadas a partir da altura real da tela, nao fixas, para o
-// layout continuar centrado se a rotacao mudar (retrato 240x320 ou
-// paisagem 320x240).
+// layout continuar centrado se a rotacao mudar (retrato 320x480 ou
+// paisagem 480x320).
 static int16_t yTitulo()  { return tft.height() * 22 / 100; }
 static int16_t yLegenda() { return tft.height() * 40 / 100; }
 static int16_t yRelogio() { return tft.height() * 52 / 100; }
@@ -84,7 +86,7 @@ void setup() {
 
   Serial.println();
   Serial.println("==================================================");
-  Serial.println("  Etapa 2 - teste do display 2,4\" SPI 240x320");
+  Serial.println("  Etapa 2 - teste do display 4\" SPI 480x320");
   Serial.println("==================================================");
   Serial.printf("Driver compilado : %s\n", DRIVER);
   Serial.printf("Barramento SPI   : %d MHz\n", SPI_FREQUENCY / 1000000);
@@ -92,7 +94,7 @@ void setup() {
                 TFT_SCLK, TFT_MOSI, TFT_CS, TFT_DC, TFT_RST);
 
   tft.init();
-  // 0 = retrato 240x320. Se a imagem sair de cabeca para baixo, troque por 2
+  // 0 = retrato 320x480. Se a imagem sair de cabeca para baixo, troque por 2
   // (o mesmo retrato girado 180 graus). 1 e 3 sao as duas paisagens.
   tft.setRotation(0);
 
@@ -100,7 +102,7 @@ void setup() {
   Serial.println("Hello World");
   Serial.println("--------------------------------------------------");
   Serial.println("Se a tela ficou branca ou embaralhada, troque o");
-  Serial.println("driver em platformio.ini (ST7789 <-> ILI9341).");
+  Serial.println("driver em platformio.ini (ST7796 <-> ILI9488).");
   Serial.println("--------------------------------------------------");
 
   larguraRelogio = tft.textWidth("00:00:00", 7);

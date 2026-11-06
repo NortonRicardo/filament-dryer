@@ -26,3 +26,6 @@ void servidorSemSensor();
 // O que mostrar na ultima linha do display: "192.168.0.12:80",
 // "conectando...", "sem Wi-Fi" ou "estufa.local". Nunca nulo.
 const char *servidorEndereco();
+
+// Umidade absoluta da ultima leitura, em g/m3.
+float umidadeAbsolutaAtual();

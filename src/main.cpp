@@ -2,18 +2,22 @@
 // Estufa de filamento - painel THERMO
 //
 // Le o BME280 e mostra temperatura e umidade no display, no layout de
-// cartoes. Serve tambem uma pagina na rede local (ver servidor.h).
+// cartoes. Os cartoes de ventilador e aquecedor mostram o que o controle
+// decidiu (ver controle.h). Serve tambem uma pagina na rede local, que e por
+// onde tudo se configura (ver servidor.h).
 //
-// Os cartoes de ventilador e hotend ja estao no layout, mas ainda nao ha
-// hardware atras deles: mostram "--" em cinza ate existirem.
+// Display: 4" TFT SPI 480x320 V1.1, ST7796S, header de 14 pinos.
+// Ligacao (os pinos ficam em platformio.ini, nao aqui):
+//   VCC       -> 5V          SCK       -> GPIO18      RESET -> GPIO26
+//   GND       -> GND         SDI(MOSI) -> GPIO23      CS    -> GPIO13
+//   LED       -> GPIO17                               DC/RS -> GPIO27
 //
-// Ligacao do display (os pinos ficam em platformio.ini, nao aqui):
-//   VCC -> 5V         SCL/SCK  -> GPIO18        RES -> GPIO26
-//   GND -> GND        SDA/MOSI -> GPIO23        CS  -> GPIO13
-//                                               DC  -> GPIO27
+// Sao oito fios. O SDO(MISO) do display fica sem ligar: nada e lido da tela.
+// O LED e o controle da luz de fundo (acende em nivel alto): com PWM nele, o
+// brilho e ajustavel pelo painel web.
 //
-// Sao sete fios. Este modulo nao tem pino de luz de fundo: ela e alimentada
-// por dentro, a partir do VCC, e fica sempre acesa.
+// Sem touch por enquanto: este modulo veio sem o chip XPT2046 (U2). O codigo
+// do touch esta guardado em extras/touch/.
 //
 // Ligacao do BME280 (I2C, pinos declarados abaixo):
 //   VIN -> 3V3        SCL -> GPIO22
@@ -27,7 +31,9 @@
 #include <TFT_eSPI.h>
 #include <Wire.h>
 #include <Adafruit_BME280.h>
+#include <Preferences.h>
 
+#include "controle.h"
 #include "servidor.h"
 #include "tela.h"
 
@@ -35,22 +41,22 @@ TFT_eSPI tft = TFT_eSPI();
 Adafruit_BME280 bme;
 
 // Qual driver de tela foi compilado. Se nao acender, troque em platformio.ini.
-#if defined(ST7789_DRIVER)
-static const char *DRIVER = "ST7789V";
-#elif defined(ILI9341_DRIVER)
-static const char *DRIVER = "ILI9341";
+#if defined(ST7796_DRIVER)
+static const char *DRIVER = "ST7796S";
+#elif defined(ILI9488_DRIVER)
+static const char *DRIVER = "ILI9488";
 #else
 static const char *DRIVER = "nao definido";
 #endif
 
-// O init do ST7789 manda INVON sem condicao, e a biblioteca so o desfaz se
-// um destes estiver definido. Sem nenhum, o preto sai branco na tela.
+// O init do ST7796 nao inverte; o flag em platformio.ini so deixa explicito.
+// Se o preto sair branco, e a inversao que precisa mudar.
 #if defined(TFT_INVERSION_OFF)
 static const char *INVERSAO = "desligada (INVOFF)";
 #elif defined(TFT_INVERSION_ON)
 static const char *INVERSAO = "ligada (INVON)";
 #else
-static const char *INVERSAO = "nao definida - o preto pode sair branco";
+static const char *INVERSAO = "nao definida (padrao do driver)";
 #endif
 
 static const uint8_t PIN_SDA = 21;
@@ -119,6 +125,29 @@ static bool iniciaSensor() {
     return true;
   }
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Umidade absoluta - quanta agua existe mesmo no ar, em gramas por metro
+// cubico. Formula de Magnus, a mesma do projeto DryFilaBox do Marlon Nardi.
+//
+// Por que isso importa numa estufa, e muito:
+//
+//   A umidade RELATIVA diz o quanto o ar esta cheio em relacao ao que ele
+//   AGUENTA naquela temperatura. E ar quente aguenta muito mais agua. Entao
+//   so de aquecer a caixa a UR despenca, sem uma unica gota ter saido.
+//
+//   Exemplo real: 25 C com 60% de UR tem 13,8 g/m3 de agua. Aqueca para
+//   45 C sem tirar nada e a UR marca 21% -- parece seco. Mas continuam os
+//   mesmos 13,8 g/m3 ali dentro.
+//
+//   A umidade ABSOLUTA so cai quando a agua realmente deixa a caixa. E ela,
+//   nao a relativa, que diz se a secagem esta funcionando.
+//
+// Conferida contra tabela: 20 C e 50% dao 8,64 g/m3 (tabela: 8,65).
+static float umidadeAbsoluta(float tempC, float umidadeRel) {
+  const float pressaoSat = 6.112f * expf((17.67f * tempC) / (tempC + 243.5f));
+  return pressaoSat * umidadeRel * 2.1674f / (273.15f + tempC);
 }
 
 static bool leSensor(float &temperatura, float &umidade) {
@@ -200,16 +229,18 @@ static void textoCentrado(int16_t cx, int16_t y, const char *texto,
   textoEspacado(cx - largura / 2, y, texto, espaco, cor, fundo);
 }
 
-// A faixa reservada ao valor dentro do cartao. Apagar so ela, e nao o cartao
-// inteiro, e o que evita piscar a cada leitura.
-// No cartao grande tudo desce 2 px, inclusive o topo da faixa: com o mesmo
-// topo dos outros, ela apagaria a ultima linha de pixels do rotulo a cada
-// leitura.
-static int16_t yRotulo(const Cartao &c)     { return c.y + (c.grande ? 18 : 17); }
-static int16_t faixaTopo(const Cartao &c)   { return c.y + (c.grande ? 26 : 24); }
-static int16_t faixaAltura(const Cartao &c) { return c.grande ? 46 : 44; }
-static int16_t yValor(const Cartao &c)      { return c.y + (c.grande ? 50 : 48); }
-static int16_t yDetalhe(const Cartao &c)    { return c.y + (c.grande ? 80 : 76); }
+// Posicoes dentro do cartao, relativas a altura dele: rotulo no alto,
+// valor no meio, detalhe embaixo.
+//
+// A faixa reservada ao valor e o que se apaga a cada leitura. Apagar so ela,
+// e nao o cartao inteiro, e o que evita piscar. Ela cobre a altura dos
+// digitos da FreeSansBold24pt (~34 px) com folga, sem encostar no rotulo nem
+// no detalhe.
+static int16_t yRotulo(const Cartao &c)     { return c.y + 20; }
+static int16_t yValor(const Cartao &c)      { return c.y + c.a / 2 + 4; }
+static int16_t faixaTopo(const Cartao &c)   { return yValor(c) - 24; }
+static int16_t faixaAltura(const Cartao &)  { return 48; }
+static int16_t yDetalhe(const Cartao &c)    { return c.y + c.a - 18; }
 
 // Unidade ao lado do numero, em fonte pequena e cinza. O grau nao existe na
 // fonte, entao vai desenhado como dois circulos - que e o que ele e.
@@ -244,17 +275,15 @@ static void desenhaValor(uint8_t i, const char *valor, bool temDado) {
 
   tft.fillRect(c.x + 3, faixaTopo(c), c.l - 6, faixaAltura(c), CARTAO);
 
-  if (c.grande) tft.setFreeFont(&FreeSansBold24pt7b);
-  else          tft.setFreeFont(&FreeSansBold18pt7b);
-
+  tft.setFreeFont(&FreeSansBold24pt7b);
   const int16_t larguraValor = tft.textWidth(valor);
   const int16_t larguraUnidade = temDado ? desenhaUnidade(0, 0, c, true) : 0;
   const int16_t total = larguraValor + (temDado ? 3 + larguraUnidade : 0);
 
   int16_t x = c.x + c.l / 2 - total / 2;
 
-  if (c.grande) tft.setFreeFont(&FreeSansBold24pt7b);
-  else          tft.setFreeFont(&FreeSansBold18pt7b);
+  // desenhaUnidade() trocou a fonte ao medir: reescolhe antes de desenhar.
+  tft.setFreeFont(&FreeSansBold24pt7b);
   tft.setTextDatum(ML_DATUM);
   tft.setTextColor(temDado ? c.cor : MUDO, CARTAO);
   tft.drawString(valor, x, y);
@@ -273,22 +302,10 @@ static void desenhaCartao(uint8_t i) {
   textoCentrado(c.x + c.l / 2, yDetalhe(c), c.detalhe, 1, MUDO, CARTAO);
 }
 
-// Rodape: so o endereco, centrado. Como ele vira "sem Wi-Fi" ou
-// "conectando..." quando a rede cai, o estado da conexao continua visivel
-// aqui sem precisar de um indicador separado.
-static void desenhaRodape(const char *endereco) {
-  tft.fillRect(MARGEM, Y_RODAPE - 7, LARGURA - 2 * MARGEM, 14, FUNDO);
-
-  tft.setTextFont(1);
-  textoCentrado(LARGURA / 2, Y_RODAPE, endereco, 1, RODAPE, FUNDO);
-}
-
 static void telaFixa() {
   tft.fillScreen(FUNDO);
   for (uint8_t i = 0; i < N_CARTOES; i++) desenhaCartao(i);
 }
-
-static bool telaLigada = true;
 
 // Uma casa decimal, menos a partir de 100: assim o texto nunca passa de
 // quatro digitos e cabe na largura do cartao sem reduzir a fonte.
@@ -297,17 +314,114 @@ static void formataValor(float valor, char *buf, size_t n) {
   else                                     snprintf(buf, n, "%.1f", valor);
 }
 
-// A ultima leitura fica guardada: com a tela desligada nada e desenhado, e
-// ao religar os cartoes voltam com o valor atual em vez de "--".
+// Com a imagem desligada pelo painel web, o loop continua lendo o sensor e
+// rodando o controle, so nao desenha. Ao religar, tudo volta com os valores
+// atuais.
+static bool telaLigada = true;
+
+// --- luz de fundo ---------------------------------------------------------------
+// PWM no pino LED do display. Pela documentacao do modulo (lcdwiki MSP4021),
+// esse pino comanda a luz e acende em nivel alto. O canal 2 do LEDC usa outro
+// temporizador que os canais 0 e 1 dos ventiladores, entao a frequencia aqui
+// nao interfere nos 25 kHz deles.
+static const uint8_t  PIN_LUZ    = 17;
+static const uint8_t  CANAL_LUZ  = 2;
+static const uint32_t LUZ_FREQ   = 5000;  // bem acima do que o olho percebe
+static const uint8_t  BRILHO_MIN = 5;     // abaixo disso a tela parece morta
+static const uint8_t  BRILHO_PADRAO = 60;
+static const char    *NVS_BRILHO = "brilho";
+
+static uint8_t brilho = BRILHO_PADRAO;  // %, 5 a 100
+
+// Com a imagem apagada pelo painel web a luz tambem apaga: tela preta com a
+// luz acesa ainda brilha, e era isso que o modulo anterior obrigava.
+static void aplicaLuz() {
+  const uint8_t pct = telaLigada ? brilho : 0;
+  ledcWrite(CANAL_LUZ, (uint32_t)pct * 255 / 100);
+}
+
+static void iniciaLuz() {
+  ledcSetup(CANAL_LUZ, LUZ_FREQ, 8);
+  ledcAttachPin(PIN_LUZ, CANAL_LUZ);
+  ledcWrite(CANAL_LUZ, 0);  // apagada ate o painel estar desenhado
+
+  Preferences nvs;
+  if (nvs.begin("painel", true)) {
+    if (nvs.isKey(NVS_BRILHO)) brilho = nvs.getUChar(NVS_BRILHO, BRILHO_PADRAO);
+    nvs.end();
+  }
+  if (brilho < BRILHO_MIN || brilho > 100) brilho = BRILHO_PADRAO;
+}
+
 static float ultimaTemp = 0, ultimaUmid = 0;
 static bool temLeitura = false;
 
+// --- temperatura maxima -------------------------------------------------------
+// Definida no painel web e salva na memoria, entao sobrevive a um reinicio.
+// Por enquanto so e guardada e mostrada: ainda nao entra na regra do controle.
+static const char *NVS_PAINEL = "painel";
+static const char *NVS_TMAX   = "tmax";
+static const float TMAX_PADRAO = 30.0f;  // ate ser mudada no painel web
+
+static float tempMaxima = 0;
+static bool  temMaxima  = false;
+
+// Sem valor salvo, parte de TMAX_PADRAO ja como configurada. O namespace
+// "painel" pode nem existir no primeiro boot, e ai begin() em leitura falha:
+// por isso o padrao e aplicado antes, nao depende do getFloat.
+static void carregaMaxima() {
+  tempMaxima = TMAX_PADRAO;
+  temMaxima = true;
+
+  Preferences nvs;
+  if (nvs.begin(NVS_PAINEL, true)) {
+    // isKey antes: getFloat de chave ausente imprime um erro no console.
+    if (nvs.isKey(NVS_TMAX)) tempMaxima = nvs.getFloat(NVS_TMAX, TMAX_PADRAO);
+    nvs.end();
+  }
+}
+
+static void salvaMaxima(float valor) {
+  tempMaxima = valor;
+  temMaxima = true;
+
+  Preferences nvs;
+  nvs.begin(NVS_PAINEL, false);
+  nvs.putFloat(NVS_TMAX, valor);
+  nvs.end();
+
+  Serial.printf("Temp. maxima     : %.1f C (salva)\n", valor);
+}
+
+// Linha de baixo do cartao de temperatura. Em verde quando configurada, para
+// distinguir de leitura; em cinza, "MAX --", quando ainda nao foi definida.
+// Fonte 2, maior que a dos outros detalhes, porque e um valor que se
+// consulta de longe.
+static void pintaMaximo() {
+  const Cartao &c = CARTOES[CARTAO_TEMP];
+  char buf[20];
+
+  tft.fillRect(c.x + 3, yDetalhe(c) - 9, c.l - 6, 18, CARTAO);
+  tft.setTextFont(2);
+
+  if (temMaxima) {
+    snprintf(buf, sizeof buf, "MAX %.1f C", tempMaxima);
+    textoCentrado(c.x + c.l / 2, yDetalhe(c), buf, 1, VERDE, CARTAO);
+  } else {
+    textoCentrado(c.x + c.l / 2, yDetalhe(c), "MAX --", 1, MUDO, CARTAO);
+  }
+}
+
+// Temperatura, umidade relativa e umidade absoluta. A absoluta tem cartao
+// proprio: e ela, e nao a relativa, que diz se a agua esta saindo da caixa.
+// Sem leitura os tres mostram "--" em cinza, em vez de congelar o ultimo valor.
 static void pintaMedidas() {
   char buf[16];
 
   if (!temLeitura) {
     desenhaValor(CARTAO_TEMP, "--", false);
     desenhaValor(CARTAO_UMID, "--", false);
+    desenhaValor(CARTAO_UABS, "--", false);
     return;
   }
 
@@ -316,6 +430,9 @@ static void pintaMedidas() {
 
   formataValor(ultimaUmid, buf, sizeof buf);
   desenhaValor(CARTAO_UMID, buf, true);
+
+  formataValor(umidadeAbsoluta(ultimaTemp, ultimaUmid), buf, sizeof buf);
+  desenhaValor(CARTAO_UABS, buf, true);
 }
 
 static void mostraLeitura(float temperatura, float umidade) {
@@ -324,8 +441,6 @@ static void mostraLeitura(float temperatura, float umidade) {
   temLeitura = true;
 
   if (telaLigada) pintaMedidas();
-
-  Serial.printf("temperatura %.2f C | umidade %.2f %%\n", temperatura, umidade);
 }
 
 static void mostraSemSensor() {
@@ -333,67 +448,89 @@ static void mostraSemSensor() {
   if (telaLigada) pintaMedidas();
 }
 
-// Ventiladores e hotend ainda nao existem no circuito. Ficam em "--" ate
-// existirem, em vez de mostrar numero inventado.
-static void mostraSemHardware() {
-  desenhaValor(CARTAO_FAN1, "--", false);
-  desenhaValor(CARTAO_FAN2, "--", false);
-  desenhaValor(CARTAO_HOTEND, "--", false);
+// Ventiladores e aquecedor, com o que o controle decidiu. O detalhe do cartao
+// grande e reescrito junto, porque ele carrega o estado do aquecedor.
+static void pintaControle() {
+  char buf[16];
+
+  for (uint8_t i = 0; i < 2; i++) {
+    const uint8_t pct = controleVelocidade(i);
+    snprintf(buf, sizeof buf, "%u", pct);
+    desenhaValor(CARTAO_FAN1 + i, buf, pct > 0);
+  }
+
+  const Cartao &c = CARTOES[CARTAO_HOTEND];
+  snprintf(buf, sizeof buf, "%.0f", controleConfig().alvo);
+  desenhaValor(CARTAO_HOTEND, buf, controleAquecedorLigado());
+
+  // Apaga e reescreve so a linha do detalhe.
+  tft.fillRect(c.x + 3, yDetalhe(c) - 6, c.l - 6, 13, CARTAO);
+  tft.setTextFont(1);
+  textoCentrado(c.x + c.l / 2, yDetalhe(c), controleEstadoTexto(), 1,
+                controleAquecedorLigado() ? LARANJA : MUDO, CARTAO);
 }
 
-// --- liga/desliga, chamado pelo servidor -----------------------------------
-//
-// Apagar e pintar de preto, nao mandar DISPOFF ao controlador. DISPOFF nao
-// significa "tela apagada": pelo datasheet do ST7789 ele desliga a saida da
-// memoria de video e insere uma "pagina em branco" no lugar - e neste painel
-// essa pagina e literalmente branca. Pintar de preto da o resultado que se
-// espera, ao custo de redesenhar tudo ao religar.
-//
-// A luz de fundo continua acesa de qualquer forma. Este modulo (GMT024-10,
-// header de 7 pinos) nao expoe pino de backlight: ela vem por dentro, do
-// proprio VCC. Nao ha o que comandar sem mexer na placa do display.
+// Rodape: so o endereco, centrado. Como ele vira "sem Wi-Fi" ou
+// "conectando..." quando a rede cai, o estado da conexao continua visivel
+// aqui sem precisar de um indicador separado.
+static void desenhaRodape(const char *endereco) {
+  tft.fillRect(MARGEM, Y_RODAPE - 8, LARGURA - 2 * MARGEM, 16, FUNDO);
+
+  tft.setTextFont(2);
+  textoCentrado(LARGURA / 2, Y_RODAPE, endereco, 1, RODAPE, FUNDO);
+}
+
+// Painel inteiro: no boot e ao religar a imagem.
+static void desenhaPainel() {
+  telaFixa();
+  desenhaRodape(servidorEndereco());
+  pintaControle();
+  pintaMedidas();  // "--" ate a primeira leitura chegar
+  pintaMaximo();
+}
+
+// --- chamadas do servidor -------------------------------------------------------
+
+// Apagar e pintar de preto, nao mandar DISPOFF ao controlador: no ST7789 do
+// display anterior o DISPOFF mostrava uma pagina branca, e pintar de preto da
+// o resultado esperado em qualquer controlador, ao custo de redesenhar tudo
+// ao religar. A luz de fundo continua acesa: o LED esta no 3V3.
 void telaDefineLigada(bool ligada) {
   if (ligada == telaLigada) return;
   telaLigada = ligada;
 
-  if (ligada) {
-    telaFixa();
-    desenhaRodape(servidorEndereco());
-    mostraSemHardware();
-    pintaMedidas();
-  } else {
-    tft.fillScreen(TFT_BLACK);
-  }
+  if (ligada) desenhaPainel();
+  else        tft.fillScreen(TFT_BLACK);
+  aplicaLuz();
 
   Serial.printf("Tela             : %s\n", ligada ? "ligada" : "apagada");
 }
 
 bool telaEstaLigada() { return telaLigada; }
 
-// --- brilho, um tiro no escuro que vale dar ---------------------------------
-//
-// O ST7789 tem registradores de brilho: WRCTRLD (0x53) liga o controle e
-// WRDISBV (0x51) recebe 0 a 255. So que eles comandam os pads de backlight do
-// PROPRIO controlador, e na maioria dos modulos baratos esses pads nao vao a
-// lugar nenhum - os LEDs sao alimentados direto pelo VCC, por fora dele.
-//
-// Como este modulo nem pino de backlight expoe, a chance e pequena. Mas o
-// teste custa quatro bytes no SPI e nao pode danificar nada: se mudar o
-// brilho, ganhamos de graca; se nao mudar, a questao fica encerrada.
-static uint8_t brilhoAtual = 255;
+void telaDefineBrilho(uint8_t pct) {
+  if (pct < BRILHO_MIN) pct = BRILHO_MIN;
+  if (pct > 100) pct = 100;
+  brilho = pct;
+  aplicaLuz();
 
-void telaDefineBrilho(uint8_t valor) {
-  brilhoAtual = valor;
-
-  tft.writecommand(0x53);  // WRCTRLD
-  tft.writedata(0x2C);     // BCTRL + DD + BL ligados
-  tft.writecommand(0x51);  // WRDISBV
-  tft.writedata(valor);
-
-  Serial.printf("Brilho           : %u enviado ao painel\n", valor);
+  Preferences nvs;
+  nvs.begin("painel", false);
+  nvs.putUChar(NVS_BRILHO, brilho);
+  nvs.end();
 }
 
-uint8_t telaBrilho() { return brilhoAtual; }
+uint8_t telaBrilho() { return brilho; }
+
+bool painelTempMaxima(float &valor) {
+  valor = tempMaxima;
+  return temMaxima;
+}
+
+void painelDefineTempMaxima(float valor) {
+  salvaMaxima(valor);
+  if (telaLigada) pintaMaximo();
+}
 
 // ---------------------------------------------------------------------------
 
@@ -412,7 +549,10 @@ void setup() {
                 TFT_SCLK, TFT_MOSI, TFT_CS, TFT_DC, TFT_RST);
   Serial.printf("Pinos do sensor  : SDA=%d SCL=%d\n", PIN_SDA, PIN_SCL);
 
+  controleInicia();
   servidorInicia();  // nao bloqueia: a rede sobe em paralelo ao resto
+  carregaMaxima();
+  Serial.printf("Temp. maxima     : %.1f C\n", tempMaxima);
 
   Wire.begin(PIN_SDA, PIN_SCL);
   varreI2C();
@@ -430,18 +570,19 @@ void setup() {
     Serial.println("                   seguindo sem ele, tentando de novo a cada 5 s");
   }
 
+  iniciaLuz();  // antes do init: a luz so acende com a imagem pronta
   tft.init();
-  // 0 = retrato 240x320. Se a imagem sair de cabeca para baixo, troque por 2
-  // (o mesmo retrato girado 180 graus). 1 e 3 sao as duas paisagens.
+  // 0 = retrato 320x480. Se a imagem sair de cabeca para baixo, troque por 2
+  // (o mesmo retrato girado 180 graus). 1 e 3 sao as duas paisagens, mas o
+  // layout de tela.h foi feito para retrato.
   tft.setRotation(0);
 
   Serial.printf("Resolucao em uso : %d x %d\n", tft.width(), tft.height());
+  Serial.printf("Luz de fundo     : PWM no GPIO%u, brilho %u%%\n", PIN_LUZ, brilho);
   Serial.println("--------------------------------------------------");
 
-  telaFixa();
-  desenhaRodape(servidorEndereco());
-  mostraSemHardware();
-  pintaMedidas();  // "--" ate a primeira leitura chegar
+  desenhaPainel();
+  aplicaLuz();
 }
 
 void loop() {
@@ -449,16 +590,25 @@ void loop() {
 
   servidorAtende();
 
+  // A rampa do ventilador desce entre leituras, entao o controle roda no
+  // ritmo do loop e nao no de 2 s do sensor.
+  static uint8_t velAnterior[2] = {255, 255};
+  controleTick();
+  if (controleVelocidade(0) != velAnterior[0] ||
+      controleVelocidade(1) != velAnterior[1]) {
+    velAnterior[0] = controleVelocidade(0);
+    velAnterior[1] = controleVelocidade(1);
+    if (telaLigada) pintaControle();
+  }
+
   // O endereco muda sozinho: conectando -> IP, ou IP -> reconectando. A tela
   // acompanha comparando o texto, para nao repintar a linha a cada volta.
   static char enderecoNaTela[40] = "";
-
   const char *endereco = servidorEndereco();
   if (strcmp(endereco, enderecoNaTela) != 0) {
     snprintf(enderecoNaTela, sizeof enderecoNaTela, "%s", endereco);
-    // Com a tela apagada so guarda: ao religar, o rodape e redesenhado com
-    // o endereco de entao.
-    if (telaEstaLigada()) desenhaRodape(endereco);
+    // Com a tela apagada so guarda: ao religar, o rodape e redesenhado.
+    if (telaLigada) desenhaRodape(endereco);
   }
 
   if (sensorOk) {
@@ -469,6 +619,8 @@ void loop() {
       if (leSensor(temperatura, umidade)) {
         mostraLeitura(temperatura, umidade);
         servidorRegistra(temperatura, umidade);
+        controleNovaLeitura(true, temperatura);
+        if (telaLigada) pintaControle();
       } else {
         // Parou de responder: cabo solto, provavelmente. Volta a procurar
         // em vez de repetir o ultimo valor, que pareceria um sensor travado.
@@ -476,6 +628,8 @@ void loop() {
         sensorOk = false;
         mostraSemSensor();
         servidorSemSensor();
+        controleNovaLeitura(false, 0);
+        if (telaLigada) pintaControle();
       }
     }
   } else if (agora - ultimaLeitura >= INTERVALO_RETENTATIVA) {

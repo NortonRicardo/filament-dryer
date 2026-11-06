@@ -7,6 +7,7 @@
 
 #include "pagina.h"
 #include "tela.h"
+#include "controle.h"
 
 #ifndef WIFI_SSID
 #error "WIFI_SSID nao definido. Crie o arquivo .env: cp .env.exemplo .env"
@@ -54,6 +55,14 @@ void servidorRegistra(float temperatura, float umidade) {
 
 void servidorSemSensor() { temLeitura = false; }
 
+// Umidade absoluta da ultima leitura, em g/m3. Mesma formula do main.cpp;
+// repetida aqui para o servidor nao depender dele.
+float umidadeAbsolutaAtual() {
+  if (!temLeitura) return 0.0f;
+  const float ps = 6.112f * expf((17.67f * ultimaTemp) / (ultimaTemp + 243.5f));
+  return ps * ultimaUmid * 2.1674f / (273.15f + ultimaTemp);
+}
+
 // Converte "i-esima amostra mais antiga" na posicao dela dentro do anel.
 static uint16_t posicao(uint16_t i) {
   return (proxima + N_HIST - nHist + i) % N_HIST;
@@ -80,6 +89,8 @@ static void rotaDados() {
   json += String(ultimaTemp, 1);
   json += ",\"u\":";
   json += String(ultimaUmid, 1);
+  json += ",\"ua\":";
+  json += String(umidadeAbsolutaAtual(), 1);
   json += ",\"n\":";
   json += nHist;
   json += ",\"ligado\":";
@@ -88,6 +99,32 @@ static void rotaDados() {
   json += telaEstaLigada() ? "true" : "false";
   json += ",\"brilho\":";
   json += telaBrilho();
+
+  // Temperatura maxima: null quando nunca foi definida, para a pagina mostrar
+  // "--" em vez de um zero que pareceria configurado.
+  float tmax;
+  json += ",\"tmax\":";
+  json += painelTempMaxima(tmax) ? String(tmax, 1) : String("null");
+  json += ",\"tmaxMin\":";  json += String(TMAX_MIN, 0);
+
+  const Config c = controleConfig();
+  json += ",\"estado\":\"";    json += controleEstadoTexto();
+  json += "\",\"motivo\":\""; json += controleMotivo();
+  json += "\",\"autorizado\":"; json += controleAutorizado() ? "true" : "false";
+  json += ",\"aquecendo\":";    json += controleAquecedorLigado() ? "true" : "false";
+  json += ",\"fan1\":";         json += controleVelocidade(0);
+  json += ",\"fan2\":";         json += controleVelocidade(1);
+  json += ",\"teto\":";         json += String(TETO_ABSOLUTO, 0);
+  json += ",\"cfg\":{\"alvo\":";  json += String(c.alvo, 1);
+  json += ",\"hist\":";         json += String(c.histerese, 1);
+  json += ",\"f2on\":";         json += c.fan2Ligado ? "true" : "false";
+  json += ",\"f2max\":";        json += c.fan2Max;
+  json += ",\"f2min\":";        json += c.fan2Min;
+  json += ",\"pwmin\":";        json += c.pwmMin;
+  json += ",\"pos1\":";         json += c.pos1;
+  json += ",\"rmp1\":";         json += c.rampa1;
+  json += ",\"subir\":";        json += c.semSubirMin;
+  json += "}";
   json += ",\"hist\":{\"t\":[";
 
   for (uint16_t i = 0; i < nHist; i++) {
@@ -124,20 +161,88 @@ static void rotaTela() {
                 telaEstaLigada() ? "{\"tela\":true}" : "{\"tela\":false}");
 }
 
-// Teste do brilho por registrador. Pode nao surtir efeito nenhum - veja o
-// comentario em telaDefineBrilho().
+// Brilho da luz de fundo, em %. Abaixo de 5 a tela sobe para 5.
 static void rotaBrilho() {
-  const long valor = servidor.arg("v").toInt();
-
-  if (valor < 0 || valor > 255) {
-    servidor.send(400, "text/plain; charset=utf-8", "use v=0 a 255\n");
+  const String txt = servidor.arg("v");
+  const long v = txt.toInt();
+  if (txt.length() == 0 || v < 0 || v > 100) {
+    servidor.send(400, "text/plain; charset=utf-8", "use v=0 a 100\n");
     return;
   }
-
-  telaDefineBrilho((uint8_t)valor);
+  telaDefineBrilho((uint8_t)v);
   servidor.sendHeader("Cache-Control", "no-store");
   servidor.send(200, "application/json; charset=utf-8",
                 String("{\"brilho\":") + telaBrilho() + "}");
+}
+
+// Temperatura maxima. Por enquanto so e guardada e mostrada: ainda nao entra
+// na regra do controle. A faixa vai ate o teto absoluto do controle.
+static void rotaTmax() {
+  const String txt = servidor.arg("v");
+  const float v = txt.toFloat();
+
+  if (txt.length() == 0 || v < TMAX_MIN || v > TETO_ABSOLUTO) {
+    servidor.send(400, "text/plain; charset=utf-8",
+                  String("temperatura maxima fora de ") + String(TMAX_MIN, 0) +
+                  " a " + String(TETO_ABSOLUTO, 0) + " C\n");
+    return;
+  }
+
+  painelDefineTempMaxima(v);
+  servidor.sendHeader("Cache-Control", "no-store");
+  servidor.send(200, "application/json; charset=utf-8",
+                String("{\"tmax\":") + String(v, 1) + "}");
+}
+
+// A autorizacao e o unico caminho para o aquecedor ligar. Nunca e salva:
+// religar a placa volta tudo para bloqueado, por regra do projeto.
+static void rotaAutorizar() {
+  const String v = servidor.arg("v");
+  if (v != "0" && v != "1") {
+    servidor.send(400, "text/plain; charset=utf-8", "use v=0 ou v=1\n");
+    return;
+  }
+  controleAutoriza(v == "1");
+  servidor.sendHeader("Cache-Control", "no-store");
+  servidor.send(200, "application/json; charset=utf-8",
+                String("{\"autorizado\":") +
+                (controleAutorizado() ? "true" : "false") + "}");
+}
+
+// Le uma porcentagem e recusa o que nao cabe em 0..100 antes de converter:
+// 300 num uint8_t viraria 44 e passaria na validacao do controle.
+static bool lePct(const char *nome, uint8_t &destino) {
+  if (!servidor.hasArg(nome)) return true;
+  const long v = servidor.arg(nome).toInt();
+  if (v < 0 || v > 100) return false;
+  destino = (uint8_t)v;
+  return true;
+}
+
+// Campos ausentes mantem o valor atual, entao da para mudar so o alvo sem
+// reenviar a configuracao inteira.
+static void rotaConfig() {
+  Config c = controleConfig();
+  if (servidor.hasArg("alvo"))  c.alvo        = servidor.arg("alvo").toFloat();
+  if (servidor.hasArg("hist"))  c.histerese   = servidor.arg("hist").toFloat();
+  if (servidor.hasArg("f2on"))  c.fan2Ligado  = servidor.arg("f2on") == "1";
+  if (!lePct("f2max", c.fan2Max) || !lePct("f2min", c.fan2Min) ||
+      !lePct("pwmin", c.pwmMin)) {
+    servidor.send(400, "text/plain; charset=utf-8",
+                  "porcentagem fora de 0 a 100\n");
+    return;
+  }
+  if (servidor.hasArg("pos1"))  c.pos1        = servidor.arg("pos1").toInt();
+  if (servidor.hasArg("rmp1"))  c.rampa1      = servidor.arg("rmp1").toInt();
+  if (servidor.hasArg("subir")) c.semSubirMin = servidor.arg("subir").toInt();
+
+  const char *porque = "";
+  if (!controleDefineConfig(c, &porque)) {
+    servidor.send(400, "text/plain; charset=utf-8", String(porque) + "\n");
+    return;
+  }
+  servidor.sendHeader("Cache-Control", "no-store");
+  servidor.send(200, "application/json; charset=utf-8", "{\"ok\":true}");
 }
 
 static void rotaPerdida() {
@@ -163,7 +268,10 @@ static void sobe() {
   servidor.on("/", rotaPagina);
   servidor.on("/dados", rotaDados);
   servidor.on("/tela", rotaTela);
+  servidor.on("/tmax", rotaTmax);
   servidor.on("/brilho", rotaBrilho);
+  servidor.on("/autorizar", rotaAutorizar);
+  servidor.on("/config", rotaConfig);
   servidor.onNotFound(rotaPerdida);
   servidor.begin();
 
