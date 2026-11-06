@@ -6,9 +6,9 @@
 // a ligacao esta certa, o driver escolhido e o correto, e o ESP32 esta vivo.
 //
 // Ligacao (configurada em platformio.ini, nao aqui):
-//   VCC -> 3V3        SCL/SCK -> GPIO18        RES -> GPIO26
+//   VCC -> 5V         SCL/SCK -> GPIO18        RES -> GPIO26
 //   GND -> GND        SDA/MOSI -> GPIO23       CS  -> GPIO13
-//   BLK -> 3V3                                 DC  -> GPIO27
+//                                              DC  -> GPIO27
 // ---------------------------------------------------------------------------
 
 #include <Arduino.h>

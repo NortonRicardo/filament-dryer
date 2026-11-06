@@ -1,14 +1,19 @@
 // ---------------------------------------------------------------------------
-// Etapa 3 - display + BME280 (temperatura e umidade)
+// Estufa de filamento - painel THERMO
 //
-// Cada grandeza aparece num anel: a barra enche da esquerda para a direita,
-// passando por cima, e o valor fica em negrito no centro. Os mesmos valores
-// saem no monitor serial.
+// Le o BME280 e mostra temperatura e umidade no display, no layout de
+// cartoes. Serve tambem uma pagina na rede local (ver servidor.h).
+//
+// Os cartoes de ventilador e hotend ja estao no layout, mas ainda nao ha
+// hardware atras deles: mostram "--" em cinza ate existirem.
 //
 // Ligacao do display (os pinos ficam em platformio.ini, nao aqui):
 //   VCC -> 5V         SCL/SCK  -> GPIO18        RES -> GPIO26
 //   GND -> GND        SDA/MOSI -> GPIO23        CS  -> GPIO13
-//   BLK -> 3V3                                  DC  -> GPIO27
+//                                               DC  -> GPIO27
+//
+// Sao sete fios. Este modulo nao tem pino de luz de fundo: ela e alimentada
+// por dentro, a partir do VCC, e fica sempre acesa.
 //
 // Ligacao do BME280 (I2C, pinos declarados abaixo):
 //   VIN -> 3V3        SCL -> GPIO22
@@ -22,6 +27,9 @@
 #include <TFT_eSPI.h>
 #include <Wire.h>
 #include <Adafruit_BME280.h>
+
+#include "servidor.h"
+#include "tela.h"
 
 TFT_eSPI tft = TFT_eSPI();
 Adafruit_BME280 bme;
@@ -54,53 +62,9 @@ static const uint8_t ENDERECOS[] = {0x76, 0x77};
 static const uint32_t INTERVALO_LEITURA = 2000;      // ms entre leituras
 static const uint32_t INTERVALO_RETENTATIVA = 5000;  // ms entre buscas do sensor
 
-// Cores escolhidas para nao apagarem no fundo preto.
-static const uint16_t COR_TEMP  = TFT_ORANGE;
-static const uint16_t COR_UMID  = TFT_CYAN;
-static const uint16_t COR_TEXTO = TFT_WHITE;
-static const uint16_t COR_TRILHA = 0x4208;  // cinza, o anel vazio por tras
-
-// ---------------------------------------------------------------------------
-// Geometria dos aneis
-//
-// Na TFT_eSPI o angulo 0 fica as 6 horas e cresce no sentido horario, ou seja
-// passando pelas 9. Comecando em 45 e varrendo 270 graus, a barra sai da base
-// esquerda, sobe pela esquerda, cruza o topo e desce pela direita -- de um
-// lado ao outro, com a abertura embaixo. Nessa abertura cabe o rotulo.
-// ---------------------------------------------------------------------------
-
-static const int16_t ANEL_CX = 120;
-static const int16_t ANEL_CY[2] = {88, 228};
-// Raio interno 48 e nao 46: o retangulo que o padding do valor apaga mede
-// 78x42 px (medido nos glifos da FreeSansBold18pt), e o canto dele fica a
-// 44,3 px do centro. Com 46 sobrava 1,7 px e o texto encostava no anel.
-static const int16_t ANEL_RE = 64;  // raio externo
-static const int16_t ANEL_RI = 48;  // raio interno
-static const int16_t DESLOC_ROTULO = 52;
-
-static const uint16_t ANG_INICIO = 45;
-static const uint16_t ANG_VARRIDO = 270;
-
-struct Serie {
-  const char *simbolo;
-  bool grau;  // desenha o anelzinho do grau antes do simbolo
-  float minimo, maximo;
-  uint16_t cor;
-};
-
-// Escalas fixas, nao automaticas. Escala automatica faria qualquer oscilacao
-// de decimo de grau encher meio anel e mudaria o significado da mesma barra
-// a cada leitura - impossivel comparar uma hora com a outra.
-static const Serie SERIES[2] = {
-  {"C", true,  0.0f,  60.0f, COR_TEMP},
-  {"%", false, 0.0f, 100.0f, COR_UMID},
-};
-
 static bool     sensorOk = false;
 static uint8_t  enderecoSensor = 0;
 static uint32_t ultimaLeitura = 0;
-static int16_t  larguraValor = 0;
-static uint16_t varrido[2] = {0, 0};  // graus ja pintados em cada anel
 
 // ---------------------------------------------------------------------------
 // Sensor
@@ -167,123 +131,269 @@ static bool leSensor(float &temperatura, float &umidade) {
 }
 
 // ---------------------------------------------------------------------------
-// Aneis
+// Desenho
+//
+// Regra em todo este bloco: escolher a fonte logo antes de cada desenho ou
+// medicao. setTextFont() zera a free font e setFreeFont() a repoe, entao
+// misturar as duas sem reescolher daria a fonte errada sem erro de compilacao.
 // ---------------------------------------------------------------------------
 
-// Pinta somente o trecho que mudou: o que cresceu sai na cor da serie, o que
-// recuou volta para a cor da trilha. O anel nunca e repintado inteiro, entao
-// nao ha o piscar de apagar e redesenhar.
+// Desenha texto com espaco extra entre as letras - metade do visual deste
+// layout vem dai, e a TFT_eSPI nao tem letter-spacing.
 //
-// drawArc (e nao drawSmoothArc) de proposito: a propria biblioteca diz que as
-// pontas sem anti-aliasing existem para permitir mudanca dinamica de
-// comprimento com juncao limpa entre segmentos. Com drawSmoothArc as pontas
-// suavizadas deixariam costura visivel a cada emenda.
-static void desenhaAnel(uint8_t i, float valor) {
-  const Serie &s = SERIES[i];
+// Resolve de passagem dois caracteres que as fontes nao tem, por cobrirem so
+// 0x20 a 0x7E: "·" vira um ponto desenhado e "Ø" vira um O cortado.
+//
+// Com medir=true nao desenha nada, so devolve a largura - e assim que se
+// centraliza ou alinha a direita.
+static int16_t textoEspacado(int16_t x, int16_t y, const char *texto,
+                             int16_t espaco, uint16_t cor, uint16_t fundo,
+                             bool medir = false) {
+  const int16_t inicio = x;
+  const int16_t altura = tft.fontHeight();
+  bool primeiro = true;
 
-  float fracao = (valor - s.minimo) / (s.maximo - s.minimo);
-  fracao = constrain(fracao, 0.0f, 1.0f);
-  const uint16_t alvo = (uint16_t)(ANG_VARRIDO * fracao + 0.5f);
-
-  if (alvo > varrido[i]) {
-    tft.drawArc(ANEL_CX, ANEL_CY[i], ANEL_RE, ANEL_RI,
-                ANG_INICIO + varrido[i], ANG_INICIO + alvo, s.cor, TFT_BLACK);
-  } else if (alvo < varrido[i]) {
-    tft.drawArc(ANEL_CX, ANEL_CY[i], ANEL_RE, ANEL_RI,
-                ANG_INICIO + alvo, ANG_INICIO + varrido[i], COR_TRILHA,
-                TFT_BLACK);
+  if (!medir) {
+    tft.setTextDatum(ML_DATUM);
+    tft.setTextColor(cor, fundo);
   }
 
-  varrido[i] = alvo;
-}
+  for (const uint8_t *p = (const uint8_t *)texto; *p; p++) {
+    if (!primeiro) x += espaco;
+    primeiro = false;
 
-static void esvaziaAnel(uint8_t i) {
-  if (varrido[i] == 0) return;
-  tft.drawArc(ANEL_CX, ANEL_CY[i], ANEL_RE, ANEL_RI,
-              ANG_INICIO, ANG_INICIO + varrido[i], COR_TRILHA, TFT_BLACK);
-  varrido[i] = 0;
-}
+    if (p[0] == 0xC2 && p[1] == 0xB7) {  // "·"
+      if (!medir) tft.fillCircle(x + 2, y, 2, cor);
+      x += 5;
+      p++;
+      continue;
+    }
 
-// ---------------------------------------------------------------------------
-// Tela
-// ---------------------------------------------------------------------------
+    char letra[2] = {0, 0};
+    bool cortado = false;
 
-// Simbolo da grandeza, na abertura de baixo do anel.
-//
-// O grau nao existe nas fontes da TFT_eSPI: elas cobrem 0x20 a 0x7E e o
-// caractere ficaria fora. Desenhado como dois circulos concentricos, que e
-// exatamente o que o simbolo e - e assim ele acompanha a cor da serie.
-static void desenhaSimbolo(uint8_t i) {
-  const Serie &s = SERIES[i];
-  const int16_t y = ANEL_CY[i] + DESLOC_ROTULO;
+    if (p[0] == 0xC3 && p[1] == 0x98) {  // "Ø"
+      letra[0] = 'O';
+      cortado = true;
+      p++;
+    } else {
+      letra[0] = (char)p[0];
+    }
 
-  tft.setTextColor(s.cor, TFT_BLACK);
-
-  if (!s.grau) {
-    tft.setTextDatum(MC_DATUM);
-    tft.drawString(s.simbolo, ANEL_CX, y, 4);
-    return;
+    const int16_t largura = tft.textWidth(letra);
+    if (!medir) {
+      tft.drawString(letra, x, y);
+      if (cortado) {
+        tft.drawLine(x + largura - 1, y - altura / 2 + 2,
+                     x + 1, y + altura / 2 - 2, cor);
+      }
+    }
+    x += largura;
   }
 
-  const int16_t largura = tft.textWidth(s.simbolo, 4);
-  const int16_t x0 = ANEL_CX - (largura + 9) / 2;
+  return x - inicio;
+}
 
-  tft.drawCircle(x0 + 3, y - 7, 3, s.cor);
-  tft.drawCircle(x0 + 3, y - 7, 2, s.cor);
+static void textoCentrado(int16_t cx, int16_t y, const char *texto,
+                          int16_t espaco, uint16_t cor, uint16_t fundo) {
+  const int16_t largura = textoEspacado(0, 0, texto, espaco, cor, fundo, true);
+  textoEspacado(cx - largura / 2, y, texto, espaco, cor, fundo);
+}
 
+// A faixa reservada ao valor dentro do cartao. Apagar so ela, e nao o cartao
+// inteiro, e o que evita piscar a cada leitura.
+// No cartao grande tudo desce 2 px, inclusive o topo da faixa: com o mesmo
+// topo dos outros, ela apagaria a ultima linha de pixels do rotulo a cada
+// leitura.
+static int16_t yRotulo(const Cartao &c)     { return c.y + (c.grande ? 18 : 17); }
+static int16_t faixaTopo(const Cartao &c)   { return c.y + (c.grande ? 26 : 24); }
+static int16_t faixaAltura(const Cartao &c) { return c.grande ? 46 : 44; }
+static int16_t yValor(const Cartao &c)      { return c.y + (c.grande ? 50 : 48); }
+static int16_t yDetalhe(const Cartao &c)    { return c.y + (c.grande ? 80 : 76); }
+
+// Unidade ao lado do numero, em fonte pequena e cinza. O grau nao existe na
+// fonte, entao vai desenhado como dois circulos - que e o que ele e.
+static int16_t desenhaUnidade(int16_t x, int16_t y, const Cartao &c,
+                              bool medir) {
+  int16_t largura = 0;
+
+  if (c.grau) {
+    if (!medir) {
+      tft.drawCircle(x + 3, y - 5, 3, MUDO);
+      tft.drawCircle(x + 3, y - 5, 2, MUDO);
+    }
+    x += 9;
+    largura += 9;
+  }
+
+  tft.setTextFont(2);
+  largura += tft.textWidth(c.unidade);
+  if (!medir) {
+    tft.setTextDatum(ML_DATUM);
+    tft.setTextColor(MUDO, CARTAO);
+    tft.drawString(c.unidade, x, y);
+  }
+  return largura;
+}
+
+// Numero grande mais a unidade, centrados juntos no cartao. Sem dado, "--"
+// em cinza: o cartao existe no layout mas nao inventa leitura.
+static void desenhaValor(uint8_t i, const char *valor, bool temDado) {
+  const Cartao &c = CARTOES[i];
+  const int16_t y = yValor(c);
+
+  tft.fillRect(c.x + 3, faixaTopo(c), c.l - 6, faixaAltura(c), CARTAO);
+
+  if (c.grande) tft.setFreeFont(&FreeSansBold24pt7b);
+  else          tft.setFreeFont(&FreeSansBold18pt7b);
+
+  const int16_t larguraValor = tft.textWidth(valor);
+  const int16_t larguraUnidade = temDado ? desenhaUnidade(0, 0, c, true) : 0;
+  const int16_t total = larguraValor + (temDado ? 3 + larguraUnidade : 0);
+
+  int16_t x = c.x + c.l / 2 - total / 2;
+
+  if (c.grande) tft.setFreeFont(&FreeSansBold24pt7b);
+  else          tft.setFreeFont(&FreeSansBold18pt7b);
   tft.setTextDatum(ML_DATUM);
-  tft.drawString(s.simbolo, x0 + 9, y, 4);
+  tft.setTextColor(temDado ? c.cor : MUDO, CARTAO);
+  tft.drawString(valor, x, y);
+
+  if (temDado) desenhaUnidade(x + larguraValor + 3, y, c, false);
 }
 
-// Desenha o que nao muda: a trilha dos dois aneis e os simbolos.
+static void desenhaCartao(uint8_t i) {
+  const Cartao &c = CARTOES[i];
+
+  tft.fillRoundRect(c.x, c.y, c.l, c.a, 9, CARTAO);
+  tft.drawRoundRect(c.x, c.y, c.l, c.a, 9, BORDA);
+
+  tft.setTextFont(1);
+  textoCentrado(c.x + c.l / 2, yRotulo(c), c.rotulo, 2, MUDO, CARTAO);
+  textoCentrado(c.x + c.l / 2, yDetalhe(c), c.detalhe, 1, MUDO, CARTAO);
+}
+
+// Rodape: so o endereco, centrado. Como ele vira "sem Wi-Fi" ou
+// "conectando..." quando a rede cai, o estado da conexao continua visivel
+// aqui sem precisar de um indicador separado.
+static void desenhaRodape(const char *endereco) {
+  tft.fillRect(MARGEM, Y_RODAPE - 7, LARGURA - 2 * MARGEM, 14, FUNDO);
+
+  tft.setTextFont(1);
+  textoCentrado(LARGURA / 2, Y_RODAPE, endereco, 1, RODAPE, FUNDO);
+}
+
 static void telaFixa() {
-  tft.fillScreen(TFT_BLACK);
-
-  for (uint8_t i = 0; i < 2; i++) {
-    tft.drawArc(ANEL_CX, ANEL_CY[i], ANEL_RE, ANEL_RI,
-                ANG_INICIO, ANG_INICIO + ANG_VARRIDO, COR_TRILHA, TFT_BLACK);
-    varrido[i] = 0;
-    desenhaSimbolo(i);
-  }
+  tft.fillScreen(FUNDO);
+  for (uint8_t i = 0; i < N_CARTOES; i++) desenhaCartao(i);
 }
+
+static bool telaLigada = true;
 
 // Uma casa decimal, menos a partir de 100: assim o texto nunca passa de
-// quatro digitos e cabe com folga dentro do anel.
+// quatro digitos e cabe na largura do cartao sem reduzir a fonte.
 static void formataValor(float valor, char *buf, size_t n) {
   if (valor >= 100.0f || valor <= -100.0f) snprintf(buf, n, "%.0f", valor);
   else                                     snprintf(buf, n, "%.1f", valor);
 }
 
-// Numero em negrito no centro do anel. O padding apaga a area inteira: um
-// valor que encurta de 100 para 99.9 nao deixa digito orfao atras.
-static void desenhaValor(uint8_t i, const char *texto, uint16_t cor) {
-  tft.setFreeFont(&FreeSansBold18pt7b);
-  tft.setTextDatum(MC_DATUM);
-  tft.setTextColor(cor, TFT_BLACK);
-  tft.setTextPadding(larguraValor);
-  tft.drawString(texto, ANEL_CX, ANEL_CY[i]);
-  tft.setTextPadding(0);
+// A ultima leitura fica guardada: com a tela desligada nada e desenhado, e
+// ao religar os cartoes voltam com o valor atual em vez de "--".
+static float ultimaTemp = 0, ultimaUmid = 0;
+static bool temLeitura = false;
+
+static void pintaMedidas() {
+  char buf[16];
+
+  if (!temLeitura) {
+    desenhaValor(CARTAO_TEMP, "--", false);
+    desenhaValor(CARTAO_UMID, "--", false);
+    return;
+  }
+
+  formataValor(ultimaTemp, buf, sizeof buf);
+  desenhaValor(CARTAO_TEMP, buf, true);
+
+  formataValor(ultimaUmid, buf, sizeof buf);
+  desenhaValor(CARTAO_UMID, buf, true);
 }
 
 static void mostraLeitura(float temperatura, float umidade) {
-  const float valores[2] = {temperatura, umidade};
-  char buf[16];
+  ultimaTemp = temperatura;
+  ultimaUmid = umidade;
+  temLeitura = true;
 
-  for (uint8_t i = 0; i < 2; i++) {
-    formataValor(valores[i], buf, sizeof buf);
-    desenhaValor(i, buf, COR_TEXTO);
-    desenhaAnel(i, valores[i]);
-  }
+  if (telaLigada) pintaMedidas();
 
   Serial.printf("temperatura %.2f C | umidade %.2f %%\n", temperatura, umidade);
 }
 
 static void mostraSemSensor() {
-  for (uint8_t i = 0; i < 2; i++) {
-    desenhaValor(i, "--", TFT_RED);
-    esvaziaAnel(i);
-  }
+  temLeitura = false;
+  if (telaLigada) pintaMedidas();
 }
+
+// Ventiladores e hotend ainda nao existem no circuito. Ficam em "--" ate
+// existirem, em vez de mostrar numero inventado.
+static void mostraSemHardware() {
+  desenhaValor(CARTAO_FAN1, "--", false);
+  desenhaValor(CARTAO_FAN2, "--", false);
+  desenhaValor(CARTAO_HOTEND, "--", false);
+}
+
+// --- liga/desliga, chamado pelo servidor -----------------------------------
+//
+// Apagar e pintar de preto, nao mandar DISPOFF ao controlador. DISPOFF nao
+// significa "tela apagada": pelo datasheet do ST7789 ele desliga a saida da
+// memoria de video e insere uma "pagina em branco" no lugar - e neste painel
+// essa pagina e literalmente branca. Pintar de preto da o resultado que se
+// espera, ao custo de redesenhar tudo ao religar.
+//
+// A luz de fundo continua acesa de qualquer forma. Este modulo (GMT024-10,
+// header de 7 pinos) nao expoe pino de backlight: ela vem por dentro, do
+// proprio VCC. Nao ha o que comandar sem mexer na placa do display.
+void telaDefineLigada(bool ligada) {
+  if (ligada == telaLigada) return;
+  telaLigada = ligada;
+
+  if (ligada) {
+    telaFixa();
+    desenhaRodape(servidorEndereco());
+    mostraSemHardware();
+    pintaMedidas();
+  } else {
+    tft.fillScreen(TFT_BLACK);
+  }
+
+  Serial.printf("Tela             : %s\n", ligada ? "ligada" : "apagada");
+}
+
+bool telaEstaLigada() { return telaLigada; }
+
+// --- brilho, um tiro no escuro que vale dar ---------------------------------
+//
+// O ST7789 tem registradores de brilho: WRCTRLD (0x53) liga o controle e
+// WRDISBV (0x51) recebe 0 a 255. So que eles comandam os pads de backlight do
+// PROPRIO controlador, e na maioria dos modulos baratos esses pads nao vao a
+// lugar nenhum - os LEDs sao alimentados direto pelo VCC, por fora dele.
+//
+// Como este modulo nem pino de backlight expoe, a chance e pequena. Mas o
+// teste custa quatro bytes no SPI e nao pode danificar nada: se mudar o
+// brilho, ganhamos de graca; se nao mudar, a questao fica encerrada.
+static uint8_t brilhoAtual = 255;
+
+void telaDefineBrilho(uint8_t valor) {
+  brilhoAtual = valor;
+
+  tft.writecommand(0x53);  // WRCTRLD
+  tft.writedata(0x2C);     // BCTRL + DD + BL ligados
+  tft.writecommand(0x51);  // WRDISBV
+  tft.writedata(valor);
+
+  Serial.printf("Brilho           : %u enviado ao painel\n", valor);
+}
+
+uint8_t telaBrilho() { return brilhoAtual; }
 
 // ---------------------------------------------------------------------------
 
@@ -293,7 +403,7 @@ void setup() {
 
   Serial.println();
   Serial.println("==================================================");
-  Serial.println("  Etapa 3 - display + BME280");
+  Serial.println("  Estufa de filamento - painel THERMO");
   Serial.println("==================================================");
   Serial.printf("Driver da tela   : %s\n", DRIVER);
   Serial.printf("Inversao de cor  : %s\n", INVERSAO);
@@ -301,6 +411,8 @@ void setup() {
   Serial.printf("Pinos da tela    : SCK=%d MOSI=%d CS=%d DC=%d RST=%d\n",
                 TFT_SCLK, TFT_MOSI, TFT_CS, TFT_DC, TFT_RST);
   Serial.printf("Pinos do sensor  : SDA=%d SCL=%d\n", PIN_SDA, PIN_SCL);
+
+  servidorInicia();  // nao bloqueia: a rede sobe em paralelo ao resto
 
   Wire.begin(PIN_SDA, PIN_SCL);
   varreI2C();
@@ -324,20 +436,30 @@ void setup() {
   tft.setRotation(0);
 
   Serial.printf("Resolucao em uso : %d x %d\n", tft.width(), tft.height());
-
-  tft.setFreeFont(&FreeSansBold18pt7b);
-  larguraValor = tft.textWidth("-99.9");  // o texto mais largo possivel
-  Serial.printf("Aneis            : raio %d-%d, %d graus; valor com %d px "
-                "dentro de %d px livres\n",
-                ANEL_RI, ANEL_RE, ANG_VARRIDO, larguraValor, ANEL_RI * 2);
   Serial.println("--------------------------------------------------");
 
   telaFixa();
-  if (!sensorOk) mostraSemSensor();
+  desenhaRodape(servidorEndereco());
+  mostraSemHardware();
+  pintaMedidas();  // "--" ate a primeira leitura chegar
 }
 
 void loop() {
   const uint32_t agora = millis();
+
+  servidorAtende();
+
+  // O endereco muda sozinho: conectando -> IP, ou IP -> reconectando. A tela
+  // acompanha comparando o texto, para nao repintar a linha a cada volta.
+  static char enderecoNaTela[40] = "";
+
+  const char *endereco = servidorEndereco();
+  if (strcmp(endereco, enderecoNaTela) != 0) {
+    snprintf(enderecoNaTela, sizeof enderecoNaTela, "%s", endereco);
+    // Com a tela apagada so guarda: ao religar, o rodape e redesenhado com
+    // o endereco de entao.
+    if (telaEstaLigada()) desenhaRodape(endereco);
+  }
 
   if (sensorOk) {
     if (agora - ultimaLeitura >= INTERVALO_LEITURA) {
@@ -346,12 +468,14 @@ void loop() {
       float temperatura, umidade;
       if (leSensor(temperatura, umidade)) {
         mostraLeitura(temperatura, umidade);
+        servidorRegistra(temperatura, umidade);
       } else {
         // Parou de responder: cabo solto, provavelmente. Volta a procurar
         // em vez de repetir o ultimo valor, que pareceria um sensor travado.
         Serial.println("Sensor parou de responder - voltando a procurar");
         sensorOk = false;
         mostraSemSensor();
+        servidorSemSensor();
       }
     }
   } else if (agora - ultimaLeitura >= INTERVALO_RETENTATIVA) {
