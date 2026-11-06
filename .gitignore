@@ -3,3 +3,6 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+
+# Credenciais locais: nunca versionar. Modelo em .env.exemplo
+.env
