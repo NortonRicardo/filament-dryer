@@ -80,16 +80,14 @@ static const Cartao CARTOES[N_CARTOES] = {
   // configurada no painel web, e e desenhada a parte (pintaMaximo no main.cpp).
   {COL_E, Y_L2, COL_L, LINHA_A, "TEMPERATURA", "",
    "C", true, LARANJA},
-  // O detalhe deste cartao e reescrito em tempo de execucao com o estado do
-  // aquecedor, entao o texto aqui e so o inicial.
+  // Sem detalhe fixo: a linha de baixo e o selo de estado (pintaControle).
   {COL_D, Y_L2, COL_L, LINHA_A, "AQUECEDOR",
-   "BLOQUEADO", "C", true, LARANJA},
+   "", "C", true, LARANJA},
 
-  // O detalhe dos ventiladores e o estado, LIGADO ou DESLIGADO, reescrito
-  // em pintaControle(). O texto aqui e so o do boot.
-  {COL_E, Y_L3, COL_L, LINHA_A, "FAN 01", "DESLIGADO",
+  // Sem detalhe fixo: a linha de baixo e o selo de estado (pintaControle).
+  {COL_E, Y_L3, COL_L, LINHA_A, "FAN 01", "",
    "%", false, AZUL},
-  {COL_D, Y_L3, COL_L, LINHA_A, "FAN 02", "DESLIGADO",
+  {COL_D, Y_L3, COL_L, LINHA_A, "FAN 02", "",
    "%", false, ROXO},
 };
 

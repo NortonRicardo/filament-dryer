@@ -76,10 +76,11 @@ button,.clicavel,input{touch-action:manipulation}
 .vivo .valor{color:var(--cor)}
 #c-t{--cor:var(--laranja)} #c-u{--cor:var(--ciano)} #c-ua{--cor:var(--turquesa)}
 #c-f1{--cor:var(--azul)} #c-f2{--cor:var(--roxo)} #c-h{--cor:var(--laranja)}
-/* No cartao do aquecedor, meia largura: estado em cima, botao embaixo */
-.rodape-cartao{display:flex;flex-direction:column;align-items:center;gap:7px;margin-top:10px}
-.rodape-cartao .estado{font-size:10px}
-.rodape-cartao button{min-height:36px;padding:7px 12px;font-size:10px;min-width:0}
+/* Selo de estado: so informa, nao e botao. Verde ligado, vermelho desligado. */
+.selo{display:inline-block;margin-top:11px;padding:3px 11px;border:1px solid;
+  border-radius:999px;font:800 9.5px var(--mono);letter-spacing:1.3px;
+  color:var(--vermelho);border-color:var(--vermelho)}
+.selo.on{color:var(--verde);border-color:var(--verde)}
 
 .fig{border:1px solid var(--borda);border-radius:16px;background:var(--card);
   padding:12px 10px 9px}
@@ -175,18 +176,15 @@ footer.ruim{color:var(--laranja)}
 
   <div class="cartao clicavel" id="c-h" data-abre="m-h"><div class="rotulo">Aquecedor · alvo</div>
     <div class="valor"><span id="alvoCard">--</span><u>°C</u></div>
-    <div class="rodape-cartao">
-      <span class="estado" data-estado-aq>—</span>
-      <button data-autoriza disabled>—</button>
-    </div></div>
+    <span class="selo" id="seloAq">DESLIGADO</span></div>
 
   <div class="cartao clicavel" id="c-f1" data-abre="m-f1"><div class="rotulo">Fan 01 · hotend</div>
     <div class="valor"><span id="f1">--</span><u>%</u></div>
-    <div class="detalhe" id="f1estado">DESLIGADO</div></div>
+    <span class="selo" id="seloF1">DESLIGADO</span></div>
 
   <div class="cartao clicavel" id="c-f2" data-abre="m-f2"><div class="rotulo">Fan 02 · circulação</div>
     <div class="valor"><span id="f2">--</span><u>%</u></div>
-    <div class="detalhe" id="f2faixa">12V · PWM</div></div>
+    <span class="selo" id="seloF2">DESLIGADO</span></div>
 </div>
 
 <div class="fig">
@@ -344,15 +342,18 @@ $("tmax").addEventListener("change", function () {
 });
 
 // --- chaves -----------------------------------------------------------------
-// O botao de autorizar existe no cartao e no modal. O do cartao nao pode
-// abrir o modal: o clique para nele.
+// Ligar o aquecedor so pelo modal: o cartao mostra o selo, nao tem botao.
 todos("[data-autoriza]").forEach(function (b) {
-  b.addEventListener("click", function (ev) {
-    ev.stopPropagation();
+  b.addEventListener("click", function () {
     this.disabled = true;
     envia("autorizar?v=" + (this.dataset.on === "1" ? 0 : 1));
   });
 });
+
+function selo(el, ligado, texto) {
+  el.textContent = texto;
+  el.className = "selo" + (ligado ? " on" : "");
+}
 $("btnF2").addEventListener("click", function () {
   this.disabled = true;
   envia("config?f2on=" + (this.dataset.on === "1" ? 0 : 1));
@@ -423,6 +424,8 @@ function ciclo() {
     todos("[data-estado-aq]").forEach(function (s) { marca(s, d.estado, classeAq); });
     todos("[data-autoriza]").forEach(function (b) { chave(b, d.autorizado, "DESLIGAR", "LIGAR"); });
     $("motivo").textContent = d.motivo || "";
+    if (d.estado === "PROTECAO") selo($("seloAq"), false, "PROTEÇÃO");
+    else selo($("seloAq"), d.autorizado, d.autorizado ? "LIGADO" : "DESLIGADO");
     $("c-h").classList.toggle("vivo", d.aquecendo);
     $("alvoCard").textContent = d.cfg.alvo.toFixed(0);
 
@@ -447,7 +450,7 @@ function ciclo() {
     $("f1").textContent = d.fan1;
     $("f2").textContent = d.fan2;
     marca($("estadoF1"), d.fan1 > 0 ? "LIGADO · " + d.fan1 + " %" : "DESLIGADO", d.fan1 > 0 ? "on" : "");
-    $("f1estado").textContent = d.fan1 > 0 ? "LIGADO" : "DESLIGADO";
+    selo($("seloF1"), d.fan1 > 0, d.fan1 > 0 ? "LIGADO" : "DESLIGADO");
 
     var f2 = d.cfg.f2on;
     marca($("estadoF2"), f2 ? "LIGADO · " + d.fan2 + " %" : "DESLIGADO", f2 ? "on" : "");
@@ -455,7 +458,7 @@ function ciclo() {
       ? (d.aquecendo ? "na máxima: aquecedor ligado" : "na mínima: aquecedor desligado")
       : "ligue aqui para começar a girar";
     chave($("btnF2"), f2, "DESLIGAR", "LIGAR");
-    $("f2faixa").textContent = f2 ? "MÍN " + d.cfg.f2min + " · MÁX " + d.cfg.f2max : "DESLIGADO";
+    selo($("seloF2"), f2, f2 ? "LIGADO" : "DESLIGADO");
 
     // Imagem do display e brilho
     marca($("estadoTela"), d.tela ? "LIGADA" : "APAGADA", d.tela ? "on" : "");

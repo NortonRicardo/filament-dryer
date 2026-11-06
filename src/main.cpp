@@ -450,17 +450,26 @@ static void mostraSemSensor() {
 
 // Ventiladores e aquecedor, com o que o controle decidiu. O detalhe do cartao
 // grande e reescrito junto, porque ele carrega o estado do aquecedor.
-// Apaga e reescreve so a linha de detalhe de um cartao.
-static void desenhaDetalhe(uint8_t i, const char *texto, uint16_t cor) {
+// Selo de estado na linha de baixo do cartao: borda arredondada com o texto
+// dentro, so informativo. Verde ligado, vermelho desligado - o mesmo selo da
+// pagina web.
+static void desenhaSelo(uint8_t i, const char *texto, uint16_t cor) {
   const Cartao &c = CARTOES[i];
-  tft.fillRect(c.x + 3, yDetalhe(c) - 6, c.l - 6, 13, CARTAO);
+  const int16_t cy = yDetalhe(c);
+  const int16_t a = 18;
+
+  tft.fillRect(c.x + 3, cy - 10, c.l - 6, 20, CARTAO);
   tft.setTextFont(1);
-  textoCentrado(c.x + c.l / 2, yDetalhe(c), texto, 1, cor, CARTAO);
+  const int16_t lt = textoEspacado(0, 0, texto, 1, cor, CARTAO, true);
+  const int16_t l = lt + 18;
+  const int16_t x = c.x + c.l / 2 - l / 2;
+
+  tft.drawRoundRect(x, cy - a / 2, l, a, a / 2, cor);
+  textoEspacado(x + 9, cy, texto, 1, cor, CARTAO);
 }
 
 // Ventiladores e aquecedor, com o que o controle decidiu. No boot tudo esta
-// desligado, e os tres cartoes dizem isso na linha de baixo ate o painel web
-// ligar.
+// desligado, e os tres cartoes mostram o selo vermelho ate o painel web ligar.
 static void pintaControle() {
   char buf[16];
 
@@ -469,14 +478,19 @@ static void pintaControle() {
     const uint8_t cartao = CARTAO_FAN1 + i;
     snprintf(buf, sizeof buf, "%u", pct);
     desenhaValor(cartao, buf, pct > 0);
-    desenhaDetalhe(cartao, pct > 0 ? "LIGADO" : "DESLIGADO",
-                   pct > 0 ? CARTOES[cartao].cor : MUDO);
+    desenhaSelo(cartao, pct > 0 ? "LIGADO" : "DESLIGADO",
+                pct > 0 ? VERDE : VERMELHO);
   }
 
   snprintf(buf, sizeof buf, "%.0f", controleConfig().alvo);
   desenhaValor(CARTAO_HOTEND, buf, controleAquecedorLigado());
-  desenhaDetalhe(CARTAO_HOTEND, controleEstadoTexto(),
-                 controleAquecedorLigado() ? LARANJA : MUDO);
+
+  // Ligado = liberado no painel, mesmo que agora esteja no alvo sem aquecer;
+  // o numero fica laranja quando aquece de fato. Protecao aparece em vez de
+  // DESLIGADO para a falha nao passar por desligamento normal.
+  if (controleEstado() == EST_FALHA)  desenhaSelo(CARTAO_HOTEND, "PROTECAO", VERMELHO);
+  else if (controleAutorizado())      desenhaSelo(CARTAO_HOTEND, "LIGADO", VERDE);
+  else                                desenhaSelo(CARTAO_HOTEND, "DESLIGADO", VERMELHO);
 }
 
 // Rodape: so o endereco, centrado. Como ele vira "sem Wi-Fi" ou
