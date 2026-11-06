@@ -5,100 +5,198 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>NodeMCU ESP-32S — placa e ligações</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Semi+Condensed:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#000000; --surface:#000000; --fg:#ffffff; --muted:#b9bbbd; --line:#5a5d63;
-  --accent:#ff8a3d; --accent-soft:#3a2415;
-  --pwr:#ff6b5e; --v33:#f7c04a; --sig:#d8d8d8; --gpio:#6ab4ff; --in:#5fd99b; --sys:#b39bff;
-  --board:#000000; --board-line:#61646a; --code:#000000;
-  --font-display:"Saira Semi Condensed","Arial Narrow",system-ui,sans-serif;
-  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
-  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  /* superfícies - preto absoluto, e tudo acima dele e branco translucido.
+     Opacidade de verdade (rgba), nao cinza solido: se um dia entrar imagem
+     de fundo, os cartoes deixam ela passar. */
+  --bg:#000000;
+  /* cartao em PRETO translucido, nao branco translucido: e o
+     "bg-black/80" deles. Deixa a textura do fundo atravessar. */
+  --surface:rgba(0,0,0,.8);
+  --surface-2:rgba(255,255,255,.1);
+  /* branco a 90%, nunca puro: o proprio design system diz que puro
+     "reduz o brilho excessivo num fundo totalmente preto". */
+  --fg:rgba(255,255,255,.9); --muted:rgba(255,255,255,.6);
+  --line:rgba(255,255,255,.1);
+
+  /* cor de interface - monocromatica, como na SpaceX */
+  --brand:rgba(255,255,255,.9); --brand-solid:rgba(255,255,255,.1);
+
+  /* cores de dado (legendas, diagramas, etiquetas).
+     Escala 400 do Tailwind: calibrada para fundo escuro. */
+  --accent:#fb923c;
+  --pwr:#f87171; --v33:#fbbf24; --sig:#d4d4d8;
+  --gpio:#60a5fa; --in:#34d399; --sys:#a78bfa;
+
+  --board:rgba(255,255,255,.05); --board-line:rgba(255,255,255,.2);
+  --code:rgba(0,0,0,.8);
+
+  /* Inter na frente da pilha padrao do Tailwind */
+  --font-text:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --font-display:var(--font-text);
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+
+  --pad:max(22px,env(safe-area-inset-left,0px));
+  /* raios do Tailwind: 2xl, lg e full */
+  --r-lg:12px; --r-md:10px; --r-pill:980px;
+
+  /* shadow-shape do globals.css da Climora, copiada na integra.
+     As tres primeiras camadas sao sombra preta e nao aparecem sobre preto;
+     quem da volume aqui sao os dois inset brancos: o anel interno de 1px e
+     o fio de luz no topo. */
+  --shadow-shape:0px 8px 8px rgba(0,0,0,.1),0px 4px 4px rgba(0,0,0,.1),0px 2px 2px rgba(0,0,0,.1),0px 0px 0px 1px rgba(0,0,0,.1),inset 0px 0px 0px 1px rgba(255,255,255,.03),inset 0px 1px 0px rgba(255,255,255,.03);
   color-scheme:dark;
 }
 
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 var(--font-body)}
-.wrap{max-width:1040px;margin:0 auto;padding-inline:max(16px,env(safe-area-inset-left,0px));padding-block:28px 56px;display:flex;flex-direction:column;gap:28px}
-h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0;line-height:1.15}
-h1{font-size:clamp(30px,5vw,44px);font-weight:700;letter-spacing:.3px}
-h1 span{color:var(--accent)}
-h2{font-size:24px;font-weight:700}
-h3{font-size:17px;font-weight:700}
-p{margin:0;max-width:68ch}
-.eyebrow{font:500 12px/1 var(--font-mono);text-transform:uppercase;letter-spacing:1.4px;color:var(--muted)}
-.lead{color:var(--muted);font-size:16px}
-header{display:flex;flex-direction:column;gap:10px}
-.spec{display:flex;flex-wrap:wrap;gap:8px 22px;font:13px var(--font-mono);color:var(--muted)}
-.spec b{color:var(--fg);font-weight:500}
-section{display:flex;flex-direction:column;gap:16px}
-.fig{background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow-x:auto}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;color:var(--fg);background:var(--bg);
+  font:17px/1.6 var(--font-text);letter-spacing:-.011em;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+::selection{background:rgba(255,255,255,.25)}
+:focus-visible{outline:2px solid var(--brand);outline-offset:3px;border-radius:6px}
+
+.wrap{max-width:980px;margin:0 auto;padding-inline:var(--pad);
+  padding-block:40px 96px;display:flex;flex-direction:column;gap:32px}
+
+h1,h2,h3{margin:0;text-wrap:balance;font-family:var(--font-display)}
+h1{font-size:clamp(30px,5.2vw,46px);font-weight:900;line-height:1.1;
+  text-transform:uppercase;letter-spacing:.2em}
+h1 span{color:var(--brand)}
+h2{font-size:clamp(26px,3.4vw,34px);font-weight:600;line-height:1.14;letter-spacing:-.019em}
+h3{font-size:21px;font-weight:600;line-height:1.25;letter-spacing:-.014em}
+p{margin:0;max-width:70ch}
+b,strong{font-weight:600}
+
+.eyebrow{font:500 11px/1.3 var(--font-text);text-transform:uppercase;
+  letter-spacing:.1em;color:var(--muted)}
+.lead{color:var(--muted);font-size:19px;line-height:1.5;letter-spacing:-.014em;max-width:62ch}
+header{display:flex;flex-direction:column;gap:14px;padding-block:12px 4px}
+header .eyebrow{color:var(--brand)}
+
+/* faixa de ficha técnica */
+.spec{display:flex;flex-wrap:wrap;gap:10px 28px;font-size:13.5px;color:var(--muted);
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);
+  box-shadow:var(--shadow-shape);padding:16px 20px}
+.spec span{display:inline-flex;gap:7px;align-items:baseline;min-width:0}
+.spec b{color:var(--fg);font-weight:600;letter-spacing:-.008em}
+
+section{display:flex;flex-direction:column;gap:18px}
+section h3{margin-top:12px}
+.cap{font-size:14px;line-height:1.5;color:var(--muted);max-width:74ch}
+
+.fig{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
+  box-shadow:var(--shadow-shape);padding:10px;overflow-x:auto;
+  -webkit-overflow-scrolling:touch}
 .fig svg{display:block;min-width:860px;width:100%;height:auto}
-.cap{font-size:13px;color:var(--muted)}
-code{font:500 12.5px var(--font-mono);background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:1px 4px;color:var(--fg)}
 
-.tabs{display:flex;gap:4px;border-bottom:2px solid var(--fg);margin-top:4px}
-.tab{font:700 17px var(--font-display);letter-spacing:.3px;padding:10px 20px;cursor:pointer;
-  background:transparent;color:var(--muted);border:1px solid var(--line);border-bottom:none;
-  border-radius:6px 6px 0 0;margin-bottom:-1px}
-.tab small{display:block;font:500 10.5px var(--font-mono);letter-spacing:1.2px;text-transform:uppercase;opacity:.75}
-.tab[aria-selected="true"]{background:var(--surface);color:var(--fg);border-color:var(--fg);border-bottom:1px solid var(--surface)}
-.tab[aria-selected="true"] small{color:var(--accent);opacity:1}
-.panel{display:flex;flex-direction:column;gap:38px;padding-top:10px}
+code{font:500 .87em/1.4 var(--font-mono);letter-spacing:0;background:var(--surface-2);
+  border:none;border-radius:6px;padding:.14em .4em;color:var(--fg)}
+
+/* barra de abas, fixa no topo */
+.tabs{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;gap:6px;
+  margin-inline:calc(-1 * var(--pad));padding:10px var(--pad);
+  background:rgba(0,0,0,.8);border-bottom:1px solid var(--line);
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.tab{font:600 15px/1 var(--font-text);letter-spacing:-.012em;padding:11px 18px;cursor:pointer;
+  background:transparent;color:var(--muted);border:1px solid transparent;border-radius:var(--r-pill);
+  -webkit-appearance:none;appearance:none;transition:background-color .2s,color .2s}
+.tab small{display:inline;font:inherit;font-weight:400;opacity:.75}
+.tab small::after{content:" · "}
+.tab:hover{color:var(--fg)}
+.tab[aria-selected="true"]{background:var(--surface-2);color:var(--fg)}
+.tab[aria-selected="true"] small{opacity:1;color:var(--muted)}
+
+.panel{display:flex;flex-direction:column;gap:36px;padding-top:24px}
 .panel[hidden]{display:none}
+.panel > section{border-top:1px solid var(--line);padding-top:36px}
 
-svg text{font-family:var(--font-mono);fill:var(--fg)}
-.t-s{font-size:11px}.t-m{font-size:12.5px}.t-b{font-size:13px;font-weight:500}.t-mut{fill:var(--muted)}
-.box{fill:var(--surface);stroke:var(--fg);stroke-width:1.4}
+svg text{font-family:var(--font-text);fill:var(--fg);letter-spacing:-.005em}
+.t-s{font-size:11.5px}.t-m{font-size:12.5px}.t-b{font-size:13px;font-weight:600}
+.t-mut{fill:var(--muted)}
+.box{fill:var(--board);stroke:var(--board-line);stroke-width:1}
 
-.legend{display:flex;flex-wrap:wrap;gap:8px 18px;font:12.5px var(--font-mono);color:var(--muted)}
-.legend i{display:inline-block;width:22px;height:3px;vertical-align:middle;margin-right:6px;border-radius:2px}
+.legend{display:flex;flex-wrap:wrap;gap:8px}
+.legend span{display:inline-flex;align-items:center;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--r-pill);padding:7px 14px;
+  font-size:13.5px;color:var(--muted)}
+.legend i{flex:none;width:10px;height:10px;border-radius:50%;margin-right:9px}
 
-.tbl{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:6px}
-table{border-collapse:collapse;width:100%;min-width:660px;font-size:14px}
-th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
-th{font:500 11.5px var(--font-mono);text-transform:uppercase;letter-spacing:1px;color:var(--muted);background:var(--bg)}
-tr.grp td{font:700 14px var(--font-display);letter-spacing:.4px;background:var(--bg);padding-top:12px}
-td.pin{font-family:var(--font-mono);font-weight:500;white-space:nowrap}
-td.q{font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
-td small{color:var(--muted)}
-.chip{display:inline-block;font:500 11px/1 var(--font-mono);padding:4px 7px;border-radius:3px;white-space:nowrap;border:1px solid}
+.tbl{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
+  box-shadow:var(--shadow-shape);overflow:hidden;overflow-x:auto;
+  -webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;width:100%;min-width:660px;font-size:15px}
+th,td{text-align:left;padding:14px 18px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:600 10.5px/1.2 var(--font-text);text-transform:uppercase;letter-spacing:.1em;
+  color:var(--muted);background:transparent;white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+tr.grp td{font-size:15px;font-weight:600;letter-spacing:-.012em;color:var(--fg);
+  background:var(--surface-2);padding-block:11px}
+td.pin{font-family:var(--font-mono);font-size:13.5px;letter-spacing:0;white-space:nowrap}
+td.q{font-family:var(--font-mono);font-size:13.5px;letter-spacing:0;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+td small{display:block;font-size:14px;line-height:1.5;color:var(--muted)}
+.chip{display:inline-block;font:600 11.5px/1.35 var(--font-mono);letter-spacing:0;
+  padding:4px 11px;border-radius:var(--r-pill);white-space:nowrap;border:1px solid;background:transparent}
 
-.power{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.power{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
 @media (max-width:860px){.power{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:460px){.power{grid-template-columns:1fr}}
-.pw{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px;display:flex;flex-direction:column;gap:3px}
-.pw .n{font:700 24px var(--font-display);font-variant-numeric:tabular-nums;line-height:1.1}
-.pw .n small{font-size:14px;color:var(--muted);font-weight:500}
-.pw p{font-size:13px;color:var(--muted)}
+.pw{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
+  box-shadow:var(--shadow-shape);padding:20px;
+  display:flex;flex-direction:column;gap:7px}
+.pw .n{font-size:30px;font-weight:600;letter-spacing:-.022em;line-height:1.12;
+  font-variant-numeric:tabular-nums;text-wrap:balance}
+.pw .n small{font-size:16px;color:var(--muted);font-weight:500;letter-spacing:-.01em;white-space:nowrap}
+.pw p{font-size:14px;line-height:1.45;color:var(--muted)}
 
-.notes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.notes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
 @media (max-width:760px){.notes{grid-template-columns:1fr}}
-.note{border-left:3px solid var(--accent);background:var(--surface);padding:12px 14px;border-radius:0 6px 6px 0;min-width:0}
-.note.warn{border-left-color:var(--pwr)}
-.note.ok{border-left-color:var(--in)}
-.note b{display:block;margin-bottom:3px}
-.note p{font-size:14px;color:var(--muted)}
-.note code{background:var(--bg)}
+.note{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
+  box-shadow:var(--shadow-shape);padding:20px 22px;min-width:0}
+.note > b{display:block;font-size:16px;font-weight:600;letter-spacing:-.013em;margin-bottom:8px}
+.note > b::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;
+  margin-right:10px;vertical-align:middle;background:var(--brand)}
+.note.warn > b::before{background:var(--pwr)}
+.note.ok > b::before{background:var(--in)}
+.note p{font-size:15px;line-height:1.55;color:var(--muted);max-width:68ch}
+.note p + p{margin-top:12px}
 
-.codehead{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.codehead .eyebrow{font-size:11px}
-.copy{font:500 11.5px var(--font-mono);color:var(--muted);background:var(--surface);
-  border:1px solid var(--line);border-radius:4px;padding:5px 10px;cursor:pointer}
-.copy:hover{color:var(--fg);border-color:var(--fg)}
-pre{margin:0;background:var(--code);border:1px solid var(--line);border-radius:6px;
-  padding:14px 16px;overflow-x:auto}
-pre code{font:400 12.5px/1.65 var(--font-mono);background:none;border:none;padding:0;white-space:pre;color:var(--fg)}
+.codehead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.codehead .eyebrow{font:500 13px/1.4 var(--font-mono);letter-spacing:0;text-transform:none}
+.copy{font:500 11px/1 var(--font-text);text-transform:uppercase;letter-spacing:.1em;
+  color:rgba(255,255,255,.9);background:transparent;border:1px solid rgba(255,255,255,.15);
+  border-radius:var(--r-pill);padding:10px 18px;cursor:pointer;
+  -webkit-appearance:none;appearance:none;transition:background-color .2s,border-color .2s}
+.copy:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.25)}
+pre{margin:0;background:var(--code);border:1px solid var(--line);border-radius:var(--r-lg);
+  box-shadow:var(--shadow-shape);
+  padding:22px 24px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+pre code{font:400 13px/1.65 var(--font-mono);letter-spacing:0;background:none;border:none;
+  padding:0;white-space:pre;color:var(--fg)}
 .cmt{color:var(--muted)}
 .str{color:var(--in)}
 .num{color:var(--accent)}
 
-.steps{counter-reset:s;display:flex;flex-direction:column;gap:10px;margin:0;padding:0;list-style:none}
-.steps li{counter-increment:s;display:flex;gap:12px;align-items:flex-start;font-size:14.5px}
-.steps li::before{content:counter(s);flex:none;width:22px;height:22px;border-radius:50%;
-  background:var(--accent);color:#fff;font:700 12px/22px var(--font-mono);text-align:center;margin-top:1px}
-.steps li small{display:block;color:var(--muted)}
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:14px;margin:0;padding:0;list-style:none}
+.steps li{counter-increment:s;display:flex;gap:16px;align-items:flex-start;font-size:16px}
+.steps li::before{content:counter(s);flex:none;width:26px;height:26px;border-radius:50%;
+  background:transparent;border:1px solid var(--line);color:var(--fg);
+  font:500 12px/24px var(--font-text);text-align:center;margin-top:2px}
+.steps li b{font-weight:600;letter-spacing:-.012em}
+.steps li small{display:block;margin-top:3px;font-size:15px;line-height:1.5;color:var(--muted)}
+
+@media (max-width:760px){
+  .wrap{padding-block:28px 72px;gap:26px}
+  .panel{gap:30px}
+  .panel > section{padding-top:30px}
+  .tab{padding:10px 14px;font-size:14px}
+  .note,.pw{padding:18px}
+  pre{padding:18px 18px}
+}
 </style>
 </head>
 <body>
@@ -114,6 +212,7 @@ pre code{font:400 12.5px/1.65 var(--font-mono);background:none;border:none;paddi
   <button class="tab" role="tab" id="t1" aria-controls="p1" aria-selected="true"><small>Etapa 1</small>A placa</button>
   <button class="tab" role="tab" id="t2" aria-controls="p2" aria-selected="false"><small>Etapa 2</small>Display TFT</button>
   <button class="tab" role="tab" id="t3" aria-controls="p3" aria-selected="false"><small>Etapa 3</small>Sensor BME280</button>
+  <button class="tab" role="tab" id="t4" aria-controls="p4" aria-selected="false"><small>Etapa 4</small>Ventiladores</button>
 </div>
 
 <!-- =================================================================== -->
@@ -247,6 +346,7 @@ pre code{font:400 12.5px/1.65 var(--font-mono);background:none;border:none;paddi
     <span>módulo <b>GMT024-10 v2.1</b></span>
     <span>tela <b>2,4" · 240×320</b></span>
     <span>interface <b>SPI 4 fios</b></span>
+    <span>header <b>7 pinos</b></span>
     <span>driver <b>ST7789V ✓</b></span>
     <span>biblioteca <b>TFT_eSPI</b></span>
   </div>
@@ -258,7 +358,7 @@ pre code{font:400 12.5px/1.65 var(--font-mono);background:none;border:none;paddi
     barramento VSPI.</p>
     <div class="notes">
       <div class="note warn"><b>Confira o silkscreen antes de ligar</b><p>Não achei a folha de dados do <code>GMT024-10 v2.1</code> em nenhuma fonte. O que achei: na mesma família da GoldenMorning, o <code>GMT024-08</code> é 2,4" 240×320 SPI com <b>ST7789V</b> e 8 pinos. Por isso o projeto começa com esse driver. Os nomes dos pinos abaixo são os usuais; compare um por um com o seu módulo.</p></div>
-      <div class="note ok"><b>Resolvido: <code>VCC</code> nos 5 V</b><p>Na traseira do módulo, junto ao <code>VCC</code>, há um regulador <code>6206-3.3</code> — um XC6206, LDO de 3,3 V que aceita até 6 V na entrada. Com ele, os 5 V do USB são a ligação correta. <b>Só o <code>VCC</code>:</b> o <code>BLK</code> fica nos 3V3, porque a luz de fundo costuma vir por fora do regulador, com resistor dimensionado para 3,3 V.</p></div>
+      <div class="note ok"><b>Resolvido: <code>VCC</code> nos 5 V</b><p>Na traseira do módulo, junto ao <code>VCC</code>, há um regulador <code>6206-3.3</code> — um XC6206, LDO de 3,3 V que aceita até 6 V na entrada. Com ele, os 5 V do USB são a ligação correta. E aqui não há a ressalva de sempre: como este módulo não expõe pino de luz de fundo, não existe um <code>BLK</code> para alimentar à parte. Tudo entra pelo <code>VCC</code>.</p></div>
       <div class="note warn"><b>Por que 3,3 V fazia a tela tremer</b><p>O XC6206 tem <i>dropout</i> de uns 250 mV: precisa da entrada acima de 3,55 V para entregar 3,3 V. Alimentado com 3,3 V ele recebia exatamente o que devia entregar — impossível. Saturava em ~3,0 V e deixava de regular, repassando ao painel qualquer oscilação do trilho. Daí o tremor. Nos 5 V ele ganha folga e isola o display do resto da placa.</p></div>
       <div class="note"><b>Sinal continua em 3,3 V</b><p>Esse regulador alimenta o painel; não é tradutor de nível. <code>SCL</code>, <code>SDA</code>, <code>CS</code>, <code>DC</code> e <code>RES</code> seguem em 3,3 V, que é o que o ESP32 entrega. Nunca 5 V num pino de sinal.</p></div>
     </div>
@@ -266,23 +366,23 @@ pre code{font:400 12.5px/1.65 var(--font-mono);background:none;border:none;paddi
 
   <section>
     <h2>Ligações</h2>
-    <p>Oito fios, dos quais cinco ocupam GPIO. Os pinos foram escolhidos longe
+    <p>Sete fios, dos quais cinco ocupam GPIO. Os pinos foram escolhidos longe
     dos de strapping, dos que emitem pulso no boot e dos seis reservados à
     flash — tudo que a Etapa 1 mapeou.</p>
     <div class="legend" id="legend2"></div>
     <div class="fig">
-      <svg id="ligacao" viewBox="0 0 920 430" role="img"
-           aria-label="Ligação da NodeMCU ESP-32S ao display SPI de 2,4 polegadas, oito fios">
-        <rect x="60" y="66" width="170" height="306" rx="6" class="box"/>
-        <text x="145" y="356" text-anchor="middle" class="t-b" style="font-size:16px">NodeMCU</text>
+      <svg id="ligacao" viewBox="0 0 920 396" role="img"
+           aria-label="Ligação da NodeMCU ESP-32S ao display SPI de 2,4 polegadas, sete fios">
+        <rect x="60" y="66" width="170" height="272" rx="6" class="box"/>
+        <text x="145" y="322" text-anchor="middle" class="t-b" style="font-size:16px">NodeMCU</text>
         <text x="145" y="88" text-anchor="middle" class="t-s t-mut">ESP-32S · 38p</text>
 
-        <rect x="690" y="56" width="180" height="326" rx="6" class="box"/>
-        <rect x="704" y="70" width="152" height="252" rx="3" fill="var(--board)" stroke="var(--board-line)" stroke-width="1.2"/>
+        <rect x="690" y="56" width="180" height="292" rx="6" class="box"/>
+        <rect x="704" y="70" width="152" height="218" rx="3" fill="var(--board)" stroke="var(--board-line)" stroke-width="1.2"/>
         <text x="780" y="186" text-anchor="middle" class="t-s t-mut">2,4"</text>
         <text x="780" y="204" text-anchor="middle" class="t-s t-mut">240 × 320</text>
-        <text x="780" y="348" text-anchor="middle" class="t-b" style="font-size:15px">GMT024-10</text>
-        <text x="780" y="366" text-anchor="middle" class="t-s t-mut">header de 8 pinos</text>
+        <text x="780" y="314" text-anchor="middle" class="t-b" style="font-size:15px">GMT024-10</text>
+        <text x="780" y="332" text-anchor="middle" class="t-s t-mut">header de 7 pinos</text>
 
         <g id="rows2"></g>
       </svg>
@@ -292,18 +392,18 @@ pre code{font:400 12.5px/1.65 var(--font-mono);background:none;border:none;paddi
       <tbody id="wirerows"></tbody>
     </table></div>
     <div class="notes">
-      <div class="note"><b>Outros nomes para os mesmos pinos</b><p>Cada fabricante escreve diferente. <code>SCL</code> também aparece como <code>SCK</code> ou <code>CLK</code>; <code>SDA</code> como <code>SDI</code>, <code>MOSI</code> ou <code>DIN</code>; <code>RES</code> como <code>RST</code> ou <code>RESET</code>; <code>DC</code> como <code>RS</code> ou <code>A0</code>; <code>BLK</code> como <code>LED</code> ou <code>BL</code>.</p></div>
+      <div class="note"><b>Outros nomes para os mesmos pinos</b><p>Cada fabricante escreve diferente. <code>SCL</code> também aparece como <code>SCK</code> ou <code>CLK</code>; <code>SDA</code> como <code>SDI</code>, <code>MOSI</code> ou <code>DIN</code>; <code>RES</code> como <code>RST</code> ou <code>RESET</code>; <code>DC</code> como <code>RS</code> ou <code>A0</code>; A luz de fundo, quando o módulo a expõe, aparece como <code>BLK</code>, <code>LED</code> ou <code>BL</code> — o nosso não a expõe.</p></div>
       <div class="note"><b>Se o módulo tiver 14 pinos</b><p>Então é um ILI9341 com touch resistivo. Os cinco pinos <code>T_</code> são o touch, num chip separado (XPT2046), e podem ficar desligados neste teste. Troque o driver em <code>platformio.ini</code>.</p></div>
       <div class="note"><b>Nada de MISO neste teste</b><p>O display só recebe dados; não precisamos ler nada dele. Por isso <code>TFT_MISO</code> não é definido e o <code>P19</code> fica livre.</p></div>
-      <div class="note"><b>Luz de fundo no 3V3</b><p>O <code>BLK</code> fica aceso direto. Controlar o brilho por PWM puxa corrente demais para um GPIO: pede um transistor, e isso fica para depois.</p></div>
+      <div class="note warn"><b>Não há pino de luz de fundo</b><p>O header deste módulo tem <b>7 pinos</b>: <code>GND</code>, <code>VCC</code>, <code>SCK</code>, <code>SDA</code>, <code>RST</code>, <code>DC</code> e <code>CS</code>. Muitos 2,4" trazem um oitavo, <code>BLK</code> ou <code>LED</code>, para comandar a luz de fundo — <b>este não traz</b>. Ela é alimentada por dentro, a partir do <code>VCC</code>, e fica sempre acesa enquanto o módulo estiver ligado. Não há como variar o brilho nem apagá-la sem mexer na placa do display.</p></div>
     </div>
   </section>
 
   <section>
     <h2>Dá para usar menos pinos</h2>
-    <p>Dos oito fios, três não disputam GPIO: <code>VCC</code>, <code>GND</code> e
-    <code>BLK</code> vão em alimentação e terra. Sobram cinco GPIOs, e dois deles
-    são negociáveis.</p>
+    <p>Dos sete fios, dois não disputam GPIO: <code>VCC</code> e <code>GND</code>
+    vão em alimentação e terra. Sobram cinco GPIOs, e dois deles são
+    negociáveis.</p>
     <div class="tbl"><table>
       <thead><tr><th>Fio</th><th>Dá para economizar?</th><th>O que acontece</th></tr></thead>
       <tbody>
@@ -392,9 +492,9 @@ build_flags =
 <span class="cmt">// a ligacao esta certa, o driver escolhido e o correto, e o ESP32 esta vivo.</span>
 <span class="cmt">//</span>
 <span class="cmt">// Ligacao (configurada em platformio.ini, nao aqui):</span>
-<span class="cmt">//   VCC -&gt; 3V3        SCL/SCK -&gt; GPIO18        RES -&gt; GPIO26</span>
+<span class="cmt">//   VCC -&gt; 5V         SCL/SCK -&gt; GPIO18        RES -&gt; GPIO26</span>
 <span class="cmt">//   GND -&gt; GND        SDA/MOSI -&gt; GPIO23       CS  -&gt; GPIO13</span>
-<span class="cmt">//   BLK -&gt; 3V3                                 DC  -&gt; GPIO27</span>
+<span class="cmt">//                                              DC  -&gt; GPIO27</span>
 <span class="cmt">// ---------------------------------------------------------------------------</span>
 
 #include &lt;Arduino.h&gt;
@@ -517,7 +617,7 @@ void loop() {
   <section>
     <h2>Como testar</h2>
     <ol class="steps">
-      <li><div><b>Com a placa desligada, faça os oito fios.</b><small>Confira duas vezes o <code>VCC</code> e o <code>GND</code>: é a única troca que estraga alguma coisa.</small></div></li>
+      <li><div><b>Com a placa desligada, faça os sete fios.</b><small>Confira duas vezes o <code>VCC</code> e o <code>GND</code>: é a única troca que estraga alguma coisa.</small></div></li>
       <li><div><b>Grave e abra o monitor.</b><small><code>pio run -t upload -t monitor</code> faz as duas coisas numa tacada.</small></div></li>
       <li><div><b>Olhe primeiro o monitor, não a tela.</b><small>O cabeçalho sai mesmo com o display desligado. Se ele aparece e o relógio anda, o ESP32 está bem e o problema é só fiação ou driver.</small></div></li>
       <li><div><b>Depois a tela.</b><small>Esperado: moldura cinza, <b>Hello World</b> em branco, relógio laranja em sete segmentos andando de segundo em segundo.</small></div></li>
@@ -525,7 +625,7 @@ void loop() {
     <div class="tbl"><table>
       <thead><tr><th>Sintoma</th><th>Causa provável</th><th>O que fazer</th></tr></thead>
       <tbody>
-        <tr><td>Tela apagada, monitor rodando</td><td><small>Luz de fundo sem alimentação</small></td><td><small>Confira o <code>BLK</code> no 3V3 e o <code>VCC</code>.</small></td></tr>
+        <tr><td>Tela apagada, monitor rodando</td><td><small>Luz de fundo sem alimentação</small></td><td><small>Confira o <code>VCC</code> e o <code>GND</code>. A luz de fundo vem do <code>VCC</code>, não tem pino próprio.</small></td></tr>
         <tr><td>Tela branca acesa</td><td><small>Driver errado, ou <code>RES</code>/<code>DC</code>/<code>CS</code> trocados</small></td><td><small>Troque para <code>ILI9341_DRIVER</code> e reconfira esses três fios.</small></td></tr>
         <tr><td>Imagem embaralhada ou listrada</td><td><small>SPI rápido demais para o cabo</small></td><td><small>Baixe <code>SPI_FREQUENCY</code> para <code>27000000</code>.</small></td></tr>
         <tr><td>Imagem tremendo, piscando junto</td><td><small>Regulador do módulo sem folga</small></td><td><small>Passe o <code>VCC</code> dos 3V3 para o <code>5V</code>. Foi o que aconteceu aqui.</small></td></tr>
@@ -639,6 +739,10 @@ framework = arduino
 monitor_speed = 115200
 monitor_filters = esp32_exception_decoder, time
 
+<span class="cmt">; Le o .env e vira -DWIFI_SSID / -DWIFI_PASSWORD. As credenciais ficam fora</span>
+<span class="cmt">; do repositorio; o modelo versionado e o .env.exemplo.</span>
+extra_scripts = pre:scripts/carrega_env.py
+
 lib_deps =
   bodmer/TFT_eSPI@^2.5.43
   <span class="cmt">; Puxa sozinha a Adafruit Unified Sensor e a Adafruit BusIO.</span>
@@ -713,16 +817,21 @@ build_flags =
       <button class="copy" data-copy="c-cpp3">copiar</button>
     </div>
     <pre><code id="c-cpp3"><span class="cmt">// ---------------------------------------------------------------------------</span>
-<span class="cmt">// Etapa 3 - display + BME280 (temperatura e umidade)</span>
+<span class="cmt">// Estufa de filamento - painel THERMO</span>
 <span class="cmt">//</span>
-<span class="cmt">// Cada grandeza aparece num anel: a barra enche da esquerda para a direita,</span>
-<span class="cmt">// passando por cima, e o valor fica em negrito no centro. Os mesmos valores</span>
-<span class="cmt">// saem no monitor serial.</span>
+<span class="cmt">// Le o BME280 e mostra temperatura e umidade no display, no layout de</span>
+<span class="cmt">// cartoes. Serve tambem uma pagina na rede local (ver servidor.h).</span>
+<span class="cmt">//</span>
+<span class="cmt">// Os cartoes de ventilador e hotend ja estao no layout, mas ainda nao ha</span>
+<span class="cmt">// hardware atras deles: mostram "--" em cinza ate existirem.</span>
 <span class="cmt">//</span>
 <span class="cmt">// Ligacao do display (os pinos ficam em platformio.ini, nao aqui):</span>
 <span class="cmt">//   VCC -&gt; 5V         SCL/SCK  -&gt; GPIO18        RES -&gt; GPIO26</span>
 <span class="cmt">//   GND -&gt; GND        SDA/MOSI -&gt; GPIO23        CS  -&gt; GPIO13</span>
-<span class="cmt">//   BLK -&gt; 3V3                                  DC  -&gt; GPIO27</span>
+<span class="cmt">//                                               DC  -&gt; GPIO27</span>
+<span class="cmt">//</span>
+<span class="cmt">// Sao sete fios. Este modulo nao tem pino de luz de fundo: ela e alimentada</span>
+<span class="cmt">// por dentro, a partir do VCC, e fica sempre acesa.</span>
 <span class="cmt">//</span>
 <span class="cmt">// Ligacao do BME280 (I2C, pinos declarados abaixo):</span>
 <span class="cmt">//   VIN -&gt; 3V3        SCL -&gt; GPIO22</span>
@@ -736,6 +845,9 @@ build_flags =
 #include &lt;TFT_eSPI.h&gt;
 #include &lt;Wire.h&gt;
 #include &lt;Adafruit_BME280.h&gt;
+
+#include "servidor.h"
+#include "tela.h"
 
 TFT_eSPI tft = TFT_eSPI();
 Adafruit_BME280 bme;
@@ -768,53 +880,9 @@ static const uint8_t ENDERECOS[] = {0x76, 0x77};
 static const uint32_t INTERVALO_LEITURA = 2000;      <span class="cmt">// ms entre leituras</span>
 static const uint32_t INTERVALO_RETENTATIVA = 5000;  <span class="cmt">// ms entre buscas do sensor</span>
 
-<span class="cmt">// Cores escolhidas para nao apagarem no fundo preto.</span>
-static const uint16_t COR_TEMP  = TFT_ORANGE;
-static const uint16_t COR_UMID  = TFT_CYAN;
-static const uint16_t COR_TEXTO = TFT_WHITE;
-static const uint16_t COR_TRILHA = 0x4208;  <span class="cmt">// cinza, o anel vazio por tras</span>
-
-<span class="cmt">// ---------------------------------------------------------------------------</span>
-<span class="cmt">// Geometria dos aneis</span>
-<span class="cmt">//</span>
-<span class="cmt">// Na TFT_eSPI o angulo 0 fica as 6 horas e cresce no sentido horario, ou seja</span>
-<span class="cmt">// passando pelas 9. Comecando em 45 e varrendo 270 graus, a barra sai da base</span>
-<span class="cmt">// esquerda, sobe pela esquerda, cruza o topo e desce pela direita -- de um</span>
-<span class="cmt">// lado ao outro, com a abertura embaixo. Nessa abertura cabe o rotulo.</span>
-<span class="cmt">// ---------------------------------------------------------------------------</span>
-
-static const int16_t ANEL_CX = 120;
-static const int16_t ANEL_CY[2] = {88, 228};
-<span class="cmt">// Raio interno 48 e nao 46: o retangulo que o padding do valor apaga mede</span>
-<span class="cmt">// 78x42 px (medido nos glifos da FreeSansBold18pt), e o canto dele fica a</span>
-<span class="cmt">// 44,3 px do centro. Com 46 sobrava 1,7 px e o texto encostava no anel.</span>
-static const int16_t ANEL_RE = 64;  <span class="cmt">// raio externo</span>
-static const int16_t ANEL_RI = 48;  <span class="cmt">// raio interno</span>
-static const int16_t DESLOC_ROTULO = 52;
-
-static const uint16_t ANG_INICIO = 45;
-static const uint16_t ANG_VARRIDO = 270;
-
-struct Serie {
-  const char *simbolo;
-  bool grau;  <span class="cmt">// desenha o anelzinho do grau antes do simbolo</span>
-  float minimo, maximo;
-  uint16_t cor;
-};
-
-<span class="cmt">// Escalas fixas, nao automaticas. Escala automatica faria qualquer oscilacao</span>
-<span class="cmt">// de decimo de grau encher meio anel e mudaria o significado da mesma barra</span>
-<span class="cmt">// a cada leitura - impossivel comparar uma hora com a outra.</span>
-static const Serie SERIES[2] = {
-  {"C", true,  0.0f,  60.0f, COR_TEMP},
-  {"%", false, 0.0f, 100.0f, COR_UMID},
-};
-
 static bool     sensorOk = false;
 static uint8_t  enderecoSensor = 0;
 static uint32_t ultimaLeitura = 0;
-static int16_t  larguraValor = 0;
-static uint16_t varrido[2] = {0, 0};  <span class="cmt">// graus ja pintados em cada anel</span>
 
 <span class="cmt">// ---------------------------------------------------------------------------</span>
 <span class="cmt">// Sensor</span>
@@ -881,123 +949,269 @@ static bool leSensor(float &amp;temperatura, float &amp;umidade) {
 }
 
 <span class="cmt">// ---------------------------------------------------------------------------</span>
-<span class="cmt">// Aneis</span>
+<span class="cmt">// Desenho</span>
+<span class="cmt">//</span>
+<span class="cmt">// Regra em todo este bloco: escolher a fonte logo antes de cada desenho ou</span>
+<span class="cmt">// medicao. setTextFont() zera a free font e setFreeFont() a repoe, entao</span>
+<span class="cmt">// misturar as duas sem reescolher daria a fonte errada sem erro de compilacao.</span>
 <span class="cmt">// ---------------------------------------------------------------------------</span>
 
-<span class="cmt">// Pinta somente o trecho que mudou: o que cresceu sai na cor da serie, o que</span>
-<span class="cmt">// recuou volta para a cor da trilha. O anel nunca e repintado inteiro, entao</span>
-<span class="cmt">// nao ha o piscar de apagar e redesenhar.</span>
+<span class="cmt">// Desenha texto com espaco extra entre as letras - metade do visual deste</span>
+<span class="cmt">// layout vem dai, e a TFT_eSPI nao tem letter-spacing.</span>
 <span class="cmt">//</span>
-<span class="cmt">// drawArc (e nao drawSmoothArc) de proposito: a propria biblioteca diz que as</span>
-<span class="cmt">// pontas sem anti-aliasing existem para permitir mudanca dinamica de</span>
-<span class="cmt">// comprimento com juncao limpa entre segmentos. Com drawSmoothArc as pontas</span>
-<span class="cmt">// suavizadas deixariam costura visivel a cada emenda.</span>
-static void desenhaAnel(uint8_t i, float valor) {
-  const Serie &amp;s = SERIES[i];
+<span class="cmt">// Resolve de passagem dois caracteres que as fontes nao tem, por cobrirem so</span>
+<span class="cmt">// 0x20 a 0x7E: "·" vira um ponto desenhado e "Ø" vira um O cortado.</span>
+<span class="cmt">//</span>
+<span class="cmt">// Com medir=true nao desenha nada, so devolve a largura - e assim que se</span>
+<span class="cmt">// centraliza ou alinha a direita.</span>
+static int16_t textoEspacado(int16_t x, int16_t y, const char *texto,
+                             int16_t espaco, uint16_t cor, uint16_t fundo,
+                             bool medir = false) {
+  const int16_t inicio = x;
+  const int16_t altura = tft.fontHeight();
+  bool primeiro = true;
 
-  float fracao = (valor - s.minimo) / (s.maximo - s.minimo);
-  fracao = constrain(fracao, 0.0f, 1.0f);
-  const uint16_t alvo = (uint16_t)(ANG_VARRIDO * fracao + 0.5f);
-
-  if (alvo &gt; varrido[i]) {
-    tft.drawArc(ANEL_CX, ANEL_CY[i], ANEL_RE, ANEL_RI,
-                ANG_INICIO + varrido[i], ANG_INICIO + alvo, s.cor, TFT_BLACK);
-  } else if (alvo &lt; varrido[i]) {
-    tft.drawArc(ANEL_CX, ANEL_CY[i], ANEL_RE, ANEL_RI,
-                ANG_INICIO + alvo, ANG_INICIO + varrido[i], COR_TRILHA,
-                TFT_BLACK);
+  if (!medir) {
+    tft.setTextDatum(ML_DATUM);
+    tft.setTextColor(cor, fundo);
   }
 
-  varrido[i] = alvo;
-}
+  for (const uint8_t *p = (const uint8_t *)texto; *p; p++) {
+    if (!primeiro) x += espaco;
+    primeiro = false;
 
-static void esvaziaAnel(uint8_t i) {
-  if (varrido[i] == 0) return;
-  tft.drawArc(ANEL_CX, ANEL_CY[i], ANEL_RE, ANEL_RI,
-              ANG_INICIO, ANG_INICIO + varrido[i], COR_TRILHA, TFT_BLACK);
-  varrido[i] = 0;
-}
+    if (p[0] == 0xC2 &amp;&amp; p[1] == 0xB7) {  <span class="cmt">// "·"</span>
+      if (!medir) tft.fillCircle(x + 2, y, 2, cor);
+      x += 5;
+      p++;
+      continue;
+    }
 
-<span class="cmt">// ---------------------------------------------------------------------------</span>
-<span class="cmt">// Tela</span>
-<span class="cmt">// ---------------------------------------------------------------------------</span>
+    char letra[2] = {0, 0};
+    bool cortado = false;
 
-<span class="cmt">// Simbolo da grandeza, na abertura de baixo do anel.</span>
-<span class="cmt">//</span>
-<span class="cmt">// O grau nao existe nas fontes da TFT_eSPI: elas cobrem 0x20 a 0x7E e o</span>
-<span class="cmt">// caractere ficaria fora. Desenhado como dois circulos concentricos, que e</span>
-<span class="cmt">// exatamente o que o simbolo e - e assim ele acompanha a cor da serie.</span>
-static void desenhaSimbolo(uint8_t i) {
-  const Serie &amp;s = SERIES[i];
-  const int16_t y = ANEL_CY[i] + DESLOC_ROTULO;
+    if (p[0] == 0xC3 &amp;&amp; p[1] == 0x98) {  <span class="cmt">// "Ø"</span>
+      letra[0] = 'O';
+      cortado = true;
+      p++;
+    } else {
+      letra[0] = (char)p[0];
+    }
 
-  tft.setTextColor(s.cor, TFT_BLACK);
-
-  if (!s.grau) {
-    tft.setTextDatum(MC_DATUM);
-    tft.drawString(s.simbolo, ANEL_CX, y, 4);
-    return;
+    const int16_t largura = tft.textWidth(letra);
+    if (!medir) {
+      tft.drawString(letra, x, y);
+      if (cortado) {
+        tft.drawLine(x + largura - 1, y - altura / 2 + 2,
+                     x + 1, y + altura / 2 - 2, cor);
+      }
+    }
+    x += largura;
   }
 
-  const int16_t largura = tft.textWidth(s.simbolo, 4);
-  const int16_t x0 = ANEL_CX - (largura + 9) / 2;
+  return x - inicio;
+}
 
-  tft.drawCircle(x0 + 3, y - 7, 3, s.cor);
-  tft.drawCircle(x0 + 3, y - 7, 2, s.cor);
+static void textoCentrado(int16_t cx, int16_t y, const char *texto,
+                          int16_t espaco, uint16_t cor, uint16_t fundo) {
+  const int16_t largura = textoEspacado(0, 0, texto, espaco, cor, fundo, true);
+  textoEspacado(cx - largura / 2, y, texto, espaco, cor, fundo);
+}
 
+<span class="cmt">// A faixa reservada ao valor dentro do cartao. Apagar so ela, e nao o cartao</span>
+<span class="cmt">// inteiro, e o que evita piscar a cada leitura.</span>
+<span class="cmt">// No cartao grande tudo desce 2 px, inclusive o topo da faixa: com o mesmo</span>
+<span class="cmt">// topo dos outros, ela apagaria a ultima linha de pixels do rotulo a cada</span>
+<span class="cmt">// leitura.</span>
+static int16_t yRotulo(const Cartao &amp;c)     { return c.y + (c.grande ? 18 : 17); }
+static int16_t faixaTopo(const Cartao &amp;c)   { return c.y + (c.grande ? 26 : 24); }
+static int16_t faixaAltura(const Cartao &amp;c) { return c.grande ? 46 : 44; }
+static int16_t yValor(const Cartao &amp;c)      { return c.y + (c.grande ? 50 : 48); }
+static int16_t yDetalhe(const Cartao &amp;c)    { return c.y + (c.grande ? 80 : 76); }
+
+<span class="cmt">// Unidade ao lado do numero, em fonte pequena e cinza. O grau nao existe na</span>
+<span class="cmt">// fonte, entao vai desenhado como dois circulos - que e o que ele e.</span>
+static int16_t desenhaUnidade(int16_t x, int16_t y, const Cartao &amp;c,
+                              bool medir) {
+  int16_t largura = 0;
+
+  if (c.grau) {
+    if (!medir) {
+      tft.drawCircle(x + 3, y - 5, 3, MUDO);
+      tft.drawCircle(x + 3, y - 5, 2, MUDO);
+    }
+    x += 9;
+    largura += 9;
+  }
+
+  tft.setTextFont(2);
+  largura += tft.textWidth(c.unidade);
+  if (!medir) {
+    tft.setTextDatum(ML_DATUM);
+    tft.setTextColor(MUDO, CARTAO);
+    tft.drawString(c.unidade, x, y);
+  }
+  return largura;
+}
+
+<span class="cmt">// Numero grande mais a unidade, centrados juntos no cartao. Sem dado, "--"</span>
+<span class="cmt">// em cinza: o cartao existe no layout mas nao inventa leitura.</span>
+static void desenhaValor(uint8_t i, const char *valor, bool temDado) {
+  const Cartao &amp;c = CARTOES[i];
+  const int16_t y = yValor(c);
+
+  tft.fillRect(c.x + 3, faixaTopo(c), c.l - 6, faixaAltura(c), CARTAO);
+
+  if (c.grande) tft.setFreeFont(&amp;FreeSansBold24pt7b);
+  else          tft.setFreeFont(&amp;FreeSansBold18pt7b);
+
+  const int16_t larguraValor = tft.textWidth(valor);
+  const int16_t larguraUnidade = temDado ? desenhaUnidade(0, 0, c, true) : 0;
+  const int16_t total = larguraValor + (temDado ? 3 + larguraUnidade : 0);
+
+  int16_t x = c.x + c.l / 2 - total / 2;
+
+  if (c.grande) tft.setFreeFont(&amp;FreeSansBold24pt7b);
+  else          tft.setFreeFont(&amp;FreeSansBold18pt7b);
   tft.setTextDatum(ML_DATUM);
-  tft.drawString(s.simbolo, x0 + 9, y, 4);
+  tft.setTextColor(temDado ? c.cor : MUDO, CARTAO);
+  tft.drawString(valor, x, y);
+
+  if (temDado) desenhaUnidade(x + larguraValor + 3, y, c, false);
 }
 
-<span class="cmt">// Desenha o que nao muda: a trilha dos dois aneis e os simbolos.</span>
+static void desenhaCartao(uint8_t i) {
+  const Cartao &amp;c = CARTOES[i];
+
+  tft.fillRoundRect(c.x, c.y, c.l, c.a, 9, CARTAO);
+  tft.drawRoundRect(c.x, c.y, c.l, c.a, 9, BORDA);
+
+  tft.setTextFont(1);
+  textoCentrado(c.x + c.l / 2, yRotulo(c), c.rotulo, 2, MUDO, CARTAO);
+  textoCentrado(c.x + c.l / 2, yDetalhe(c), c.detalhe, 1, MUDO, CARTAO);
+}
+
+<span class="cmt">// Rodape: so o endereco, centrado. Como ele vira "sem Wi-Fi" ou</span>
+<span class="cmt">// "conectando..." quando a rede cai, o estado da conexao continua visivel</span>
+<span class="cmt">// aqui sem precisar de um indicador separado.</span>
+static void desenhaRodape(const char *endereco) {
+  tft.fillRect(MARGEM, Y_RODAPE - 7, LARGURA - 2 * MARGEM, 14, FUNDO);
+
+  tft.setTextFont(1);
+  textoCentrado(LARGURA / 2, Y_RODAPE, endereco, 1, RODAPE, FUNDO);
+}
+
 static void telaFixa() {
-  tft.fillScreen(TFT_BLACK);
-
-  for (uint8_t i = 0; i &lt; 2; i++) {
-    tft.drawArc(ANEL_CX, ANEL_CY[i], ANEL_RE, ANEL_RI,
-                ANG_INICIO, ANG_INICIO + ANG_VARRIDO, COR_TRILHA, TFT_BLACK);
-    varrido[i] = 0;
-    desenhaSimbolo(i);
-  }
+  tft.fillScreen(FUNDO);
+  for (uint8_t i = 0; i &lt; N_CARTOES; i++) desenhaCartao(i);
 }
+
+static bool telaLigada = true;
 
 <span class="cmt">// Uma casa decimal, menos a partir de 100: assim o texto nunca passa de</span>
-<span class="cmt">// quatro digitos e cabe com folga dentro do anel.</span>
+<span class="cmt">// quatro digitos e cabe na largura do cartao sem reduzir a fonte.</span>
 static void formataValor(float valor, char *buf, size_t n) {
   if (valor &gt;= 100.0f || valor &lt;= -100.0f) snprintf(buf, n, "%.0f", valor);
   else                                     snprintf(buf, n, "%.1f", valor);
 }
 
-<span class="cmt">// Numero em negrito no centro do anel. O padding apaga a area inteira: um</span>
-<span class="cmt">// valor que encurta de 100 para 99.9 nao deixa digito orfao atras.</span>
-static void desenhaValor(uint8_t i, const char *texto, uint16_t cor) {
-  tft.setFreeFont(&amp;FreeSansBold18pt7b);
-  tft.setTextDatum(MC_DATUM);
-  tft.setTextColor(cor, TFT_BLACK);
-  tft.setTextPadding(larguraValor);
-  tft.drawString(texto, ANEL_CX, ANEL_CY[i]);
-  tft.setTextPadding(0);
+<span class="cmt">// A ultima leitura fica guardada: com a tela desligada nada e desenhado, e</span>
+<span class="cmt">// ao religar os cartoes voltam com o valor atual em vez de "--".</span>
+static float ultimaTemp = 0, ultimaUmid = 0;
+static bool temLeitura = false;
+
+static void pintaMedidas() {
+  char buf[16];
+
+  if (!temLeitura) {
+    desenhaValor(CARTAO_TEMP, "--", false);
+    desenhaValor(CARTAO_UMID, "--", false);
+    return;
+  }
+
+  formataValor(ultimaTemp, buf, sizeof buf);
+  desenhaValor(CARTAO_TEMP, buf, true);
+
+  formataValor(ultimaUmid, buf, sizeof buf);
+  desenhaValor(CARTAO_UMID, buf, true);
 }
 
 static void mostraLeitura(float temperatura, float umidade) {
-  const float valores[2] = {temperatura, umidade};
-  char buf[16];
+  ultimaTemp = temperatura;
+  ultimaUmid = umidade;
+  temLeitura = true;
 
-  for (uint8_t i = 0; i &lt; 2; i++) {
-    formataValor(valores[i], buf, sizeof buf);
-    desenhaValor(i, buf, COR_TEXTO);
-    desenhaAnel(i, valores[i]);
-  }
+  if (telaLigada) pintaMedidas();
 
   Serial.printf("temperatura %.2f C | umidade %.2f %%\n", temperatura, umidade);
 }
 
 static void mostraSemSensor() {
-  for (uint8_t i = 0; i &lt; 2; i++) {
-    desenhaValor(i, "--", TFT_RED);
-    esvaziaAnel(i);
-  }
+  temLeitura = false;
+  if (telaLigada) pintaMedidas();
 }
+
+<span class="cmt">// Ventiladores e hotend ainda nao existem no circuito. Ficam em "--" ate</span>
+<span class="cmt">// existirem, em vez de mostrar numero inventado.</span>
+static void mostraSemHardware() {
+  desenhaValor(CARTAO_FAN1, "--", false);
+  desenhaValor(CARTAO_FAN2, "--", false);
+  desenhaValor(CARTAO_HOTEND, "--", false);
+}
+
+<span class="cmt">// --- liga/desliga, chamado pelo servidor -----------------------------------</span>
+<span class="cmt">//</span>
+<span class="cmt">// Apagar e pintar de preto, nao mandar DISPOFF ao controlador. DISPOFF nao</span>
+<span class="cmt">// significa "tela apagada": pelo datasheet do ST7789 ele desliga a saida da</span>
+<span class="cmt">// memoria de video e insere uma "pagina em branco" no lugar - e neste painel</span>
+<span class="cmt">// essa pagina e literalmente branca. Pintar de preto da o resultado que se</span>
+<span class="cmt">// espera, ao custo de redesenhar tudo ao religar.</span>
+<span class="cmt">//</span>
+<span class="cmt">// A luz de fundo continua acesa de qualquer forma. Este modulo (GMT024-10,</span>
+<span class="cmt">// header de 7 pinos) nao expoe pino de backlight: ela vem por dentro, do</span>
+<span class="cmt">// proprio VCC. Nao ha o que comandar sem mexer na placa do display.</span>
+void telaDefineLigada(bool ligada) {
+  if (ligada == telaLigada) return;
+  telaLigada = ligada;
+
+  if (ligada) {
+    telaFixa();
+    desenhaRodape(servidorEndereco());
+    mostraSemHardware();
+    pintaMedidas();
+  } else {
+    tft.fillScreen(TFT_BLACK);
+  }
+
+  Serial.printf("Tela             : %s\n", ligada ? "ligada" : "apagada");
+}
+
+bool telaEstaLigada() { return telaLigada; }
+
+<span class="cmt">// --- brilho, um tiro no escuro que vale dar ---------------------------------</span>
+<span class="cmt">//</span>
+<span class="cmt">// O ST7789 tem registradores de brilho: WRCTRLD (0x53) liga o controle e</span>
+<span class="cmt">// WRDISBV (0x51) recebe 0 a 255. So que eles comandam os pads de backlight do</span>
+<span class="cmt">// PROPRIO controlador, e na maioria dos modulos baratos esses pads nao vao a</span>
+<span class="cmt">// lugar nenhum - os LEDs sao alimentados direto pelo VCC, por fora dele.</span>
+<span class="cmt">//</span>
+<span class="cmt">// Como este modulo nem pino de backlight expoe, a chance e pequena. Mas o</span>
+<span class="cmt">// teste custa quatro bytes no SPI e nao pode danificar nada: se mudar o</span>
+<span class="cmt">// brilho, ganhamos de graca; se nao mudar, a questao fica encerrada.</span>
+static uint8_t brilhoAtual = 255;
+
+void telaDefineBrilho(uint8_t valor) {
+  brilhoAtual = valor;
+
+  tft.writecommand(0x53);  <span class="cmt">// WRCTRLD</span>
+  tft.writedata(0x2C);     <span class="cmt">// BCTRL + DD + BL ligados</span>
+  tft.writecommand(0x51);  <span class="cmt">// WRDISBV</span>
+  tft.writedata(valor);
+
+  Serial.printf("Brilho           : %u enviado ao painel\n", valor);
+}
+
+uint8_t telaBrilho() { return brilhoAtual; }
 
 <span class="cmt">// ---------------------------------------------------------------------------</span>
 
@@ -1007,7 +1221,7 @@ void setup() {
 
   Serial.println();
   Serial.println("==================================================");
-  Serial.println("  Etapa 3 - display + BME280");
+  Serial.println("  Estufa de filamento - painel THERMO");
   Serial.println("==================================================");
   Serial.printf("Driver da tela   : %s\n", DRIVER);
   Serial.printf("Inversao de cor  : %s\n", INVERSAO);
@@ -1015,6 +1229,8 @@ void setup() {
   Serial.printf("Pinos da tela    : SCK=%d MOSI=%d CS=%d DC=%d RST=%d\n",
                 TFT_SCLK, TFT_MOSI, TFT_CS, TFT_DC, TFT_RST);
   Serial.printf("Pinos do sensor  : SDA=%d SCL=%d\n", PIN_SDA, PIN_SCL);
+
+  servidorInicia();  <span class="cmt">// nao bloqueia: a rede sobe em paralelo ao resto</span>
 
   Wire.begin(PIN_SDA, PIN_SCL);
   varreI2C();
@@ -1038,20 +1254,30 @@ void setup() {
   tft.setRotation(0);
 
   Serial.printf("Resolucao em uso : %d x %d\n", tft.width(), tft.height());
-
-  tft.setFreeFont(&amp;FreeSansBold18pt7b);
-  larguraValor = tft.textWidth("-99.9");  <span class="cmt">// o texto mais largo possivel</span>
-  Serial.printf("Aneis            : raio %d-%d, %d graus; valor com %d px "
-                "dentro de %d px livres\n",
-                ANEL_RI, ANEL_RE, ANG_VARRIDO, larguraValor, ANEL_RI * 2);
   Serial.println("--------------------------------------------------");
 
   telaFixa();
-  if (!sensorOk) mostraSemSensor();
+  desenhaRodape(servidorEndereco());
+  mostraSemHardware();
+  pintaMedidas();  <span class="cmt">// "--" ate a primeira leitura chegar</span>
 }
 
 void loop() {
   const uint32_t agora = millis();
+
+  servidorAtende();
+
+  <span class="cmt">// O endereco muda sozinho: conectando -&gt; IP, ou IP -&gt; reconectando. A tela</span>
+  <span class="cmt">// acompanha comparando o texto, para nao repintar a linha a cada volta.</span>
+  static char enderecoNaTela[40] = "";
+
+  const char *endereco = servidorEndereco();
+  if (strcmp(endereco, enderecoNaTela) != 0) {
+    snprintf(enderecoNaTela, sizeof enderecoNaTela, "%s", endereco);
+    <span class="cmt">// Com a tela apagada so guarda: ao religar, o rodape e redesenhado com</span>
+    <span class="cmt">// o endereco de entao.</span>
+    if (telaEstaLigada()) desenhaRodape(endereco);
+  }
 
   if (sensorOk) {
     if (agora - ultimaLeitura &gt;= INTERVALO_LEITURA) {
@@ -1060,12 +1286,14 @@ void loop() {
       float temperatura, umidade;
       if (leSensor(temperatura, umidade)) {
         mostraLeitura(temperatura, umidade);
+        servidorRegistra(temperatura, umidade);
       } else {
         <span class="cmt">// Parou de responder: cabo solto, provavelmente. Volta a procurar</span>
         <span class="cmt">// em vez de repetir o ultimo valor, que pareceria um sensor travado.</span>
         Serial.println("Sensor parou de responder - voltando a procurar");
         sensorOk = false;
         mostraSemSensor();
+        servidorSemSensor();
       }
     }
   } else if (agora - ultimaLeitura &gt;= INTERVALO_RETENTATIVA) {
@@ -1111,6 +1339,334 @@ void loop() {
   </section>
 
   <p class="cap">Compilado para este chip: 339 KB de flash (26% do slot) e 22 KB de RAM, sem buffer extra de <i>heap</i>. Falta a ligação física para fechar a etapa.</p>
+
+</div>
+
+
+<!-- =================================================================== -->
+<!-- ETAPA 4                                                             -->
+<!-- =================================================================== -->
+<div class="panel" id="p4" role="tabpanel" aria-labelledby="t4" hidden>
+
+  <div class="spec">
+    <span>ventiladores <b>2 × 120 mm · 12 V</b></span>
+    <span>fonte <b>12 V 5 A</b></span>
+    <span>canais <b>2 independentes</b></span>
+    <span>chave <b>2 × 2N2222</b></span>
+    <span>controle <b>PWM 25 kHz</b></span>
+  </div>
+
+  <section>
+    <h2>Dois ventiladores iguais, dois canais separados</h2>
+    <p>Os dois são de 12 V e 120 mm, os dois são chaveados, e cada um tem a sua
+    própria velocidade. O cooler Intel de três fios saiu do projeto.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Ventilador</th><th>Onde fica</th><th>Trabalho</th><th>Faixa de uso</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="pin">Cooler 1</td>
+          <td><small>Perto do hotend, embaixo</small></td>
+          <td><small>Tira o calor do bloco e espalha pelo gabinete</small></td>
+          <td><small>Liga e desliga acompanhando o aquecedor</small></td>
+        </tr>
+        <tr>
+          <td class="pin">Cooler 2</td>
+          <td><small>Mais acima, na lateral</small></td>
+          <td><small>Sopra para cima e põe o ar para circular</small></td>
+          <td><small><b>70–80%</b> em regime normal, <b>100%</b> quando o hotend vai a plena carga</small></td>
+        </tr>
+      </tbody>
+    </table></div>
+    <div class="notes">
+      <div class="note ok"><b>Nenhum ventilador em 3,3 V — nunca houve</b><p>Na versão anterior desta página havia um <code>10 kΩ → 3V3</code>, e dá para ler como se um ventilador estivesse sendo alimentado ali. Não estava: aquilo era um <i>pull-up</i> no <b>fio de rotação</b> do cooler Intel, um fio de sinal que só informava se a hélice estava girando. Corrente de ventilador nunca passou por ali. Como o Intel saiu do projeto, o fio e o resistor saíram junto.</p></div>
+      <div class="note"><b>Duas velocidades exigem duas chaves</b><p>Um transistor é um interruptor: ele tem um estado só. Para o cooler 1 estar em 40% enquanto o cooler 2 está em 80%, são necessários <b>dois canais</b> — cada um com sua chave, seu resistor e seu diodo. Ligar os dois ventiladores na mesma chave faria os dois andarem sempre juntos, na mesma velocidade.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>O 2N2222 dá conta de 120 mm</h2>
+    <p>O IRLB8721 está reservado ao cartucho aquecedor, que puxa 4 A e não
+    aceita substituto. Para os ventiladores fica o 2N2222 — e em 120 mm ele
+    é a peça certa, não um improviso. A faixa típica cai dentro do que ele
+    satura.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Tamanho</th><th>Corrente típica a 12 V</th><th>2N2222 dá conta?</th></tr></thead>
+      <tbody>
+        <tr><td class="pin">80 mm</td><td class="q">100 – 200 mA</td><td><span class="chip" style="color:var(--in);border-color:var(--in)">sim</span></td></tr>
+        <tr><td class="pin">120 mm</td><td class="q">150 – 350 mA</td><td><span class="chip" style="color:var(--in);border-color:var(--in)">é o nosso caso</span></td></tr>
+        <tr><td class="pin">150 mm</td><td class="q">300 – 700 mA</td><td><span class="chip" style="color:var(--pwr);border-color:var(--pwr)">pediria MOSFET</span></td></tr>
+      </tbody>
+    </table></div>
+    <p>Com <b>150 Ω</b> na base o pino entrega 17,3 mA, e isso satura o
+    transistor com folga <b>até 347 mA</b> — que é justamente o topo da faixa
+    de um 120 mm. Medir continua valendo, porque existe 120 mm de alta vazão
+    que foge da faixa.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Corrente medida</th><th>Satura?</th><th>Calor a 100%</th><th>Veredito</th></tr></thead>
+      <tbody>
+        <tr><td class="q">200 mA</td><td>sim</td><td class="q">60 mW</td><td><span class="chip" style="color:var(--in);border-color:var(--in)">tranquilo</span></td></tr>
+        <tr><td class="q">300 mA</td><td>sim</td><td class="q">90 mW</td><td><span class="chip" style="color:var(--in);border-color:var(--in)">tranquilo</span></td></tr>
+        <tr><td class="q">350 mA</td><td>no limite</td><td class="q">140 mW</td><td><span class="chip" style="color:var(--accent);border-color:var(--accent)">morno, aceitável</span></td></tr>
+        <tr><td class="q">500 mA</td><td>não</td><td class="q">600 mW</td><td><span class="chip" style="color:var(--pwr);border-color:var(--pwr)">só com PWM limitado</span></td></tr>
+        <tr><td class="q">700 mA</td><td>não</td><td class="q">1400 mW</td><td><span class="chip" style="color:var(--pwr);border-color:var(--pwr)">queima</span></td></tr>
+      </tbody>
+    </table></div>
+    <div class="notes">
+      <div class="note warn"><b>Girar mais devagar ajuda, mas não resolve tudo</b><p>Essa foi a sua ideia, e ela está meio certa. O PWM corta o <b>aquecimento médio</b>: a 60% o transistor dissipa 60% do calor. Mas ele <b>não reduz o pico de corrente</b> — durante cada pulso ligado passa a corrente inteira do ventilador, e é esse pico que decide se o transistor satura ou não.</p><p>Traduzindo: a 500 mA, limitar o PWM a 60% derruba o calor de 600 mW para 360 mW e salva o transistor do forno. Mas ele continua sem saturar, ainda esquenta, e o ventilador recebe uns 10,8 V em vez de 12 V. Funciona; não é bonito.</p></div>
+      <div class="note warn"><b>Meça antes de ligar, não depois</b><p>Ligue um ventilador direto nos 12 V com o multímetro em série, escala de corrente contínua. O número que aparecer decide tudo. Dois minutos agora valem mais do que qualquer tabela minha.</p></div>
+      <div class="note"><b>Se o seu for de alta vazão e passar de 350 mA</b><p>Não precisa desistir: limite o PWM no firmware a 60% e acompanhe a temperatura do transistor na primeira hora. Se der para encostar o dedo e segurar, está dentro. Se queimar o dedo, a saída é um MOSFET de nível lógico — são baratos e qualquer <code>IRLZ44N</code> ou <code>AO3400</code> serve. O IRLB8721 do aquecedor continua intocado.</p></div>
+      <div class="note"><b>São dois transistores</b><p>Um por canal. Dois 2N2222, dois resistores de base e dois diodos — os canais são independentes e nenhuma peça é compartilhada.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Ligações</h2>
+    <p>Os dois canais são idênticos. A chave nunca fica no lado positivo: os
+    12 V vão direto da fonte ao ventilador, e a chave abre e fecha o caminho
+    de volta para o terra.</p>
+    <div class="legend">
+      <span><i style="background:var(--pwr)"></i>+12 V</span>
+      <span><i style="background:var(--sig)"></i>Terra comum</span>
+      <span><i style="background:var(--gpio)"></i>Sinal do ESP32</span>
+      <span><i style="background:var(--v33)"></i>Diodo de roda livre</span>
+    </div>
+    <div class="fig">
+      <svg viewBox="0 0 940 640" role="img" aria-label="Esquema: fonte de 12 V, dois ventiladores de 120 mm, dois transistores 2N2222 e dois diodos de roda livre">
+        <line x1="200" y1="50" x2="925" y2="50" stroke="var(--pwr)" stroke-width="2.5"/>
+        <line x1="115" y1="590" x2="900" y2="590" stroke="var(--sig)" stroke-width="2.5"/>
+        <text x="206" y="40" class="t-b" fill="var(--pwr)">+12 V</text>
+        <text x="121" y="610" class="t-b" fill="var(--sig)">GND comum</text>
+
+        <rect x="40" y="20" width="150" height="90" rx="6" class="box"/>
+        <text x="115" y="58" text-anchor="middle" class="t-b">Fonte 12 V</text>
+        <text x="115" y="78" text-anchor="middle" class="t-s t-mut">5 A · externa</text>
+        <line x1="115" y1="110" x2="115" y2="590" stroke="var(--sig)" stroke-width="2.5"/>
+
+        <rect x="40" y="230" width="160" height="200" rx="6" class="box"/>
+        <text x="120" y="272" text-anchor="middle" class="t-b">NodeMCU</text>
+        <text x="120" y="292" text-anchor="middle" class="t-s t-mut">ESP-32S</text>
+        <text x="190" y="315" text-anchor="end" class="t-s t-mut">P32</text>
+        <text x="190" y="378" text-anchor="end" class="t-s t-mut">P33</text>
+        <text x="190" y="418" text-anchor="end" class="t-s t-mut">GND</text>
+        <polyline points="200,410 250,410 250,590" fill="none" stroke="var(--sig)" stroke-width="2.5"/>
+
+        <polyline points="200,310 270,310 270,160 300,160" fill="none" stroke="var(--gpio)" stroke-width="2.5"/>
+        <rect x="300" y="152" width="60" height="18" rx="3" fill="var(--board)" stroke="var(--gpio)" stroke-width="1.5"/>
+        <text x="330" y="145" text-anchor="middle" class="t-s" fill="var(--gpio)">150 Ω</text>
+        <line x1="360" y1="160" x2="420" y2="160" stroke="var(--gpio)" stroke-width="2.5"/>
+        <rect x="420" y="120" width="120" height="80" rx="6" class="box"/>
+        <text x="480" y="155" text-anchor="middle" class="t-b">2N2222</text>
+        <text x="480" y="174" text-anchor="middle" class="t-s t-mut">canal 1</text>
+        <text x="414" y="146" text-anchor="end" class="t-s t-mut">B</text>
+        <text x="548" y="146" class="t-s t-mut">C</text>
+        <text x="505" y="218" class="t-s t-mut">E</text>
+        <line x1="540" y1="160" x2="700" y2="160" stroke="var(--sig)" stroke-width="2.5"/>
+        <polyline points="500,200 500,260 670,260 670,590" fill="none" stroke="var(--sig)" stroke-width="2.5"/>
+        <rect x="700" y="100" width="180" height="120" rx="6" class="box"/>
+        <text x="790" y="142" text-anchor="middle" class="t-b">Cooler 1</text>
+        <text x="790" y="162" text-anchor="middle" class="t-s t-mut">120 mm · 12 V</text>
+        <text x="790" y="182" text-anchor="middle" class="t-s t-mut">junto ao hotend</text>
+        <text x="790" y="204" text-anchor="middle" class="t-s" fill="var(--gpio)">PWM</text>
+        <polyline points="880,130 900,130 900,50" fill="none" stroke="var(--pwr)" stroke-width="2.5"/>
+        <line x1="620" y1="50" x2="620" y2="160" stroke="var(--v33)" stroke-width="2.5"/>
+        <polygon points="610,120 630,120 620,98" fill="var(--v33)"/>
+        <line x1="608" y1="96" x2="632" y2="96" stroke="var(--v33)" stroke-width="3"/>
+
+        <polyline points="200,375 265,375 265,400 300,400" fill="none" stroke="var(--gpio)" stroke-width="2.5"/>
+        <rect x="300" y="392" width="60" height="18" rx="3" fill="var(--board)" stroke="var(--gpio)" stroke-width="1.5"/>
+        <text x="330" y="385" text-anchor="middle" class="t-s" fill="var(--gpio)">150 Ω</text>
+        <line x1="360" y1="400" x2="420" y2="400" stroke="var(--gpio)" stroke-width="2.5"/>
+        <rect x="420" y="360" width="120" height="80" rx="6" class="box"/>
+        <text x="480" y="395" text-anchor="middle" class="t-b">2N2222</text>
+        <text x="480" y="414" text-anchor="middle" class="t-s t-mut">canal 2</text>
+        <text x="414" y="386" text-anchor="end" class="t-s t-mut">B</text>
+        <text x="548" y="386" class="t-s t-mut">C</text>
+        <text x="505" y="458" class="t-s t-mut">E</text>
+        <line x1="540" y1="400" x2="700" y2="400" stroke="var(--sig)" stroke-width="2.5"/>
+        <line x1="480" y1="440" x2="480" y2="590" stroke="var(--sig)" stroke-width="2.5"/>
+        <rect x="700" y="340" width="180" height="120" rx="6" class="box"/>
+        <text x="790" y="382" text-anchor="middle" class="t-b">Cooler 2</text>
+        <text x="790" y="402" text-anchor="middle" class="t-s t-mut">120 mm · 12 V</text>
+        <text x="790" y="422" text-anchor="middle" class="t-s t-mut">lateral, soprando para cima</text>
+        <text x="790" y="444" text-anchor="middle" class="t-s" fill="var(--gpio)">PWM</text>
+        <polyline points="880,370 920,370 920,50" fill="none" stroke="var(--pwr)" stroke-width="2.5"/>
+        <line x1="580" y1="50" x2="580" y2="400" stroke="var(--v33)" stroke-width="2.5"/>
+        <polygon points="570,340 590,340 580,318" fill="var(--v33)"/>
+        <line x1="568" y1="316" x2="592" y2="316" stroke="var(--v33)" stroke-width="3"/>
+        <text x="562" y="340" text-anchor="end" class="t-s" fill="var(--v33)">1N4007</text>
+        <text x="562" y="358" text-anchor="end" class="t-s t-mut">listra para cima</text>
+
+        <circle cx="900" cy="50" r="4.5" fill="var(--pwr)"/>
+        <circle cx="920" cy="50" r="4.5" fill="var(--pwr)"/>
+        <circle cx="620" cy="50" r="4.5" fill="var(--pwr)"/>
+        <circle cx="580" cy="50" r="4.5" fill="var(--pwr)"/>
+        <circle cx="620" cy="160" r="4.5" fill="var(--sig)"/>
+        <circle cx="580" cy="400" r="4.5" fill="var(--sig)"/>
+        <circle cx="115" cy="590" r="4.5" fill="var(--sig)"/>
+        <circle cx="250" cy="590" r="4.5" fill="var(--sig)"/>
+        <circle cx="480" cy="590" r="4.5" fill="var(--sig)"/>
+        <circle cx="670" cy="590" r="4.5" fill="var(--sig)"/>
+      </svg>
+    </div>
+    <div class="tbl"><table>
+      <thead><tr><th>De</th><th>Para</th><th>Observação</th></tr></thead>
+      <tbody>
+        <tr class="grp"><td colspan="3">Cada ventilador · os dois são iguais</td></tr>
+        <tr><td class="pin">vermelho</td><td class="pin">+12 V</td><td><small>Direto da fonte. A chave nunca entra no lado positivo.</small></td></tr>
+        <tr><td class="pin">preto</td><td class="pin">coletor (C)</td><td><small>É o lado que o transistor liga e desliga do terra.</small></td></tr>
+        <tr class="grp"><td colspan="3">Cada 2N2222 · face chata para você, pernas para baixo: E · B · C</td></tr>
+        <tr><td class="pin">base (B)</td><td class="pin">P32 ou P33 por 150 Ω</td><td><small><b>Nunca direto no pino.</b> Sem o resistor, a junção base-emissor é um curto e leva o GPIO junto.</small></td></tr>
+        <tr><td class="pin">base (B)</td><td class="pin">GND por 10 kΩ</td><td><small>Segura a base em zero enquanto o ESP32 inicia e os pinos ficam soltos.</small></td></tr>
+        <tr><td class="pin">coletor (C)</td><td class="pin">preto do ventilador</td><td><small>O ânodo do diodo também chega aqui.</small></td></tr>
+        <tr><td class="pin">emissor (E)</td><td class="pin">GND</td><td><small>O mesmo terra da fonte e do ESP32.</small></td></tr>
+        <tr class="grp"><td colspan="3">Um 1N4007 por ventilador</td></tr>
+        <tr><td class="pin">listra (cátodo)</td><td class="pin">+12 V</td><td><small>A listra prateada aponta para o positivo.</small></td></tr>
+        <tr><td class="pin">outro lado (ânodo)</td><td class="pin">coletor (C)</td><td><small>Invertido, fica em curto e queima na hora.</small></td></tr>
+      </tbody>
+    </table></div>
+    <div class="notes">
+      <div class="note warn"><b>Terra comum: sem isso nada funciona</b><p>O GND da fonte de 12 V <b>precisa</b> estar ligado ao GND do ESP32. O transistor compara a tensão da base com a do emissor; sem terra comum não existe referência, e o ventilador liga sozinho ou não liga nunca. É o erro mais comum dessa montagem.</p></div>
+      <div class="note warn"><b>O resistor de 10 kΩ na base não é detalhe</b><p>Enquanto o ESP32 inicia, os pinos ficam em alta impedância por alguns milissegundos — soltos. Base solta capta ruído e o ventilador pode dar arrancos. O resistor de 10 kΩ entre base e GND segura a base em zero durante o boot, garantindo que os ventiladores só girem quando o firmware mandar.</p></div>
+      <div class="note warn"><b>Um diodo por ventilador</b><p>Ventilador é motor, motor é bobina. Quando a chave corta, o campo colapsa e a bobina devolve um pico invertido muito acima de 12 V. Sem o diodo esse pico cai em cima da chave e a mata. Os dois canais precisam do seu.</p></div>
+      <div class="note"><b>Cruzamento não é ligação</b><p>No desenho, fios ligados têm um <b>ponto cheio</b>. Onde as linhas apenas se cruzam — o diodo do canal 2 passando pelo fio do canal 1, e o terra do canal 1 passando pelo fio do canal 2 — não há contato.</p></div>
+    </div>
+  </section>
+
+
+  <section>
+    <h2>Qual perna é qual</h2>
+    <p>O 2N2222 vem num corpo <b>TO-92</b>: uma face é chata e a outra é
+    arredondada, igual a meia bolacha. É essa face chata que diz a ordem das
+    pernas — e trocar duas delas é o erro mais rápido de cometer.</p>
+    <div class="fig">
+      <svg viewBox="0 0 940 400" role="img" aria-label="Encapsulamento TO-92 do 2N2222 visto de frente e de cima, com as pernas identificadas">
+        <text x="190" y="46" text-anchor="middle" class="t-b">DE FRENTE</text>
+        <text x="190" y="66" text-anchor="middle" class="t-s t-mut">face chata virada para você</text>
+        <path d="M130,250 L130,150 A60,60 0 0 1 250,150 L250,250 Z" fill="var(--board)" stroke="var(--fg)" stroke-width="2"/>
+        <text x="190" y="205" text-anchor="middle" class="t-s t-mut">2N2222</text>
+        <text x="190" y="228" text-anchor="middle" class="t-s t-mut">face chata</text>
+        <line x1="155" y1="250" x2="155" y2="320" stroke="var(--in)" stroke-width="3"/>
+        <line x1="190" y1="250" x2="190" y2="320" stroke="var(--gpio)" stroke-width="3"/>
+        <line x1="225" y1="250" x2="225" y2="320" stroke="var(--pwr)" stroke-width="3"/>
+        <text x="155" y="345" text-anchor="middle" class="t-b" fill="var(--in)">E</text>
+        <text x="190" y="345" text-anchor="middle" class="t-b" fill="var(--gpio)">B</text>
+        <text x="225" y="345" text-anchor="middle" class="t-b" fill="var(--pwr)">C</text>
+        <text x="155" y="368" text-anchor="middle" class="t-s t-mut">GND</text>
+        <text x="190" y="368" text-anchor="middle" class="t-s t-mut">150 Ω</text>
+        <text x="225" y="368" text-anchor="middle" class="t-s t-mut">fan</text>
+
+        <line x1="340" y1="90" x2="340" y2="340" stroke="var(--line)" stroke-width="1"/>
+
+        <text x="520" y="46" text-anchor="middle" class="t-b">DE CIMA</text>
+        <text x="520" y="66" text-anchor="middle" class="t-s t-mut">é aqui que se vê a barriga</text>
+        <path d="M430,250 A90,90 0 0 1 610,250 Z" fill="var(--board)" stroke="var(--fg)" stroke-width="2"/>
+        <line x1="430" y1="250" x2="610" y2="250" stroke="var(--accent)" stroke-width="4"/>
+        <text x="520" y="278" text-anchor="middle" class="t-s" fill="var(--accent)">lado CHATO</text>
+        <text x="520" y="150" text-anchor="middle" class="t-s t-mut">lado curvo</text>
+        <circle cx="475" cy="220" r="9" fill="var(--in)"/>
+        <circle cx="520" cy="220" r="9" fill="var(--gpio)"/>
+        <circle cx="565" cy="220" r="9" fill="var(--pwr)"/>
+        <text x="475" y="205" text-anchor="middle" class="t-s t-mut">E</text>
+        <text x="520" y="205" text-anchor="middle" class="t-s t-mut">B</text>
+        <text x="565" y="205" text-anchor="middle" class="t-s t-mut">C</text>
+        <text x="520" y="320" text-anchor="middle" class="t-s t-mut">com o lado chato apontado para você,</text>
+        <text x="520" y="338" text-anchor="middle" class="t-s t-mut">a ordem é E · B · C da esquerda para a direita</text>
+
+        <line x1="700" y1="90" x2="700" y2="340" stroke="var(--line)" stroke-width="1"/>
+
+        <text x="820" y="46" text-anchor="middle" class="t-b" fill="var(--pwr)">CUIDADO</text>
+        <text x="820" y="66" text-anchor="middle" class="t-s t-mut">BC547 é igualzinho por fora</text>
+        <path d="M760,250 L760,150 A60,60 0 0 1 880,150 L880,250 Z" fill="var(--board)" stroke="var(--pwr)" stroke-width="2"/>
+        <text x="820" y="205" text-anchor="middle" class="t-s t-mut">BC547</text>
+        <text x="820" y="228" text-anchor="middle" class="t-s t-mut">face chata</text>
+        <line x1="785" y1="250" x2="785" y2="320" stroke="var(--pwr)" stroke-width="3"/>
+        <line x1="820" y1="250" x2="820" y2="320" stroke="var(--gpio)" stroke-width="3"/>
+        <line x1="855" y1="250" x2="855" y2="320" stroke="var(--in)" stroke-width="3"/>
+        <text x="785" y="345" text-anchor="middle" class="t-b" fill="var(--pwr)">C</text>
+        <text x="820" y="345" text-anchor="middle" class="t-b" fill="var(--gpio)">B</text>
+        <text x="855" y="345" text-anchor="middle" class="t-b" fill="var(--in)">E</text>
+        <text x="820" y="368" text-anchor="middle" class="t-s" fill="var(--pwr)">ordem invertida!</text>
+      </svg>
+    </div>
+    <div class="notes">
+      <div class="note warn"><b>BC547 e 2N2222 são espelhados</b><p>Os dois são TO-92 e, por fora, idênticos. Mas com a face chata virada para você o <b>2N2222 é E·B·C</b> e o <b>BC547 é C·B·E</b> — a ordem inverte. Se você tiver os dois na gaveta, leia o que está escrito no corpo antes de soldar. Montar um no lugar do outro põe os 12 V do ventilador direto no pino do ESP32.</p></div>
+      <div class="note"><b>Confirme com o multímetro, leva trinta segundos</b><p>Ponha o multímetro na escala de <b>diodo</b>. A <b>base</b> é a perna que, com a ponta vermelha nela, marca uns 0,7 V contra <b>as duas outras</b>. Depois, com a vermelha na base: a perna que marcar o valor <i>ligeiramente maior</i> é o <b>emissor</b>; a outra é o coletor. Funciona para qualquer NPN, de qualquer fabricante, e não depende de desenho nenhum.</p></div>
+      <div class="note"><b>No esquema acima</b><p><span style="color:var(--in)">E</span> vai no terra, <span style="color:var(--gpio)">B</span> vai ao pino do ESP32 pelos 150 Ω, e <span style="color:var(--pwr)">C</span> recebe o fio preto do ventilador. O vermelho do ventilador nunca encosta no transistor.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>A estratégia de controle</h2>
+    <p>É o que você descreveu, escrito como regra. O cooler 2 nunca para
+    enquanto houver calor: ele é quem distribui.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Estado do aquecedor</th><th>Cooler 1 · hotend</th><th>Cooler 2 · circulação</th></tr></thead>
+      <tbody>
+        <tr><td><small>Desligado</small></td><td class="q">0%</td><td class="q">0%</td></tr>
+        <tr><td><small>Aquecendo em carga parcial</small></td><td class="q">acompanha a carga</td><td class="q">70 – 80%</td></tr>
+        <tr><td><small>Plena carga</small></td><td class="q">100%</td><td class="q">100%</td></tr>
+        <tr><td><small>Acabou de desligar</small></td><td class="q">100% por alguns minutos</td><td class="q">70%</td></tr>
+      </tbody>
+    </table></div>
+    <div class="notes">
+      <div class="note warn"><b>O cooler 1 desliga depois do aquecedor, não junto</b><p>O bloco do hotend continua quente depois que o cartucho desliga. Cortar o ventilador no mesmo instante deixa todo esse calor parado em cima do bloco. Deixe o cooler 1 girando mais alguns minutos, até o metal baixar — é o mesmo princípio do ventilador que continua rodando depois de desligar o carro.</p></div>
+      <div class="note"><b>Nada disso existe ainda no firmware</b><p>Esta tabela é a regra a implementar. Hoje os cartões <b>FAN 01</b> e <b>FAN 02</b> mostram <code>--</code> no display e no painel web. O controle entra junto com o aquecedor, porque depende de saber em que carga o PID está trabalhando.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>PWM: 25 kHz, e nada abaixo de 30%</h2>
+    <div class="tbl"><table>
+      <thead><tr><th>Frequência</th><th>O que acontece</th></tr></thead>
+      <tbody>
+        <tr><td class="q">100 Hz – 1 kHz</td><td><small>Dentro da faixa audível: o ventilador <b>chia</b>, porque a bobina vibra no ritmo do chaveamento. Numa estufa ligada por horas, incomoda.</small></td></tr>
+        <tr><td class="q">25 kHz</td><td><small>Acima do que o ouvido capta. É a frequência que a indústria padronizou para ventilador.</small></td></tr>
+      </tbody>
+    </table></div>
+    <div class="note warn"><b>Abaixo de uns 30% ele não parte</b><p>Ventilador sem escovas tem eletrônica própria por dentro, que precisa de tensão mínima para iniciar. Com PWM muito baixo ele fica zumbindo parado, sem girar — e parado ele esquenta. Na prática: ou está desligado, ou acima de uns 30%. Em 120 mm o efeito é mais forte, porque a hélice é pesada e custa mais a vencer a inércia. Descubra o mínimo real de cada um medindo, e trave esse valor no firmware.</p></div>
+  </section>
+
+  <section>
+    <h2>Quais pinos</h2>
+    <div class="tbl"><table>
+      <thead><tr><th>Função</th><th>Pino</th><th>Por quê</th></tr></thead>
+      <tbody>
+        <tr><td><small>PWM do cooler 1</small></td><td class="pin">P32</td><td><small>Livre, com saída, fora dos pinos de strapping e longe da flash.</small></td></tr>
+        <tr><td><small>PWM do cooler 2</small></td><td class="pin">P33</td><td><small>Mesma coisa. Os dois aceitam o LEDC, que é o gerador de PWM por hardware do ESP32.</small></td></tr>
+      </tbody>
+    </table></div>
+    <div class="note"><b>O mapa até aqui</b><p>Display em <code>P18</code>, <code>P23</code>, <code>P13</code>, <code>P27</code>, <code>P26</code>. Sensor em <code>P21</code> e <code>P22</code>. Ventiladores em <code>P32</code> e <code>P33</code>. Nove dos 32 GPIOs ocupados — sobra de sobra para o aquecedor.</p></div>
+  </section>
+
+  <section>
+    <h2>Como testar</h2>
+    <ol class="steps">
+      <li><div><b>Meça a corrente de um ventilador antes de tudo.</b><small>Direto nos 12 V, multímetro em série. Abaixo de 350 mA o 2N2222 trabalha saturado; acima, limite o PWM e vigie a temperatura.</small></div></li>
+      <li><div><b>Monte um canal só, com a fonte desligada.</b><small>Confira a listra do diodo e a ordem G·D·S antes de energizar. Não monte os dois de uma vez: se algo estiver errado, você queima duas peças em vez de uma.</small></div></li>
+      <li><div><b>Terra comum antes de energizar.</b><small>GND da fonte ligado ao GND do ESP32, com tudo desligado. Só depois ligue os dois.</small></div></li>
+      <li><div><b>Teste sem PWM.</b><small>Pino em nível alto fixo: gira a 100%. Em nível baixo: para por completo. Se não parar, a base não está sendo puxada para o terra.</small></div></li>
+      <li><div><b>Agora o PWM, descendo.</b><small>Comece em 100% e vá baixando de 10 em 10. Anote onde ele para de girar — esse número vira o mínimo do firmware, e provavelmente não é igual nos dois.</small></div></li>
+      <li><div><b>Encoste na chave depois de um minuto a 100%.</b><small>Morno é aceitável. Quente de não dar para segurar o dedo significa que ele não saturou — veja a tabela de corrente.</small></div></li>
+      <li><div><b>Só então monte o segundo canal.</b><small>Repetindo os mesmos passos.</small></div></li>
+    </ol>
+    <div class="tbl"><table>
+      <thead><tr><th>Sintoma</th><th>Causa provável</th><th>O que fazer</th></tr></thead>
+      <tbody>
+        <tr><td>Gira sozinho ao ligar a placa</td><td><small>Falta o 10 kΩ da base ao GND</small></td><td><small>Acrescente. A base fica solta durante o boot.</small></td></tr>
+        <tr><td>Gira sozinho, sem comando nenhum</td><td><small>Terra não é comum</small></td><td><small>Ligue o GND da fonte ao GND do ESP32.</small></td></tr>
+        <tr><td>Nunca gira</td><td><small>E e C trocados</small></td><td><small>Face chata para você, pernas para baixo: E · B · C.</small></td></tr>
+        <tr><td>Gira devagar mesmo a 100%</td><td><small>Chave fora da saturação</small></td><td><small>Não saturou: resistor de base menor, ou corrente alta demais para ele.</small></td></tr>
+        <tr><td>Chia em velocidade média</td><td><small>PWM na faixa audível</small></td><td><small>Suba para 25 kHz.</small></td></tr>
+        <tr><td>Zumbe mas não gira</td><td><small>PWM abaixo do mínimo de partida</small></td><td><small>Suba o piso. Em 120 mm costuma ficar acima de 30%.</small></td></tr>
+        <tr><td>Chave queimou</td><td><small>Diodo ausente ou invertido</small></td><td><small>Listra no +12 V. Troque a chave junto.</small></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <p class="cap">Revisão desta etapa: os dois ventiladores passaram a ser 120 mm
+  de 12 V, ambos chaveados e independentes. O cooler Intel de três fios e o
+  <i>pull-up</i> de rotação saíram. Com 120 mm o 2N2222 trabalha saturado e
+  sobra folga; o IRLB8721 fica reservado ao aquecedor.</p>
 
 </div>
 
@@ -1386,8 +1942,6 @@ const FIOS = [
     obs:"Diz ao painel se o byte é instrução ou pixel. Livre no boot." },
   { esp:"P26",  tela:"RES / RST", tipo:"ctrl", sinal:"reset do painel",
     obs:"Pode ir para o EN em vez de um GPIO, e aí o display reinicia junto com a placa." },
-  { esp:"3V3",  tela:"BLK / LED", tipo:"pwr",  sinal:"luz de fundo",
-    obs:"Fixa em 3,3 V. Sem a luz, a imagem existe mas não se vê nada." },
 ];
 
 const alvo2 = document.getElementById("rows2");
