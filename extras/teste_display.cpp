@@ -8,7 +8,7 @@
 // Ligacao (configurada em platformio.ini, nao aqui):
 //   VCC       -> 5V          SCK       -> GPIO18      RESET -> GPIO26
 //   GND       -> GND         SDI(MOSI) -> GPIO23      CS    -> GPIO13
-//   LED       -> 3V3                                  DC/RS -> GPIO27
+//   LED       -> GPIO17 (luz de fundo, acesa em nivel alto)  DC/RS -> GPIO27
 //
 // SDO(MISO) e os cinco T_ do touch ficam sem ligar neste teste.
 // ---------------------------------------------------------------------------
@@ -28,6 +28,7 @@ static const char *DRIVER = "nao definido";
 #endif
 
 static const uint8_t LED_PLACA = 2;  // LED azul de bordo, prova de vida extra
+static const uint8_t PIN_LUZ = 17;   // pino LED do display: sem nivel alto, tela escura
 
 static uint32_t segundoAnterior = UINT32_MAX;
 static int16_t  larguraRelogio = 0;   // para apagar o valor antigo sem piscar
@@ -82,6 +83,8 @@ static void desenhaRelogio(const char *texto) {
 void setup() {
   Serial.begin(115200);
   pinMode(LED_PLACA, OUTPUT);
+  pinMode(PIN_LUZ, OUTPUT);
+  digitalWrite(PIN_LUZ, HIGH);  // luz de fundo no maximo, sem PWM neste teste
   delay(400);  // da tempo ao monitor serial de abrir
 
   Serial.println();

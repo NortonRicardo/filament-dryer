@@ -16,8 +16,17 @@
 // ESP32, aquecedor e ventiladores comecam todos desligados, e so o painel web
 // liga. Tudo o mais (alvo, faixas, tempos) e salvo.
 //
-// Nesta etapa o aquecedor e o LED azul de bordo (GPIO2), nao o cartucho. A
-// logica e a mesma; so a carga e inofensiva.
+// O aquecedor e o cartucho de 12 V / 50 W, chaveado por um IRLB8721 no
+// GPIO25. A potencia sai de um PID (0 a 100%) e chega ao cartucho por PWM
+// lento: janela de 2 s, ligado a fracao da janela que o PID pedir. Mesmo
+// principio do Dry Fila Box do Marlon Nardi, que usa PID com analogWrite a
+// ~490 Hz; aqui a janela e longa porque o aquecedor tem inercia de sobra e
+// assim o MOSFET e a fonte chaveiam centenas de vezes menos.
+//
+// Protecoes no firmware: teto absoluto de 60 C, sensor sem leitura, e PID
+// pedindo potencia maxima por semSubirMin minutos sem a temperatura subir
+// 1 C. A unica protecao de hardware e o fusivel de 7,5 A na linha do
+// cartucho (o termostato KSD301 do projeto original e recomendado).
 // ---------------------------------------------------------------------------
 
 #pragma once
@@ -30,21 +39,23 @@ static const float TETO_ABSOLUTO = 60.0f;
 
 enum EstadoAquecedor {
   EST_BLOQUEADO,   // ninguem ligou - estado de nascimento ("DESLIGADO")
-  EST_OCIOSO,      // autorizado, mas a temperatura ja esta no alvo
-  EST_AQUECENDO,   // aquecedor ligado
+  EST_OCIOSO,      // autorizado, PID pedindo 0% (acima do alvo)
+  EST_AQUECENDO,   // autorizado, PID pedindo mais que 0%
   EST_FALHA,       // protecao disparou; a autorizacao caiu junto
 };
 
 struct Config {
   float    alvo;        // graus que se quer atingir
-  float    histerese;   // quanto pode cair abaixo do alvo antes de religar
+  float    kp;          // PID: % de potencia por grau de erro
+  float    ki;          // PID: % por grau por segundo de erro acumulado
+  float    kd;          // PID: % por grau/s de subida (freia a chegada)
   bool     fan2Ligado;  // circulacao ligada; nasce falso a cada boot, nao e salvo
   uint8_t  fan2Max;     // % da circulacao com o aquecedor ligado
   uint8_t  fan2Min;     // % da circulacao com o aquecedor desligado
   uint8_t  pwmMin;      // % abaixo do qual o ventilador nao parte
   uint16_t pos1;        // s que o ventilador do hotend fica a 100% apos desligar
   uint16_t rampa1;      // s que ele leva descendo de 100% ate parar
-  uint16_t semSubirMin; // min no maximo sem a temperatura subir; 0 desliga
+  uint16_t semSubirMin; // min ligado sem a temperatura subir 1 C; 5 a 60
 };
 
 void controleInicia();
@@ -58,7 +69,8 @@ void controleTick();
 EstadoAquecedor controleEstado();
 const char *controleEstadoTexto();
 const char *controleMotivo();      // vazio quando nao ha falha
-bool controleAquecedorLigado();
+bool controleAquecedorLigado();    // PID pedindo mais que 0%
+uint8_t controlePotencia();        // 0 a 100 %, o que o PID pediu
 bool controleAutorizado();
 uint8_t controleVelocidade(uint8_t ventilador);  // 0 ou 1 -> 0 a 100 %
 

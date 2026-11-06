@@ -112,11 +112,14 @@ static void rotaDados() {
   json += "\",\"motivo\":\""; json += controleMotivo();
   json += "\",\"autorizado\":"; json += controleAutorizado() ? "true" : "false";
   json += ",\"aquecendo\":";    json += controleAquecedorLigado() ? "true" : "false";
+  json += ",\"pot\":";          json += controlePotencia();
   json += ",\"fan1\":";         json += controleVelocidade(0);
   json += ",\"fan2\":";         json += controleVelocidade(1);
   json += ",\"teto\":";         json += String(TETO_ABSOLUTO, 0);
   json += ",\"cfg\":{\"alvo\":";  json += String(c.alvo, 1);
-  json += ",\"hist\":";         json += String(c.histerese, 1);
+  json += ",\"kp\":";           json += String(c.kp, 2);
+  json += ",\"ki\":";           json += String(c.ki, 3);
+  json += ",\"kd\":";           json += String(c.kd, 1);
   json += ",\"f2on\":";         json += c.fan2Ligado ? "true" : "false";
   json += ",\"f2max\":";        json += c.fan2Max;
   json += ",\"f2min\":";        json += c.fan2Min;
@@ -224,7 +227,9 @@ static bool lePct(const char *nome, uint8_t &destino) {
 static void rotaConfig() {
   Config c = controleConfig();
   if (servidor.hasArg("alvo"))  c.alvo        = servidor.arg("alvo").toFloat();
-  if (servidor.hasArg("hist"))  c.histerese   = servidor.arg("hist").toFloat();
+  if (servidor.hasArg("kp"))    c.kp          = servidor.arg("kp").toFloat();
+  if (servidor.hasArg("ki"))    c.ki          = servidor.arg("ki").toFloat();
+  if (servidor.hasArg("kd"))    c.kd          = servidor.arg("kd").toFloat();
   if (servidor.hasArg("f2on"))  c.fan2Ligado  = servidor.arg("f2on") == "1";
   if (!lePct("f2max", c.fan2Max) || !lePct("f2min", c.fan2Min) ||
       !lePct("pwmin", c.pwmMin)) {

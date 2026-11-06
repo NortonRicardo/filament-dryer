@@ -153,6 +153,9 @@ input[type=range]::-moz-range-thumb{width:28px;height:28px;border:0;border-radiu
 @keyframes sobe{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
 .topo{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
 .topo b{margin:0}
+.sub{color:var(--mudo);font:800 9.5px var(--mono);letter-spacing:1.4px;
+  text-transform:uppercase;margin:16px 0 10px;padding-top:14px;
+  border-top:1px solid var(--borda)}
 .topo button{min-width:0;padding:8px 14px}
 
 footer{margin-top:16px;text-align:center;color:var(--rodape);
@@ -231,8 +234,12 @@ footer.ruim{color:var(--laranja)}
     <button data-autoriza disabled>—</button>
   </div>
   <div class="linha"><label>Alvo · °C<small>PETG: 55, o máximo da caixa</small></label><input data-k="alvo" inputmode="decimal"></div>
-  <div class="linha"><label>Histerese · °C<small>quanto cai abaixo do alvo antes de religar</small></label><input data-k="hist" inputmode="decimal"></div>
-  <small class="nota">Nunca liga sozinho: começa desligado a cada boot. Salva ao sair do campo.</small>
+  <div class="linha"><label>Proteção · min<small>corta se ficar no máximo esse tempo sem subir 1 °C (5 a 60)</small></label><input data-k="subir" inputmode="numeric"></div>
+  <div class="sub">Ajuste do PID</div>
+  <div class="linha"><label>Kp · %/°C<small>potência por grau abaixo do alvo</small></label><input data-k="kp" inputmode="decimal"></div>
+  <div class="linha"><label>Ki · %/°C·s<small>corrige o erro que sobra com o tempo</small></label><input data-k="ki" inputmode="decimal"></div>
+  <div class="linha"><label>Kd · %·s/°C<small>freia a chegada ao alvo</small></label><input data-k="kd" inputmode="decimal"></div>
+  <small class="nota">Nunca liga sozinho: começa desligado a cada boot. Passou do alvo e oscila: baixe o Ki. Demora a chegar ou fica abaixo: suba o Kp. Salva ao sair do campo.</small>
 </div></div>
 
 <div class="fundo" id="m-f2" hidden><div class="modal">
@@ -421,7 +428,8 @@ function ciclo() {
 
     // Aquecedor: o estado e o botao aparecem no cartao e no modal.
     var classeAq = d.estado === "PROTECAO" ? "falha" : d.aquecendo ? "quente" : "";
-    todos("[data-estado-aq]").forEach(function (s) { marca(s, d.estado, classeAq); });
+    var textoAq = d.estado === "AQUECENDO" ? "AQUECENDO · " + d.pot + " %" : d.estado;
+    todos("[data-estado-aq]").forEach(function (s) { marca(s, textoAq, classeAq); });
     todos("[data-autoriza]").forEach(function (b) { chave(b, d.autorizado, "DESLIGAR", "LIGAR"); });
     $("motivo").textContent = d.motivo || "";
     if (d.estado === "PROTECAO") selo($("seloAq"), false, "PROTEÇÃO");

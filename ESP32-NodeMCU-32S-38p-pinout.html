@@ -349,7 +349,7 @@ pre code{font:400 13px/1.65 var(--font-mono);letter-spacing:0;background:none;bo
     <span>interface <b>SPI 4 fios</b></span>
     <span>header <b>14 pinos</b></span>
     <span>driver <b>ST7796S ✓</b></span>
-    <span>touch <b>XPT2046 · resistivo</b></span>
+    <span>touch <b>sem o chip U2 · desligado</b></span>
     <span>biblioteca <b>TFT_eSPI</b></span>
   </div>
 
@@ -359,7 +359,7 @@ pre code{font:400 13px/1.65 var(--font-mono);letter-spacing:0;background:none;bo
     vermelho de 4 polegadas, 320×480 pixels, com touch resistivo e slot de
     cartão SD. Continua sendo SPI de 4 fios no VSPI, então os GPIOs do display
     anterior servem sem mudança: só os fios trocam de lugar no header.</p>
-    <p>A imagem foi ligada primeiro. A ligação do touch vem logo depois, em <b>Ligações do touch</b>. O cartão SD fica de fora.</p>
+    <p>Só a imagem funciona: o touch deste módulo não tem como funcionar, porque ele veio <b>sem o chip XPT2046</b> no lugar do <code>U2</code>. A ligação do touch fica documentada em <b>Ligações do touch</b> para quando chegar um módulo com o chip. O cartão SD fica de fora.</p>
     <div class="notes">
       <div class="note ok"><b>Driver: ST7796S, confirmado no hardware</b><p>A serigrafia diz só <code>4.0'' TFT SPI 480X320 V1.1</code>. Esse módulo, com 14 pinos e slot SD, é o da família MSP4020/MSP4021, que usa o <b>ST7796S</b>. O firmware começou com ele, e a tela acendeu com o painel desenhado. Se um dia aparecer um módulo parecido que acenda branco ou embaralhado com a fiação certa, a outra opção para 480×320 SPI é o <b>ILI9488</b>: troque a linha em <code>platformio.ini</code>.</p></div>
       <div class="note ok"><b><code>VCC</code> nos 5 V, de novo</b><p>Na traseira, ao lado do <code>VCC</code>, há um regulador de 3 pernas (<code>U1</code>). É a mesma situação do display anterior: alimentado com 3,3 V, o regulador fica sem folga e a imagem pode tremer. Nos 5 V ele regula direito.</p></div>
@@ -399,7 +399,7 @@ pre code{font:400 13px/1.65 var(--font-mono);letter-spacing:0;background:none;bo
     </table></div>
     <div class="notes">
       <div class="note"><b>Os nomes deste header</b><p>A serigrafia usa <code>SDI(MOSI)</code> para os dados que entram no display, <code>SDO(MISO)</code> para os que saem, <code>DC/RS</code> para comando ou dado e <code>RESET</code> para o reset. Comparando com o display anterior: <code>SDA</code> virou <code>SDI(MOSI)</code>, <code>SCL</code> virou <code>SCK</code> e <code>RES</code> virou <code>RESET</code>.</p></div>
-      <div class="note"><b>Luz de fundo no 3V3</b><p>Este módulo tem pino de luz de fundo, o <code>LED</code>, e o anterior não tinha. Ela acende em nível alto. Ligada direto no <code>3V3</code>, fica sempre acesa, que basta para esta etapa. Num GPIO daria para apagar a tela e variar o brilho por PWM. Fica para depois.</p></div>
+      <div class="note ok"><b>Luz de fundo no P17, com brilho</b><p>Este módulo tem pino de luz de fundo, o <code>LED</code>, e o anterior não tinha. Pela documentação do módulo ele comanda a luz e acende em nível alto. Ligado no <code>P17</code>, o firmware manda PWM de 5 kHz nele: o brilho vai de 5 a 100% pela página, fica salvo, e o botão de apagar a imagem apaga também a luz. No boot a luz só acende depois que o painel está desenhado.</p></div>
       <div class="note"><b>Nada de MISO nesta etapa</b><p>O display só recebe dados, então <code>SDO(MISO)</code> fica sem ligar e <code>TFT_MISO</code> não é definido. O <code>P19</code> fica reservado: é o MISO do VSPI, e o touch vai precisar dele.</p></div>
       <div class="note"><b>O touch tem ligação própria</b><p>Os cinco pinos <code>T_</code> vão para um chip separado, o <b>XPT2046</b>. A ligação dele está logo abaixo, em <b>Ligações do touch</b>.</p></div>
       <div class="note"><b>O cartão SD tem pinos próprios</b><p>O slot usa os quatro furos <code>SD_CS</code>, <code>SD_MOSI</code>, <code>SD_MISO</code> e <code>SD_SCK</code> na borda de baixo da placa, separados do header de 14 pinos. Não são usados aqui.</p></div>
@@ -408,6 +408,7 @@ pre code{font:400 13px/1.65 var(--font-mono);letter-spacing:0;background:none;bo
 
   <section>
     <h2>Ligações do touch</h2>
+    <div class="note warn"><b>Este módulo veio sem o chip do touch</b><p>O <code>U2</code>, que deveria ser o XPT2046, está vazio: só as ilhas de solda. O diagnóstico confirmou: o chip não responde no SPI (<code>8191</code> em todas as leituras) e o <code>T_IRQ</code> não reage ao toque. A ligação abaixo é a certa, conferida com o fórum e com outros projetos do mesmo display, e fica pronta para um módulo com o chip. O código do touch está guardado em <code>extras/touch/</code>, com um LEIAME de como religar.</p></div>
     <p>O touch é resistivo e tem chip próprio, o <b>XPT2046</b>, já soldado no
     módulo. Ele recebe energia do mesmo <code>VCC</code> e <code>GND</code> do
     display, então não precisa de fio de alimentação a mais: são só os cinco
@@ -446,9 +447,9 @@ pre code{font:400 13px/1.65 var(--font-mono);letter-spacing:0;background:none;bo
 
   <section>
     <h2>Dá para usar menos pinos</h2>
-    <p>Dos oito fios, três não disputam GPIO: <code>VCC</code>, <code>GND</code>
-    e <code>LED</code> vão em alimentação e terra. Sobram cinco GPIOs, e dois
-    deles são negociáveis.</p>
+    <p>Dos oito fios, dois não disputam GPIO: <code>VCC</code> e <code>GND</code>.
+    Sobram seis GPIOs: cinco do SPI e do controle, mais o <code>P17</code> da luz
+    de fundo. Dois deles são negociáveis.</p>
     <div class="tbl"><table>
       <thead><tr><th>Fio</th><th>Dá para economizar?</th><th>O que acontece</th></tr></thead>
       <tbody>
@@ -483,6 +484,10 @@ framework = arduino
 monitor_speed = 115200
 monitor_filters = esp32_exception_decoder, time
 
+<span class="cmt">; Le o .env e vira -DWIFI_SSID / -DWIFI_PASSWORD. As credenciais ficam fora</span>
+<span class="cmt">; do repositorio; o modelo versionado e o .env.exemplo.</span>
+extra_scripts = pre:scripts/carrega_env.py
+
 lib_deps =
   bodmer/TFT_eSPI@^2.5.43
   <span class="cmt">; Puxa sozinha a Adafruit Unified Sensor e a Adafruit BusIO.</span>
@@ -515,8 +520,10 @@ build_flags =
   <span class="cmt">; --- ligacao ao ESP32 ---------------------------------------------------</span>
   <span class="cmt">; Pinos escolhidos para nao cair em pino de strapping nem de boot. Os mesmos</span>
   <span class="cmt">; do display anterior: so os fios mudam de lugar no header.</span>
-  <span class="cmt">; SDO(MISO) e os cinco T_ do touch ficam desligados nesta etapa. O LED da</span>
-  <span class="cmt">; luz de fundo vai direto no 3V3, sem GPIO.</span>
+  <span class="cmt">; O SDO(MISO) do display nao e usado: nada e lido da tela. O LED da luz de</span>
+  <span class="cmt">; fundo vai no GPIO17, com PWM feito no main.cpp (nao pela TFT_eSPI).</span>
+  <span class="cmt">; Touch desligado: este modulo veio sem o chip XPT2046 (U2). O codigo do</span>
+  <span class="cmt">; touch esta guardado em extras/touch/, com os flags que ele precisa.</span>
   -DTFT_MOSI=23
   -DTFT_SCLK=18
   -DTFT_CS=13
@@ -559,7 +566,7 @@ build_flags =
 <span class="cmt">// Ligacao (configurada em platformio.ini, nao aqui):</span>
 <span class="cmt">//   VCC       -&gt; 5V          SCK       -&gt; GPIO18      RESET -&gt; GPIO26</span>
 <span class="cmt">//   GND       -&gt; GND         SDI(MOSI) -&gt; GPIO23      CS    -&gt; GPIO13</span>
-<span class="cmt">//   LED       -&gt; 3V3                                  DC/RS -&gt; GPIO27</span>
+<span class="cmt">//   LED       -&gt; GPIO17 (luz de fundo, acesa em nivel alto)  DC/RS -&gt; GPIO27</span>
 <span class="cmt">//</span>
 <span class="cmt">// SDO(MISO) e os cinco T_ do touch ficam sem ligar neste teste.</span>
 <span class="cmt">// ---------------------------------------------------------------------------</span>
@@ -579,6 +586,7 @@ static const char *DRIVER = "nao definido";
 #endif
 
 static const uint8_t LED_PLACA = 2;  <span class="cmt">// LED azul de bordo, prova de vida extra</span>
+static const uint8_t PIN_LUZ = 17;   <span class="cmt">// pino LED do display: sem nivel alto, tela escura</span>
 
 static uint32_t segundoAnterior = UINT32_MAX;
 static int16_t  larguraRelogio = 0;   <span class="cmt">// para apagar o valor antigo sem piscar</span>
@@ -633,6 +641,8 @@ static void desenhaRelogio(const char *texto) {
 void setup() {
   Serial.begin(115200);
   pinMode(LED_PLACA, OUTPUT);
+  pinMode(PIN_LUZ, OUTPUT);
+  digitalWrite(PIN_LUZ, HIGH);  <span class="cmt">// luz de fundo no maximo, sem PWM neste teste</span>
   delay(400);  <span class="cmt">// da tempo ao monitor serial de abrir</span>
 
   Serial.println();
@@ -692,7 +702,7 @@ void loop() {
     <div class="tbl"><table>
       <thead><tr><th>Sintoma</th><th>Causa provável</th><th>O que fazer</th></tr></thead>
       <tbody>
-        <tr><td>Tela apagada, monitor rodando</td><td><small>Luz de fundo sem alimentação</small></td><td><small>Confira o <code>LED</code> no <code>3V3</code>, e o <code>VCC</code> e o <code>GND</code>.</small></td></tr>
+        <tr><td>Tela apagada, monitor rodando</td><td><small>Luz de fundo sem alimentação</small></td><td><small>Confira o <code>LED</code> no <code>P17</code> e o brilho na página, e o <code>VCC</code> e o <code>GND</code>.</small></td></tr>
         <tr><td>Luz acesa, tela branca</td><td><small>Mau contato no <code>GND</code></small></td><td><small>Foi o que aconteceu aqui. Com o terra falhando, a luz de fundo ainda acende, mas os sinais do SPI ficam sem referência e o controlador não recebe nada. Firme o jumper do <code>GND</code> ou troque-o antes de mexer em driver.</small></td></tr>
         <tr><td>Luz acesa, tela branca (GND firme)</td><td><small>Driver errado, ou <code>RESET</code>/<code>DC/RS</code>/<code>CS</code> trocados</small></td><td><small>Reconfira esses três fios. Se estiverem certos, troque para <code>ILI9488_DRIVER</code>.</small></td></tr>
         <tr><td>Imagem embaralhada ou listrada</td><td><small>SPI rápido demais para o cabo</small></td><td><small>Baixe <code>SPI_FREQUENCY</code> para <code>27000000</code>. Jumpers longos são a causa mais comum.</small></td></tr>
@@ -707,7 +717,7 @@ void loop() {
 
   <div class="note"><b>O que veio do display anterior</b><p>O GMT024-10 (ST7789V, 240×320) deixou duas lições que valem aqui. Primeira: o <code>VCC</code> vai nos 5 V, porque o regulador do módulo precisa de folga. Segunda: a inversão de cor fica explícita em <code>platformio.ini</code>. No ST7789 isso era obrigatório, porque o init da TFT_eSPI manda <code>INVON</code> sem condição. O init do ST7796 não manda, então aqui o <code>-DTFT_INVERSION_OFF=1</code> só deixa claro o que está valendo.</p></div>
 
-  <p class="cap">Display trocado em 06/11/2026. Etapa fechada no hardware: com o <code>GND</code> firme, o ST7796S acendeu e desenhou o painel. Firmware com 27% da flash e 6,9% da RAM.</p>
+  <p class="cap">Display trocado em 06/11/2026. Etapa fechada no hardware: com o <code>GND</code> firme, o ST7796S acendeu e desenhou o painel. Luz de fundo depois passou do <code>3V3</code> para o <code>P17</code>, com brilho ajustável.</p>
 
 </div>
 
@@ -809,6 +819,10 @@ framework = arduino
 monitor_speed = 115200
 monitor_filters = esp32_exception_decoder, time
 
+<span class="cmt">; Le o .env e vira -DWIFI_SSID / -DWIFI_PASSWORD. As credenciais ficam fora</span>
+<span class="cmt">; do repositorio; o modelo versionado e o .env.exemplo.</span>
+extra_scripts = pre:scripts/carrega_env.py
+
 lib_deps =
   bodmer/TFT_eSPI@^2.5.43
   <span class="cmt">; Puxa sozinha a Adafruit Unified Sensor e a Adafruit BusIO.</span>
@@ -841,8 +855,10 @@ build_flags =
   <span class="cmt">; --- ligacao ao ESP32 ---------------------------------------------------</span>
   <span class="cmt">; Pinos escolhidos para nao cair em pino de strapping nem de boot. Os mesmos</span>
   <span class="cmt">; do display anterior: so os fios mudam de lugar no header.</span>
-  <span class="cmt">; SDO(MISO) e os cinco T_ do touch ficam desligados nesta etapa. O LED da</span>
-  <span class="cmt">; luz de fundo vai direto no 3V3, sem GPIO.</span>
+  <span class="cmt">; O SDO(MISO) do display nao e usado: nada e lido da tela. O LED da luz de</span>
+  <span class="cmt">; fundo vai no GPIO17, com PWM feito no main.cpp (nao pela TFT_eSPI).</span>
+  <span class="cmt">; Touch desligado: este modulo veio sem o chip XPT2046 (U2). O codigo do</span>
+  <span class="cmt">; touch esta guardado em extras/touch/, com os flags que ele precisa.</span>
   -DTFT_MOSI=23
   -DTFT_SCLK=18
   -DTFT_CS=13
@@ -889,16 +905,21 @@ build_flags =
 <span class="cmt">//</span>
 <span class="cmt">// Le o BME280 e mostra temperatura e umidade no display, no layout de</span>
 <span class="cmt">// cartoes. Os cartoes de ventilador e aquecedor mostram o que o controle</span>
-<span class="cmt">// decidiu (ver controle.h).</span>
+<span class="cmt">// decidiu (ver controle.h). Serve tambem uma pagina na rede local, que e por</span>
+<span class="cmt">// onde tudo se configura (ver servidor.h).</span>
 <span class="cmt">//</span>
 <span class="cmt">// Display: 4" TFT SPI 480x320 V1.1, ST7796S, header de 14 pinos.</span>
 <span class="cmt">// Ligacao (os pinos ficam em platformio.ini, nao aqui):</span>
 <span class="cmt">//   VCC       -&gt; 5V          SCK       -&gt; GPIO18      RESET -&gt; GPIO26</span>
 <span class="cmt">//   GND       -&gt; GND         SDI(MOSI) -&gt; GPIO23      CS    -&gt; GPIO13</span>
-<span class="cmt">//   LED       -&gt; 3V3                                  DC/RS -&gt; GPIO27</span>
+<span class="cmt">//   LED       -&gt; GPIO17                               DC/RS -&gt; GPIO27</span>
 <span class="cmt">//</span>
-<span class="cmt">// Sao oito fios. SDO(MISO) e os cinco pinos T_ do touch ficam sem ligar</span>
-<span class="cmt">// nesta etapa: o display so recebe dados, e o touch entra depois.</span>
+<span class="cmt">// Sao oito fios. O SDO(MISO) do display fica sem ligar: nada e lido da tela.</span>
+<span class="cmt">// O LED e o controle da luz de fundo (acende em nivel alto): com PWM nele, o</span>
+<span class="cmt">// brilho e ajustavel pelo painel web.</span>
+<span class="cmt">//</span>
+<span class="cmt">// Sem touch por enquanto: este modulo veio sem o chip XPT2046 (U2). O codigo</span>
+<span class="cmt">// do touch esta guardado em extras/touch/.</span>
 <span class="cmt">//</span>
 <span class="cmt">// Ligacao do BME280 (I2C, pinos declarados abaixo):</span>
 <span class="cmt">//   VIN -&gt; 3V3        SCL -&gt; GPIO22</span>
@@ -912,8 +933,10 @@ build_flags =
 #include &lt;TFT_eSPI.h&gt;
 #include &lt;Wire.h&gt;
 #include &lt;Adafruit_BME280.h&gt;
+#include &lt;Preferences.h&gt;
 
 #include "controle.h"
+#include "servidor.h"
 #include "tela.h"
 
 TFT_eSPI tft = TFT_eSPI();
@@ -1193,15 +1216,114 @@ static void formataValor(float valor, char *buf, size_t n) {
   else                                     snprintf(buf, n, "%.1f", valor);
 }
 
+<span class="cmt">// Com a imagem desligada pelo painel web, o loop continua lendo o sensor e</span>
+<span class="cmt">// rodando o controle, so nao desenha. Ao religar, tudo volta com os valores</span>
+<span class="cmt">// atuais.</span>
+static bool telaLigada = true;
+
+<span class="cmt">// --- luz de fundo ---------------------------------------------------------------</span>
+<span class="cmt">// PWM no pino LED do display. Pela documentacao do modulo (lcdwiki MSP4021),</span>
+<span class="cmt">// esse pino comanda a luz e acende em nivel alto. O canal 2 do LEDC usa outro</span>
+<span class="cmt">// temporizador que os canais 0 e 1 dos ventiladores, entao a frequencia aqui</span>
+<span class="cmt">// nao interfere nos 25 kHz deles.</span>
+static const uint8_t  PIN_LUZ    = 17;
+static const uint8_t  CANAL_LUZ  = 2;
+static const uint32_t LUZ_FREQ   = 5000;  <span class="cmt">// bem acima do que o olho percebe</span>
+static const uint8_t  BRILHO_MIN = 5;     <span class="cmt">// abaixo disso a tela parece morta</span>
+static const uint8_t  BRILHO_PADRAO = 60;
+static const char    *NVS_BRILHO = "brilho";
+
+static uint8_t brilho = BRILHO_PADRAO;  <span class="cmt">// %, 5 a 100</span>
+
+<span class="cmt">// Com a imagem apagada pelo painel web a luz tambem apaga: tela preta com a</span>
+<span class="cmt">// luz acesa ainda brilha, e era isso que o modulo anterior obrigava.</span>
+static void aplicaLuz() {
+  const uint8_t pct = telaLigada ? brilho : 0;
+  ledcWrite(CANAL_LUZ, (uint32_t)pct * 255 / 100);
+}
+
+static void iniciaLuz() {
+  ledcSetup(CANAL_LUZ, LUZ_FREQ, 8);
+  ledcAttachPin(PIN_LUZ, CANAL_LUZ);
+  ledcWrite(CANAL_LUZ, 0);  <span class="cmt">// apagada ate o painel estar desenhado</span>
+
+  Preferences nvs;
+  if (nvs.begin("painel", true)) {
+    if (nvs.isKey(NVS_BRILHO)) brilho = nvs.getUChar(NVS_BRILHO, BRILHO_PADRAO);
+    nvs.end();
+  }
+  if (brilho &lt; BRILHO_MIN || brilho &gt; 100) brilho = BRILHO_PADRAO;
+}
+
 static float ultimaTemp = 0, ultimaUmid = 0;
 static bool temLeitura = false;
 
+<span class="cmt">// --- temperatura maxima -------------------------------------------------------</span>
+<span class="cmt">// Definida no painel web e salva na memoria, entao sobrevive a um reinicio.</span>
+<span class="cmt">// Por enquanto so e guardada e mostrada: ainda nao entra na regra do controle.</span>
+static const char *NVS_PAINEL = "painel";
+static const char *NVS_TMAX   = "tmax";
+static const float TMAX_PADRAO = 30.0f;  <span class="cmt">// ate ser mudada no painel web</span>
+
+static float tempMaxima = 0;
+static bool  temMaxima  = false;
+
+<span class="cmt">// Sem valor salvo, parte de TMAX_PADRAO ja como configurada. O namespace</span>
+<span class="cmt">// "painel" pode nem existir no primeiro boot, e ai begin() em leitura falha:</span>
+<span class="cmt">// por isso o padrao e aplicado antes, nao depende do getFloat.</span>
+static void carregaMaxima() {
+  tempMaxima = TMAX_PADRAO;
+  temMaxima = true;
+
+  Preferences nvs;
+  if (nvs.begin(NVS_PAINEL, true)) {
+    <span class="cmt">// isKey antes: getFloat de chave ausente imprime um erro no console.</span>
+    if (nvs.isKey(NVS_TMAX)) tempMaxima = nvs.getFloat(NVS_TMAX, TMAX_PADRAO);
+    nvs.end();
+  }
+}
+
+static void salvaMaxima(float valor) {
+  tempMaxima = valor;
+  temMaxima = true;
+
+  Preferences nvs;
+  nvs.begin(NVS_PAINEL, false);
+  nvs.putFloat(NVS_TMAX, valor);
+  nvs.end();
+
+  Serial.printf("Temp. maxima     : %.1f C (salva)\n", valor);
+}
+
+<span class="cmt">// Linha de baixo do cartao de temperatura. Em verde quando configurada, para</span>
+<span class="cmt">// distinguir de leitura; em cinza, "MAX --", quando ainda nao foi definida.</span>
+<span class="cmt">// Fonte 2, maior que a dos outros detalhes, porque e um valor que se</span>
+<span class="cmt">// consulta de longe.</span>
+static void pintaMaximo() {
+  const Cartao &amp;c = CARTOES[CARTAO_TEMP];
+  char buf[20];
+
+  tft.fillRect(c.x + 3, yDetalhe(c) - 9, c.l - 6, 18, CARTAO);
+  tft.setTextFont(2);
+
+  if (temMaxima) {
+    snprintf(buf, sizeof buf, "MAX %.1f C", tempMaxima);
+    textoCentrado(c.x + c.l / 2, yDetalhe(c), buf, 1, VERDE, CARTAO);
+  } else {
+    textoCentrado(c.x + c.l / 2, yDetalhe(c), "MAX --", 1, MUDO, CARTAO);
+  }
+}
+
+<span class="cmt">// Temperatura, umidade relativa e umidade absoluta. A absoluta tem cartao</span>
+<span class="cmt">// proprio: e ela, e nao a relativa, que diz se a agua esta saindo da caixa.</span>
+<span class="cmt">// Sem leitura os tres mostram "--" em cinza, em vez de congelar o ultimo valor.</span>
 static void pintaMedidas() {
   char buf[16];
 
   if (!temLeitura) {
     desenhaValor(CARTAO_TEMP, "--", false);
     desenhaValor(CARTAO_UMID, "--", false);
+    desenhaValor(CARTAO_UABS, "--", false);
     return;
   }
 
@@ -1211,14 +1333,8 @@ static void pintaMedidas() {
   formataValor(ultimaUmid, buf, sizeof buf);
   desenhaValor(CARTAO_UMID, buf, true);
 
-  <span class="cmt">// Linha de detalhe do cartao de umidade: a absoluta, em g/m3. O numero</span>
-  <span class="cmt">// grande e a relativa; esta embaixo e a que diz se a agua esta saindo.</span>
-  const Cartao &amp;c = CARTOES[CARTAO_UMID];
-  snprintf(buf, sizeof buf, "ABS %.1f g/m3",
-           umidadeAbsoluta(ultimaTemp, ultimaUmid));
-  tft.fillRect(c.x + 3, yDetalhe(c) - 6, c.l - 6, 13, CARTAO);
-  tft.setTextFont(1);
-  textoCentrado(c.x + c.l / 2, yDetalhe(c), buf, 1, MUDO, CARTAO);
+  formataValor(umidadeAbsoluta(ultimaTemp, ultimaUmid), buf, sizeof buf);
+  desenhaValor(CARTAO_UABS, buf, true);
 }
 
 static void mostraLeitura(float temperatura, float umidade) {
@@ -1226,38 +1342,120 @@ static void mostraLeitura(float temperatura, float umidade) {
   ultimaUmid = umidade;
   temLeitura = true;
 
-  pintaMedidas();
-
-  Serial.printf("temperatura %.2f C | umidade %.2f %%\n", temperatura, umidade);
+  if (telaLigada) pintaMedidas();
 }
 
 static void mostraSemSensor() {
   temLeitura = false;
-  pintaMedidas();
+  if (telaLigada) pintaMedidas();
 }
 
 <span class="cmt">// Ventiladores e aquecedor, com o que o controle decidiu. O detalhe do cartao</span>
 <span class="cmt">// grande e reescrito junto, porque ele carrega o estado do aquecedor.</span>
+<span class="cmt">// Selo de estado na linha de baixo do cartao: borda arredondada com o texto</span>
+<span class="cmt">// dentro, so informativo. Verde ligado, vermelho desligado - o mesmo selo da</span>
+<span class="cmt">// pagina web.</span>
+static void desenhaSelo(uint8_t i, const char *texto, uint16_t cor) {
+  const Cartao &amp;c = CARTOES[i];
+  const int16_t cy = yDetalhe(c);
+  const int16_t a = 18;
+
+  tft.fillRect(c.x + 3, cy - 10, c.l - 6, 20, CARTAO);
+  tft.setTextFont(1);
+  const int16_t lt = textoEspacado(0, 0, texto, 1, cor, CARTAO, true);
+  const int16_t l = lt + 18;
+  const int16_t x = c.x + c.l / 2 - l / 2;
+
+  tft.drawRoundRect(x, cy - a / 2, l, a, a / 2, cor);
+  textoEspacado(x + 9, cy, texto, 1, cor, CARTAO);
+}
+
+<span class="cmt">// Ventiladores e aquecedor, com o que o controle decidiu. No boot tudo esta</span>
+<span class="cmt">// desligado, e os tres cartoes mostram o selo vermelho ate o painel web ligar.</span>
 static void pintaControle() {
   char buf[16];
 
   for (uint8_t i = 0; i &lt; 2; i++) {
     const uint8_t pct = controleVelocidade(i);
+    const uint8_t cartao = CARTAO_FAN1 + i;
     snprintf(buf, sizeof buf, "%u", pct);
-    desenhaValor(CARTAO_FAN1 + i, buf, pct &gt; 0);
+    desenhaValor(cartao, buf, pct &gt; 0);
+    desenhaSelo(cartao, pct &gt; 0 ? "LIGADO" : "DESLIGADO",
+                pct &gt; 0 ? VERDE : VERMELHO);
   }
 
-  const Cartao &amp;c = CARTOES[CARTAO_HOTEND];
   snprintf(buf, sizeof buf, "%.0f", controleConfig().alvo);
   desenhaValor(CARTAO_HOTEND, buf, controleAquecedorLigado());
 
-  <span class="cmt">// Apaga e reescreve so a linha do detalhe.</span>
-  tft.fillRect(c.x + 3, yDetalhe(c) - 6, c.l - 6, 13, CARTAO);
-  tft.setTextFont(1);
-  textoCentrado(c.x + c.l / 2, yDetalhe(c), controleEstadoTexto(), 1,
-                controleAquecedorLigado() ? LARANJA : MUDO, CARTAO);
+  <span class="cmt">// Ligado = liberado no painel, mesmo que agora esteja no alvo sem aquecer;</span>
+  <span class="cmt">// o numero fica laranja quando aquece de fato. Protecao aparece em vez de</span>
+  <span class="cmt">// DESLIGADO para a falha nao passar por desligamento normal.</span>
+  if (controleEstado() == EST_FALHA)  desenhaSelo(CARTAO_HOTEND, "PROTECAO", VERMELHO);
+  else if (controleAutorizado())      desenhaSelo(CARTAO_HOTEND, "LIGADO", VERDE);
+  else                                desenhaSelo(CARTAO_HOTEND, "DESLIGADO", VERMELHO);
 }
 
+<span class="cmt">// Rodape: so o endereco, centrado. Como ele vira "sem Wi-Fi" ou</span>
+<span class="cmt">// "conectando..." quando a rede cai, o estado da conexao continua visivel</span>
+<span class="cmt">// aqui sem precisar de um indicador separado.</span>
+static void desenhaRodape(const char *endereco) {
+  tft.fillRect(MARGEM, Y_RODAPE - 8, LARGURA - 2 * MARGEM, 16, FUNDO);
+
+  tft.setTextFont(2);
+  textoCentrado(LARGURA / 2, Y_RODAPE, endereco, 1, RODAPE, FUNDO);
+}
+
+<span class="cmt">// Painel inteiro: no boot e ao religar a imagem.</span>
+static void desenhaPainel() {
+  telaFixa();
+  desenhaRodape(servidorEndereco());
+  pintaControle();
+  pintaMedidas();  <span class="cmt">// "--" ate a primeira leitura chegar</span>
+  pintaMaximo();
+}
+
+<span class="cmt">// --- chamadas do servidor -------------------------------------------------------</span>
+
+<span class="cmt">// Apagar e pintar de preto, nao mandar DISPOFF ao controlador: no ST7789 do</span>
+<span class="cmt">// display anterior o DISPOFF mostrava uma pagina branca, e pintar de preto da</span>
+<span class="cmt">// o resultado esperado em qualquer controlador, ao custo de redesenhar tudo</span>
+<span class="cmt">// ao religar. A luz de fundo continua acesa: o LED esta no 3V3.</span>
+void telaDefineLigada(bool ligada) {
+  if (ligada == telaLigada) return;
+  telaLigada = ligada;
+
+  if (ligada) desenhaPainel();
+  else        tft.fillScreen(TFT_BLACK);
+  aplicaLuz();
+
+  Serial.printf("Tela             : %s\n", ligada ? "ligada" : "apagada");
+}
+
+bool telaEstaLigada() { return telaLigada; }
+
+void telaDefineBrilho(uint8_t pct) {
+  if (pct &lt; BRILHO_MIN) pct = BRILHO_MIN;
+  if (pct &gt; 100) pct = 100;
+  brilho = pct;
+  aplicaLuz();
+
+  Preferences nvs;
+  nvs.begin("painel", false);
+  nvs.putUChar(NVS_BRILHO, brilho);
+  nvs.end();
+}
+
+uint8_t telaBrilho() { return brilho; }
+
+bool painelTempMaxima(float &amp;valor) {
+  valor = tempMaxima;
+  return temMaxima;
+}
+
+void painelDefineTempMaxima(float valor) {
+  salvaMaxima(valor);
+  if (telaLigada) pintaMaximo();
+}
 
 <span class="cmt">// ---------------------------------------------------------------------------</span>
 
@@ -1277,6 +1475,9 @@ void setup() {
   Serial.printf("Pinos do sensor  : SDA=%d SCL=%d\n", PIN_SDA, PIN_SCL);
 
   controleInicia();
+  servidorInicia();  <span class="cmt">// nao bloqueia: a rede sobe em paralelo ao resto</span>
+  carregaMaxima();
+  Serial.printf("Temp. maxima     : %.1f C\n", tempMaxima);
 
   Wire.begin(PIN_SDA, PIN_SCL);
   varreI2C();
@@ -1294,6 +1495,7 @@ void setup() {
     Serial.println("                   seguindo sem ele, tentando de novo a cada 5 s");
   }
 
+  iniciaLuz();  <span class="cmt">// antes do init: a luz so acende com a imagem pronta</span>
   tft.init();
   <span class="cmt">// 0 = retrato 320x480. Se a imagem sair de cabeca para baixo, troque por 2</span>
   <span class="cmt">// (o mesmo retrato girado 180 graus). 1 e 3 sao as duas paisagens, mas o</span>
@@ -1301,15 +1503,17 @@ void setup() {
   tft.setRotation(0);
 
   Serial.printf("Resolucao em uso : %d x %d\n", tft.width(), tft.height());
+  Serial.printf("Luz de fundo     : PWM no GPIO%u, brilho %u%%\n", PIN_LUZ, brilho);
   Serial.println("--------------------------------------------------");
 
-  telaFixa();
-  pintaControle();
-  pintaMedidas();  <span class="cmt">// "--" ate a primeira leitura chegar</span>
+  desenhaPainel();
+  aplicaLuz();
 }
 
 void loop() {
   const uint32_t agora = millis();
+
+  servidorAtende();
 
   <span class="cmt">// A rampa do ventilador desce entre leituras, entao o controle roda no</span>
   <span class="cmt">// ritmo do loop e nao no de 2 s do sensor.</span>
@@ -1319,7 +1523,17 @@ void loop() {
       controleVelocidade(1) != velAnterior[1]) {
     velAnterior[0] = controleVelocidade(0);
     velAnterior[1] = controleVelocidade(1);
-    pintaControle();
+    if (telaLigada) pintaControle();
+  }
+
+  <span class="cmt">// O endereco muda sozinho: conectando -&gt; IP, ou IP -&gt; reconectando. A tela</span>
+  <span class="cmt">// acompanha comparando o texto, para nao repintar a linha a cada volta.</span>
+  static char enderecoNaTela[40] = "";
+  const char *endereco = servidorEndereco();
+  if (strcmp(endereco, enderecoNaTela) != 0) {
+    snprintf(enderecoNaTela, sizeof enderecoNaTela, "%s", endereco);
+    <span class="cmt">// Com a tela apagada so guarda: ao religar, o rodape e redesenhado.</span>
+    if (telaLigada) desenhaRodape(endereco);
   }
 
   if (sensorOk) {
@@ -1329,16 +1543,18 @@ void loop() {
       float temperatura, umidade;
       if (leSensor(temperatura, umidade)) {
         mostraLeitura(temperatura, umidade);
+        servidorRegistra(temperatura, umidade);
         controleNovaLeitura(true, temperatura);
-        pintaControle();
+        if (telaLigada) pintaControle();
       } else {
         <span class="cmt">// Parou de responder: cabo solto, provavelmente. Volta a procurar</span>
         <span class="cmt">// em vez de repetir o ultimo valor, que pareceria um sensor travado.</span>
         Serial.println("Sensor parou de responder - voltando a procurar");
         sensorOk = false;
         mostraSemSensor();
+        servidorSemSensor();
         controleNovaLeitura(false, 0);
-        pintaControle();
+        if (telaLigada) pintaControle();
       }
     }
   } else if (agora - ultimaLeitura &gt;= INTERVALO_RETENTATIVA) {
@@ -1701,20 +1917,20 @@ void loop() {
 
   <section>
     <h2>A estratégia de controle</h2>
-    <p>É o que você descreveu, escrito como regra. O cooler 2 nunca para
-    enquanto houver calor: ele é quem distribui.</p>
+    <p>Como está no firmware. Ao ligar o ESP32, os dois ventiladores e o
+    aquecedor começam <b>desligados</b>, e só a página liga.</p>
     <div class="tbl"><table>
-      <thead><tr><th>Estado do aquecedor</th><th>Cooler 1 · hotend</th><th>Cooler 2 · circulação</th></tr></thead>
+      <thead><tr><th>Situação</th><th>Cooler 1 · hotend</th><th>Cooler 2 · circulação</th></tr></thead>
       <tbody>
-        <tr><td><small>Desligado</small></td><td class="q">0%</td><td class="q">0%</td></tr>
-        <tr><td><small>Aquecendo em carga parcial</small></td><td class="q">acompanha a carga</td><td class="q">70 – 80%</td></tr>
-        <tr><td><small>Plena carga</small></td><td class="q">100%</td><td class="q">100%</td></tr>
-        <tr><td><small>Acabou de desligar</small></td><td class="q">100% por alguns minutos</td><td class="q">70%</td></tr>
+        <tr><td><small>Boot, nada ligado</small></td><td class="q">0%</td><td class="q">0%</td></tr>
+        <tr><td><small>Cooler 2 ligado, aquecedor desligado</small></td><td class="q">0%</td><td class="q">mínima · padrão 70%</td></tr>
+        <tr><td><small>Aquecendo</small></td><td class="q">100%</td><td class="q">máxima · padrão 100%</td></tr>
+        <tr><td><small>Acabou de desligar o aquecimento</small></td><td class="q">100% por 3 min, depois rampa de 2 min até parar</td><td class="q">mínima</td></tr>
       </tbody>
     </table></div>
     <div class="notes">
-      <div class="note warn"><b>O cooler 1 desliga depois do aquecedor, não junto</b><p>O bloco do hotend continua quente depois que o cartucho desliga. Cortar o ventilador no mesmo instante deixa todo esse calor parado em cima do bloco. Deixe o cooler 1 girando mais alguns minutos, até o metal baixar — é o mesmo princípio do ventilador que continua rodando depois de desligar o carro.</p></div>
-      <div class="note"><b>Nada disso existe ainda no firmware</b><p>Esta tabela é a regra a implementar. Hoje os cartões <b>FAN 01</b> e <b>FAN 02</b> mostram <code>--</code> no display. O controle entra junto com o aquecedor, porque depende de saber em que carga o PID está trabalhando.</p></div>
+      <div class="note warn"><b>O cooler 1 desliga depois do aquecedor, não junto</b><p>O bloco do hotend continua quente depois que o cartucho desliga. Cortar o ventilador no mesmo instante deixa todo esse calor parado em cima do bloco. Por isso ele segue a 100% e depois desce em rampa. Os dois tempos se ajustam no modal do FAN 01, em minutos.</p></div>
+      <div class="note ok"><b>Já está no firmware</b><p>O cooler 1 é automático: segue o aquecedor e não tem botão próprio. O cooler 2 tem liga/desliga, máxima e mínima no modal do FAN 02, e nasce desligado a cada boot, como a autorização do aquecedor. No display e na página, cada cartão mostra um selo: <b>DESLIGADO</b> em vermelho, <b>LIGADO</b> em verde. O aquecedor é controlado por PID: os ventiladores tratam como "aquecendo" qualquer potência acima de 0%.</p></div>
     </div>
   </section>
 
@@ -1739,7 +1955,7 @@ void loop() {
         <tr><td><small>PWM do cooler 2</small></td><td class="pin">P33</td><td><small>Mesma coisa. Os dois aceitam o LEDC, que é o gerador de PWM por hardware do ESP32.</small></td></tr>
       </tbody>
     </table></div>
-    <div class="note"><b>O mapa até aqui</b><p>Display em <code>P18</code>, <code>P23</code>, <code>P13</code>, <code>P27</code>, <code>P26</code>. Sensor em <code>P21</code> e <code>P22</code>. Ventiladores em <code>P32</code> e <code>P33</code>. Nove dos 32 GPIOs ocupados — sobra de sobra para o aquecedor.</p></div>
+    <div class="note"><b>O mapa até aqui</b><p>Display em <code>P18</code>, <code>P23</code>, <code>P13</code>, <code>P27</code>, <code>P26</code>, e a luz de fundo no <code>P17</code>. Sensor em <code>P21</code> e <code>P22</code>. Ventiladores em <code>P32</code> e <code>P33</code>. Aquecedor no <code>P25</code>. Onze dos 32 GPIOs ocupados. O <code>P16</code> e o <code>P19</code> ficam reservados para o touch.</p></div>
   </section>
 
   <section>
@@ -1784,7 +2000,7 @@ void loop() {
     <span>corrente <b>≈ 4,2 A</b></span>
     <span>chave <b>IRLB8721</b></span>
     <span>fusível <b>7,5 A</b></span>
-    <span>estado <b>só no HTML, ainda não no firmware</b></span>
+    <span>firmware <b>pronto · P25</b></span>
   </div>
 
   <section>
@@ -1869,7 +2085,7 @@ void loop() {
         <rect x="420" y="328" width="60" height="16" rx="3" fill="var(--board)" stroke="var(--gpio)" stroke-width="1.5"/>
         <text x="450" y="321" text-anchor="middle" class="t-s" fill="var(--gpio)">100 Ω</text>
         <line x1="420" y1="336" x2="300" y2="336" stroke="var(--gpio)" stroke-width="2.5"/>
-        <text x="294" y="340" text-anchor="end" class="t-s t-mut">GPIO do ESP32</text>
+        <text x="294" y="340" text-anchor="end" class="t-s t-mut">P25 do ESP32</text>
 
         <line x1="510" y1="336" x2="510" y2="420" stroke="var(--gpio)" stroke-width="2"/>
         <rect x="492" y="366" width="36" height="16" rx="3" fill="var(--board)" stroke="var(--gpio)" stroke-width="1.5"/>
@@ -1887,12 +2103,100 @@ void loop() {
   </section>
 
   <section>
-    <h2>O que ainda falta</h2>
-    <div class="notes">
-      <div class="note warn"><b>Nada disto está no firmware</b><p>O aquecedor no código continua sendo o <b>LED azul de bordo</b>, no <code>GPIO2</code>. A lógica de controle — autorização, alvo, histerese, teto de 60 °C, ventiladores acompanhando — já funciona inteira; só a carga é inofensiva. Quando o cartucho entrar, muda o pino e entra o PID no lugar da histerese.</p></div>
-      <div class="note warn"><b>O GPIO2 não serve para o cartucho</b><p>Ele é pino de <i>strapping</i>: o ESP32 lê o estado dele no boot para decidir como iniciar. Com um LED isso é inofensivo. Com um MOSFET e um resistor de 10 kΩ pendurados, pode atrapalhar a inicialização. O cartucho vai num pino comum — <code>P25</code> está livre.</p></div>
-      <div class="note"><b>Proteção que falta ligar</b><p>A guarda de <i>"ligado no máximo sem a temperatura subir"</i> está no código com o valor <code>0</code>, ou seja, desligada. Com um LED no lugar do cartucho a temperatura nunca sobe, e ela dispararia sempre. <b>Ligue-a quando o cartucho chegar</b> — é ela que pega cartucho solto, sensor fora do lugar e porta aberta.</p></div>
+    <h2>Qual perna é qual</h2>
+    <p>O IRLB8721 vem num corpo <b>TO-220</b>: uma placa preta com uma aba de
+    metal furada em cima. Diferente do 2N2222, aqui não há face chata: quem
+    diz a ordem é o <b>lado escrito</b>. Com ele virado para você e as pernas
+    para baixo, a ordem é sempre a mesma.</p>
+    <div class="fig">
+      <svg viewBox="0 0 940 420" role="img" aria-label="Encapsulamento TO-220 do IRLB8721 visto de frente, com as pernas G, D e S identificadas">
+        <text x="190" y="40" text-anchor="middle" class="t-b">DE FRENTE</text>
+        <text x="190" y="60" text-anchor="middle" class="t-s t-mut">lado escrito virado para você</text>
+        <rect x="125" y="78" width="130" height="58" rx="4" fill="var(--board)" stroke="var(--fg)" stroke-width="2"/>
+        <circle cx="190" cy="106" r="13" fill="none" stroke="var(--fg)" stroke-width="2"/>
+        <text x="190" y="152" text-anchor="middle" class="t-s t-mut">aba de metal</text>
+        <rect x="115" y="160" width="150" height="110" rx="4" fill="var(--board)" stroke="var(--fg)" stroke-width="2"/>
+        <text x="190" y="208" text-anchor="middle" class="t-b" style="font-size:15px">IRLB8721</text>
+        <text x="190" y="232" text-anchor="middle" class="t-s t-mut">lado escrito</text>
+        <line x1="140" y1="270" x2="140" y2="345" stroke="var(--gpio)" stroke-width="4"/>
+        <line x1="190" y1="270" x2="190" y2="345" stroke="var(--pwr)" stroke-width="4"/>
+        <line x1="240" y1="270" x2="240" y2="345" stroke="var(--in)" stroke-width="4"/>
+        <text x="140" y="370" text-anchor="middle" class="t-b" style="fill:var(--gpio)">G</text>
+        <text x="190" y="370" text-anchor="middle" class="t-b" style="fill:var(--pwr)">D</text>
+        <text x="240" y="370" text-anchor="middle" class="t-b" style="fill:var(--in)">S</text>
+        <text x="140" y="393" text-anchor="middle" class="t-s t-mut">P25</text>
+        <text x="190" y="393" text-anchor="middle" class="t-s t-mut">cartucho</text>
+        <text x="240" y="393" text-anchor="middle" class="t-s t-mut">GND</text>
+
+        <line x1="340" y1="80" x2="340" y2="380" stroke="var(--line)" stroke-width="1"/>
+
+        <text x="520" y="40" text-anchor="middle" class="t-b" style="fill:var(--pwr)">A ABA É O D</text>
+        <text x="520" y="60" text-anchor="middle" class="t-s t-mut">ligada por dentro ao pino do meio</text>
+        <rect x="455" y="78" width="130" height="58" rx="4" fill="none" stroke="var(--pwr)" stroke-width="3"/>
+        <circle cx="520" cy="106" r="13" fill="none" stroke="var(--pwr)" stroke-width="2"/>
+        <rect x="445" y="160" width="150" height="110" rx="4" fill="var(--board)" stroke="var(--fg)" stroke-width="2"/>
+        <path d="M520,136 L520,270" stroke="var(--pwr)" stroke-width="2" stroke-dasharray="5 5"/>
+        <line x1="470" y1="270" x2="470" y2="345" stroke="var(--line)" stroke-width="4"/>
+        <line x1="520" y1="270" x2="520" y2="345" stroke="var(--pwr)" stroke-width="4"/>
+        <line x1="570" y1="270" x2="570" y2="345" stroke="var(--line)" stroke-width="4"/>
+        <text x="520" y="370" text-anchor="middle" class="t-b" style="fill:var(--pwr)">D</text>
+        <text x="520" y="393" text-anchor="middle" class="t-s t-mut">aba e pino do meio: mesmo ponto</text>
+
+        <line x1="700" y1="80" x2="700" y2="380" stroke="var(--line)" stroke-width="1"/>
+
+        <text x="820" y="40" text-anchor="middle" class="t-b">MESMA LÓGICA</text>
+        <text x="820" y="60" text-anchor="middle" class="t-s t-mut">do 2N2222 dos ventiladores</text>
+        <text x="745" y="140" class="t-s t-mut">2N2222</text>
+        <text x="895" y="140" text-anchor="end" class="t-s t-mut">IRLB8721</text>
+        <text x="760" y="185" text-anchor="middle" class="t-b" style="fill:var(--gpio)">B</text>
+        <text x="820" y="185" text-anchor="middle" class="t-s t-mut">→</text>
+        <text x="880" y="185" text-anchor="middle" class="t-b" style="fill:var(--gpio)">G</text>
+        <text x="820" y="206" text-anchor="middle" class="t-s t-mut">comando, vem do ESP32</text>
+        <text x="760" y="250" text-anchor="middle" class="t-b" style="fill:var(--pwr)">C</text>
+        <text x="820" y="250" text-anchor="middle" class="t-s t-mut">→</text>
+        <text x="880" y="250" text-anchor="middle" class="t-b" style="fill:var(--pwr)">D</text>
+        <text x="820" y="271" text-anchor="middle" class="t-s t-mut">lado da carga</text>
+        <text x="760" y="315" text-anchor="middle" class="t-b" style="fill:var(--in)">E</text>
+        <text x="820" y="315" text-anchor="middle" class="t-s t-mut">→</text>
+        <text x="880" y="315" text-anchor="middle" class="t-b" style="fill:var(--in)">S</text>
+        <text x="820" y="336" text-anchor="middle" class="t-s t-mut">terra</text>
+      </svg>
     </div>
+    <div class="tbl"><table>
+      <thead><tr><th>Perna</th><th>Nome</th><th>Vai em</th></tr></thead>
+      <tbody>
+        <tr><td class="pin"><span class="chip" style="color:var(--gpio);border-color:var(--gpio)">G</span> esquerda</td><td><small>gate, o comando</small></td><td><small>Resistor de <b>100 Ω</b> até o <code>P25</code>. O resistor de <b>10 kΩ</b> sai daqui para o GND.</small></td></tr>
+        <tr><td class="pin"><span class="chip" style="color:var(--pwr);border-color:var(--pwr)">D</span> meio</td><td><small>dreno, o lado da carga</small></td><td><small>Um fio do <b>cartucho</b>. O outro fio do cartucho vai ao +12 V, passando pelo fusível de 7,5 A. É o mesmo ponto da aba.</small></td></tr>
+        <tr><td class="pin"><span class="chip" style="color:var(--in);border-color:var(--in)">S</span> direita</td><td><small>source, o terra</small></td><td><small><b>GND comum</b>: o da fonte de 12 V e o do ESP32 juntos. Fio de 1 mm², porque os 4,2 A passam por aqui.</small></td></tr>
+      </tbody>
+    </table></div>
+    <div class="notes">
+      <div class="note"><b>Dica de montagem: o 10 kΩ entre G e S</b><p>O resistor de 10 kΩ vai do gate ao GND, e o S já é o GND. Dá para soldá-lo direto entre as pernas <b>G</b> e <b>S</b>, por trás, pulando a do meio. Fica curto, sem fio solto, e o gate nunca fica no ar, nem com o fio do <code>P25</code> desconectado.</p></div>
+      <div class="note"><b>Confirme com o multímetro</b><p>Escala de <b>diodo</b>. Ponta <b>vermelha no S</b> e <b>preta no D</b>: marca uns 0,4 a 0,7 V, que é o diodo interno do MOSFET. Invertendo as pontas, não marca nada. O <b>G</b> não conduz para nenhuma das outras duas, em nenhum sentido. E a aba dá continuidade com a perna do meio. Assim você confere o D, o S e o G sem depender de desenho.</p></div>
+      <div class="note warn"><b>A aba está no potencial do D</b><p>Se a aba encostar em metal ligado ao terra (gabinete, dissipador sem isolador), o cartucho liga direto e fica ligado, sem o firmware conseguir desligar. A 0,3 W ele não precisa de dissipador: deixe a aba livre, ou use mica e bucha isolante se for parafusar.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>No firmware</h2>
+    <div class="notes">
+      <div class="note ok"><b>Cartucho no P25</b><p>O gate do IRLB8721 vai no <code>P25</code>, com o resistor de 100 Ω em série e o de 10 kΩ do gate ao GND. Não é mais o <code>GPIO2</code>: aquele é pino de <i>strapping</i>, e com o MOSFET pendurado podia atrapalhar o boot. O LED azul de bordo deixou de ser o aquecedor.</p></div>
+      <div class="note ok"><b>PID com PWM lento</b><p>Como no Dry Fila Box do Marlon Nardi, a potência sai de um <b>PID</b> (0 a 100%) e chega ao cartucho por <b>PWM</b>. A diferença é a velocidade: lá o <code>analogWrite</code> chaveia a uns 490 Hz; aqui a janela é de <b>2 segundos</b> — com 60%, o cartucho fica 1,2 s ligado e 0,8 s desligado. O bloco tem inércia de sobra, então o efeito térmico é o mesmo, com centenas de vezes menos chaveamento de 4,2 A. Os ganhos começam em <code>Kp 10</code>, <code>Ki 0,03</code>, <code>Kd 0</code> (os do Marlon, 2/5/1, são os do exemplo da biblioteca) e se ajustam no modal do aquecedor. A potência aparece no estado: "AQUECENDO · 62 %".</p></div>
+      <div class="note ok"><b>As proteções que o firmware faz</b><p>Liga só pela página, e começa desligado a cada boot e depois de qualquer queda de energia. Corta e marca <b>PROTEÇÃO</b> em três casos: temperatura no teto de 60 °C, sensor sem leitura, ou <b>15 minutos com o PID no máximo sem a temperatura subir 1 °C</b>. Esse tempo se ajusta de 5 a 60 minutos no modal do aquecedor, e não dá para desligar.</p></div>
+      <div class="note warn"><b>O que o firmware não vê</b><p>O BME280 mede o <b>ar da caixa</b>. Ninguém mede o <b>bloco do cartucho</b>. Se o cooler 1 parar ou o cartucho perder contato com o bloco, o metal esquenta muito antes de o ar perceber. Um fusível térmico preso ao bloco seria a proteção de hardware que falta, independente do firmware.</p></div>
+      <div class="note"><b>O IRLB8721 esquenta?</b><p>Pouco. A 4,2 A e com cerca de 17 mΩ de resistência com 3,3 V no gate, ele dissipa uns <b>0,3 W</b>. Sem dissipador, isso sobe uns 20 °C acima do ambiente. Dentro da caixa a 55 °C ele fica perto de 75 °C, longe dos 175 °C que aguenta. O PWM do cartucho tem janela de 2 s: no máximo uma ligada e uma desligada por janela, então a perda de chaveamento é desprezível. <b>Se ficar quente demais para encostar</b>, o gate não está recebendo os 3,3 V inteiros: confira o resistor de 100 Ω e o fio do <code>P25</code>, e se a peça é mesmo um IRL<b>B</b>8721 (os IRF sem "L" precisam de 10 V no gate).</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Teste de fogo</h2>
+    <ol class="steps">
+      <li><div><b>Monte com tudo desligado da tomada.</b><small>Confira o fusível de 7,5 A na linha do cartucho, os capacitores perto do MOSFET e do ESP32, o terra comum entre a fonte de 12 V e o ESP32, e que a aba do MOSFET não encosta em metal.</small></div></li>
+      <li><div><b>Ligue e olhe o monitor serial.</b><small>Deve aparecer <code>Cartucho : GPIO25</code> e <code>Protecao : corta se 15 min ligado sem subir 1 C</code>. O cartucho tem que estar frio: tudo nasce desligado.</small></div></li>
+      <li><div><b>Comece com o alvo baixo.</b><small>Uns 40 °C no modal do aquecedor. Num modelo da caixa, os ganhos iniciais do PID chegam ao alvo passando cerca de 1,5 °C dele. Veja quanto passa na sua antes de subir para 55 °C: se passar muito ou ficar oscilando, baixe o <code>Ki</code>; se demorar demais ou estacionar abaixo, suba o <code>Kp</code>.</small></div></li>
+      <li><div><b>Ligue o FAN 02 e depois o aquecedor, pela página.</b><small>O selo do aquecedor fica verde, o modal mostra "AQUECENDO · 100 %" no começo e a potência cai conforme chega ao alvo. O cooler 1 tem que ir a 100% junto. Confira com a mão, sem encostar no bloco, que ele está girando.</small></div></li>
+      <li><div><b>Fique do lado o tempo todo no primeiro teste.</b><small>Com a fonte de 12 V ao alcance para desligar. Se o selo mostrar <b>PROTEÇÃO</b>, o modal do aquecedor diz o motivo.</small></div></li>
+    </ol>
   </section>
 
 </div>
@@ -2171,8 +2475,8 @@ const FIOS = [
     obs:"MOSI do VSPI. O display só recebe; não há volta de dados." },
   { esp:"P18",  tela:"SCK",       tipo:"spi",  sinal:"clock do SPI",
     obs:"Clock do VSPI, por hardware. Livre no boot. É o GPIO18." },
-  { esp:"3V3",  tela:"LED",       tipo:"pwr",  sinal:"luz de fundo",
-    obs:"Acende em nível alto. Direto no 3V3 fica sempre acesa. Num GPIO daria para apagar e regular o brilho." },
+  { esp:"P17",  tela:"LED",       tipo:"ctrl", sinal:"luz de fundo · PWM",
+    obs:"PWM da luz de fundo: brilho de 5 a 100% pela página. Acende em nível alto. Livre no boot." },
   { esp:"—",    tela:"SDO(MISO)", tipo:"nc",   sinal:"dados vindos do display",
     obs:"Fica solto. O P19 vai só para o T_DO do touch." },
   { esp:"—",    tela:"T_CLK",     tipo:"nc",   sinal:"clock do touch",
