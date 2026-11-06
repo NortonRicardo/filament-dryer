@@ -26,7 +26,7 @@ static Config cfg = {
   55.0f,  // alvo: PETG, o filamento usado aqui. Recomendado 55 a 70 C;
           // 55 e o maximo que a caixa permite (ALVO_MAX)
   1.0f,   // histerese
-  true,   // circulacao ligada
+  false,  // circulacao: desligada no boot, so o painel web liga
   100,    // circulacao maxima, com o aquecedor ligado
   70,     // circulacao minima, com o aquecedor desligado
   30,     // piso de PWM: abaixo disso a helice nao parte
@@ -93,9 +93,9 @@ static void falha(const char *porque) {
 // quando o aquecedor corta - cortar o ventilador junto deixaria todo esse
 // calor parado em cima do metal.
 //
-// Ventilador de circulacao: fica ligado direto, independente de autorizacao.
-// Na maxima enquanto o aquecedor esta ligado, na minima quando desligado.
-// So para se for desligado no painel.
+// Ventilador de circulacao: comeca desligado a cada boot. Depois de ligado no
+// painel, gira direto, independente do aquecedor estar autorizado: na maxima
+// enquanto o aquecedor esta ligado, na minima quando desligado.
 // ---------------------------------------------------------------------------
 static uint8_t velocidadeCirculacao() {
   if (!cfg.fan2Ligado) return 0;
@@ -149,7 +149,6 @@ void controleInicia() {
   // imprime um erro no console. Os inteiros nao tem esse problema.
   if (nvs.isKey("alvo")) cfg.alvo      = nvs.getFloat("alvo", cfg.alvo);
   if (nvs.isKey("hist")) cfg.histerese = nvs.getFloat("hist", cfg.histerese);
-  cfg.fan2Ligado  = nvs.getBool("f2on", cfg.fan2Ligado);
   cfg.fan2Max     = nvs.getUChar("f2max", cfg.fan2Max);
   cfg.fan2Min     = nvs.getUChar("f2min", cfg.fan2Min);
   cfg.pwmMin      = nvs.getUChar("pwmin", cfg.pwmMin);
@@ -157,20 +156,21 @@ void controleInicia() {
   cfg.rampa1      = nvs.getUShort("rmp1", cfg.rampa1);
   cfg.semSubirMin = nvs.getUShort("subir", cfg.semSubirMin);
 
-  // Nao se le autorizacao da memoria: ela nasce falsa toda vez, por regra.
+  // Nao se le da memoria nem a autorizacao nem o liga/desliga do FAN 02:
+  // os dois nascem falsos toda vez, por regra. Tudo comeca desligado.
   autorizado = false;
+  cfg.fan2Ligado = false;
   estado = EST_BLOQUEADO;
 
-  Serial.printf("Aquecedor        : BLOQUEADO no boot, por regra\n");
+  Serial.printf("Aquecedor        : DESLIGADO no boot, por regra\n");
   Serial.printf("Alvo             : %.1f C, histerese %.1f C, teto %.0f C\n",
                 cfg.alvo, cfg.histerese, TETO_ABSOLUTO);
   Serial.printf("Ventiladores     : P%d e P%d, PWM %lu Hz, piso %u%%\n",
                 PIN_FAN1, PIN_FAN2, (unsigned long)PWM_FREQ, cfg.pwmMin);
-  Serial.printf("Circulacao       : %s, max %u%%, min %u%%\n",
-                cfg.fan2Ligado ? "ligada" : "DESLIGADA", cfg.fan2Max, cfg.fan2Min);
+  Serial.printf("Circulacao       : DESLIGADA no boot, max %u%%, min %u%%\n",
+                cfg.fan2Max, cfg.fan2Min);
 
-  // A circulacao nao depende de autorizacao: ja parte no boot, na minima.
-  atualizaVentiladores();
+  atualizaVentiladores();  // tudo em 0% ate o painel web ligar
 }
 
 void controleNovaLeitura(bool sensorOk, float temperatura) {
@@ -223,7 +223,7 @@ EstadoAquecedor controleEstado() { return estado; }
 
 const char *controleEstadoTexto() {
   switch (estado) {
-    case EST_BLOQUEADO: return "BLOQUEADO";
+    case EST_BLOQUEADO: return "DESLIGADO";
     case EST_OCIOSO:    return "NO ALVO";
     case EST_AQUECENDO: return "AQUECENDO";
     case EST_FALHA:     return "PROTECAO";
@@ -277,7 +277,6 @@ bool controleDefineConfig(const Config &n, const char **porque) {
   cfg = n;
   nvs.putFloat("alvo", cfg.alvo);
   nvs.putFloat("hist", cfg.histerese);
-  nvs.putBool("f2on", cfg.fan2Ligado);
   nvs.putUChar("f2max", cfg.fan2Max);
   nvs.putUChar("f2min", cfg.fan2Min);
   nvs.putUChar("pwmin", cfg.pwmMin);

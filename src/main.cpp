@@ -450,24 +450,33 @@ static void mostraSemSensor() {
 
 // Ventiladores e aquecedor, com o que o controle decidiu. O detalhe do cartao
 // grande e reescrito junto, porque ele carrega o estado do aquecedor.
+// Apaga e reescreve so a linha de detalhe de um cartao.
+static void desenhaDetalhe(uint8_t i, const char *texto, uint16_t cor) {
+  const Cartao &c = CARTOES[i];
+  tft.fillRect(c.x + 3, yDetalhe(c) - 6, c.l - 6, 13, CARTAO);
+  tft.setTextFont(1);
+  textoCentrado(c.x + c.l / 2, yDetalhe(c), texto, 1, cor, CARTAO);
+}
+
+// Ventiladores e aquecedor, com o que o controle decidiu. No boot tudo esta
+// desligado, e os tres cartoes dizem isso na linha de baixo ate o painel web
+// ligar.
 static void pintaControle() {
   char buf[16];
 
   for (uint8_t i = 0; i < 2; i++) {
     const uint8_t pct = controleVelocidade(i);
+    const uint8_t cartao = CARTAO_FAN1 + i;
     snprintf(buf, sizeof buf, "%u", pct);
-    desenhaValor(CARTAO_FAN1 + i, buf, pct > 0);
+    desenhaValor(cartao, buf, pct > 0);
+    desenhaDetalhe(cartao, pct > 0 ? "LIGADO" : "DESLIGADO",
+                   pct > 0 ? CARTOES[cartao].cor : MUDO);
   }
 
-  const Cartao &c = CARTOES[CARTAO_HOTEND];
   snprintf(buf, sizeof buf, "%.0f", controleConfig().alvo);
   desenhaValor(CARTAO_HOTEND, buf, controleAquecedorLigado());
-
-  // Apaga e reescreve so a linha do detalhe.
-  tft.fillRect(c.x + 3, yDetalhe(c) - 6, c.l - 6, 13, CARTAO);
-  tft.setTextFont(1);
-  textoCentrado(c.x + c.l / 2, yDetalhe(c), controleEstadoTexto(), 1,
-                controleAquecedorLigado() ? LARANJA : MUDO, CARTAO);
+  desenhaDetalhe(CARTAO_HOTEND, controleEstadoTexto(),
+                 controleAquecedorLigado() ? LARANJA : MUDO);
 }
 
 // Rodape: so o endereco, centrado. Como ele vira "sem Wi-Fi" ou

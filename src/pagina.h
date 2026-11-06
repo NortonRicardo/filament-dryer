@@ -182,7 +182,7 @@ footer.ruim{color:var(--laranja)}
 
   <div class="cartao clicavel" id="c-f1" data-abre="m-f1"><div class="rotulo">Fan 01 · hotend</div>
     <div class="valor"><span id="f1">--</span><u>%</u></div>
-    <div class="detalhe">AUTOMÁTICO</div></div>
+    <div class="detalhe" id="f1estado">DESLIGADO</div></div>
 
   <div class="cartao clicavel" id="c-f2" data-abre="m-f2"><div class="rotulo">Fan 02 · circulação</div>
     <div class="valor"><span id="f2">--</span><u>%</u></div>
@@ -234,7 +234,7 @@ footer.ruim{color:var(--laranja)}
   </div>
   <div class="linha"><label>Alvo · °C<small>PETG: 55, o máximo da caixa</small></label><input data-k="alvo" inputmode="decimal"></div>
   <div class="linha"><label>Histerese · °C<small>quanto cai abaixo do alvo antes de religar</small></label><input data-k="hist" inputmode="decimal"></div>
-  <small class="nota">Nunca liga sozinho: começa bloqueado a cada boot. Salva ao sair do campo.</small>
+  <small class="nota">Nunca liga sozinho: começa desligado a cada boot. Salva ao sair do campo.</small>
 </div></div>
 
 <div class="fundo" id="m-f2" hidden><div class="modal">
@@ -246,7 +246,7 @@ footer.ruim{color:var(--laranja)}
   <div class="linha"><label>Máxima · %<small>com o aquecedor ligado</small></label><input data-k="f2max" inputmode="numeric"></div>
   <div class="linha"><label>Mínima · %<small>com o aquecedor desligado</small></label><input data-k="f2min" inputmode="numeric"></div>
   <div class="linha"><label>Piso de PWM · %<small>vale para os dois ventiladores</small></label><input data-k="pwmin" inputmode="numeric"></div>
-  <small class="nota">Cada campo salva ao sair dele.</small>
+  <small class="nota">Começa desligado a cada boot. Cada campo salva ao sair dele.</small>
 </div></div>
 
 <div class="fundo" id="m-f1" hidden><div class="modal">
@@ -421,7 +421,7 @@ function ciclo() {
     // Aquecedor: o estado e o botao aparecem no cartao e no modal.
     var classeAq = d.estado === "PROTECAO" ? "falha" : d.aquecendo ? "quente" : "";
     todos("[data-estado-aq]").forEach(function (s) { marca(s, d.estado, classeAq); });
-    todos("[data-autoriza]").forEach(function (b) { chave(b, d.autorizado, "BLOQUEAR", "AUTORIZAR"); });
+    todos("[data-autoriza]").forEach(function (b) { chave(b, d.autorizado, "DESLIGAR", "LIGAR"); });
     $("motivo").textContent = d.motivo || "";
     $("c-h").classList.toggle("vivo", d.aquecendo);
     $("alvoCard").textContent = d.cfg.alvo.toFixed(0);
@@ -446,13 +446,14 @@ function ciclo() {
     $("c-f2").classList.toggle("vivo", d.fan2 > 0);
     $("f1").textContent = d.fan1;
     $("f2").textContent = d.fan2;
-    marca($("estadoF1"), d.fan1 > 0 ? "GIRANDO · " + d.fan1 + " %" : "PARADO", d.fan1 > 0 ? "on" : "");
+    marca($("estadoF1"), d.fan1 > 0 ? "LIGADO · " + d.fan1 + " %" : "DESLIGADO", d.fan1 > 0 ? "on" : "");
+    $("f1estado").textContent = d.fan1 > 0 ? "LIGADO" : "DESLIGADO";
 
     var f2 = d.cfg.f2on;
     marca($("estadoF2"), f2 ? "LIGADO · " + d.fan2 + " %" : "DESLIGADO", f2 ? "on" : "");
     $("f2agora").textContent = f2
       ? (d.aquecendo ? "na máxima: aquecedor ligado" : "na mínima: aquecedor desligado")
-      : "parado até ser ligado aqui";
+      : "ligue aqui para começar a girar";
     chave($("btnF2"), f2, "DESLIGAR", "LIGAR");
     $("f2faixa").textContent = f2 ? "MÍN " + d.cfg.f2min + " · MÁX " + d.cfg.f2max : "DESLIGADO";
 

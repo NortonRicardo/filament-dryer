@@ -12,7 +12,9 @@
 //      volta bloqueado."
 //
 // Por isso a autorizacao NAO e salva na memoria: ela nasce falsa a cada boot,
-// de proposito. Tudo o mais e salvo.
+// de proposito. O mesmo vale para o liga/desliga do FAN 02: ao ligar o
+// ESP32, aquecedor e ventiladores comecam todos desligados, e so o painel web
+// liga. Tudo o mais (alvo, faixas, tempos) e salvo.
 //
 // Nesta etapa o aquecedor e o LED azul de bordo (GPIO2), nao o cartucho. A
 // logica e a mesma; so a carga e inofensiva.
@@ -27,7 +29,7 @@
 static const float TETO_ABSOLUTO = 60.0f;
 
 enum EstadoAquecedor {
-  EST_BLOQUEADO,   // ninguem autorizou - estado de nascimento
+  EST_BLOQUEADO,   // ninguem ligou - estado de nascimento ("DESLIGADO")
   EST_OCIOSO,      // autorizado, mas a temperatura ja esta no alvo
   EST_AQUECENDO,   // aquecedor ligado
   EST_FALHA,       // protecao disparou; a autorizacao caiu junto
@@ -36,7 +38,7 @@ enum EstadoAquecedor {
 struct Config {
   float    alvo;        // graus que se quer atingir
   float    histerese;   // quanto pode cair abaixo do alvo antes de religar
-  bool     fan2Ligado;  // circulacao ligada; desligada fica em 0%
+  bool     fan2Ligado;  // circulacao ligada; nasce falso a cada boot, nao e salvo
   uint8_t  fan2Max;     // % da circulacao com o aquecedor ligado
   uint8_t  fan2Min;     // % da circulacao com o aquecedor desligado
   uint8_t  pwmMin;      // % abaixo do qual o ventilador nao parte

@@ -85,9 +85,11 @@ static const Cartao CARTOES[N_CARTOES] = {
   {COL_D, Y_L2, COL_L, LINHA_A, "AQUECEDOR",
    "BLOQUEADO", "C", true, LARANJA},
 
-  {COL_E, Y_L3, COL_L, LINHA_A, "FAN 01", "12V \xC2\xB7 PWM",
+  // O detalhe dos ventiladores e o estado, LIGADO ou DESLIGADO, reescrito
+  // em pintaControle(). O texto aqui e so o do boot.
+  {COL_E, Y_L3, COL_L, LINHA_A, "FAN 01", "DESLIGADO",
    "%", false, AZUL},
-  {COL_D, Y_L3, COL_L, LINHA_A, "FAN 02", "12V \xC2\xB7 PWM",
+  {COL_D, Y_L3, COL_L, LINHA_A, "FAN 02", "DESLIGADO",
    "%", false, ROXO},
 };
 
