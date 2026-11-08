@@ -1,9 +1,11 @@
 #include "servidor.h"
+#include "diario.h"
 
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
+#include <ArduinoOTA.h>
 
 #include "pagina.h"
 #include "tela.h"
@@ -250,6 +252,13 @@ static void rotaConfig() {
   servidor.send(200, "application/json; charset=utf-8", "{\"ok\":true}");
 }
 
+// O diario: o que sairia no monitor serial, para ver com a caixa fechada.
+// Texto puro, do mais antigo ao mais novo; o mais novo fica no fim.
+static void rotaLog() {
+  servidor.sendHeader("Cache-Control", "no-store");
+  servidor.send(200, "text/plain; charset=utf-8", diario.texto());
+}
+
 static void rotaPerdida() {
   servidor.send(404, "text/plain; charset=utf-8", "nao existe\n");
 }
@@ -259,7 +268,7 @@ static void rotaPerdida() {
 // ---------------------------------------------------------------------------
 
 void servidorInicia() {
-  Serial.printf("Wi-Fi            : conectando em \"%s\"\n", WIFI_SSID);
+  diario.printf("Wi-Fi            : conectando em \"%s\"\n", WIFI_SSID);
 
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
@@ -267,6 +276,53 @@ void servidorInicia() {
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
   inicioConexao = millis();
+}
+
+// ---------------------------------------------------------------------------
+// Atualizacao pelo Wi-Fi (OTA)
+//
+// Para gravar firmware com a caixa fechada: pio run -e ota -t upload. A
+// senha e a mesma do Wi-Fi, que ja fica no .env fora do repositorio; o script
+// scripts/senha_ota.py a entrega ao envio.
+//
+// A placa tem dois espacos de programa: o novo e gravado no que esta livre e
+// so vira o ativo no fim, conferido. Se cair no meio, continua o antigo.
+//
+// Seguranca: o aquecedor e desligado antes de receber o primeiro byte. Durante
+// a gravacao o loop fica parado (o controle nao roda), entao o cartucho nao
+// pode ficar ligado esperando. Depois a placa reinicia, e como em todo boot
+// tudo comeca desligado.
+// ---------------------------------------------------------------------------
+static void iniciaAtualizacao() {
+  ArduinoOTA.setHostname(NOME_MDNS);
+  ArduinoOTA.setPassword(WIFI_PASSWORD);
+  ArduinoOTA.setMdnsEnabled(false);  // o mDNS ja esta de pe, acima
+
+  ArduinoOTA.onStart([]() {
+    controleAutoriza(false);
+    diario.println("Atualizacao      : comecou - aquecedor desligado");
+    telaAtualizando(0);
+  });
+  ArduinoOTA.onProgress([](unsigned int feito, unsigned int total) {
+    static uint8_t ultimo = 255;
+    const uint8_t pct = total ? (uint8_t)((uint64_t)feito * 100 / total) : 0;
+    if (pct / 5 != ultimo / 5) {  // redesenha a cada 5%, nao a cada pacote
+      ultimo = pct;
+      telaAtualizando(pct);
+    }
+  });
+  ArduinoOTA.onEnd([]() {
+    diario.println("Atualizacao      : concluida - reiniciando");
+  });
+  ArduinoOTA.onError([](ota_error_t erro) {
+    diario.printf("Atualizacao      : FALHOU (erro %u) - segue o firmware atual\n",
+                  (unsigned)erro);
+    telaFimAtualizacao();
+  });
+
+  ArduinoOTA.begin();
+  MDNS.enableArduino(3232, true);
+  diario.println("Atualizacao      : pelo Wi-Fi liberada (porta 3232, com senha)");
 }
 
 static void sobe() {
@@ -277,6 +333,7 @@ static void sobe() {
   servidor.on("/brilho", rotaBrilho);
   servidor.on("/autorizar", rotaAutorizar);
   servidor.on("/config", rotaConfig);
+  servidor.on("/log", rotaLog);
   servidor.onNotFound(rotaPerdida);
   servidor.begin();
 
@@ -284,14 +341,16 @@ static void sobe() {
   snprintf(endereco, sizeof endereco, "%u.%u.%u.%u:%u", ip[0], ip[1], ip[2],
            ip[3], PORTA);
 
-  Serial.printf("Wi-Fi            : conectado, %d dBm\n", WiFi.RSSI());
-  Serial.printf("Servidor         : http://%s\n", endereco);
+  diario.printf("Wi-Fi            : conectado, %d dBm\n", WiFi.RSSI());
+  diario.printf("Servidor         : http://%s\n", endereco);
 
   if (MDNS.begin(NOME_MDNS)) {
     MDNS.addService("http", "tcp", PORTA);
-    Serial.printf("                   http://%s.local tambem funciona\n",
+    diario.printf("                   http://%s.local tambem funciona\n",
                   NOME_MDNS);
   }
+
+  iniciaAtualizacao();
 
   noAr = true;
   avisouFalha = false;
@@ -300,11 +359,13 @@ static void sobe() {
 void servidorAtende() {
   if (noAr) {
     servidor.handleClient();
+    ArduinoOTA.handle();
 
     if (WiFi.status() != WL_CONNECTED) {
-      Serial.println("Wi-Fi caiu - reconectando");
+      diario.println("Wi-Fi caiu - reconectando");
       snprintf(endereco, sizeof endereco, "reconectando...");
       servidor.stop();
+      ArduinoOTA.end();
       noAr = false;
       inicioConexao = millis();
     }
@@ -321,7 +382,7 @@ void servidorAtende() {
   if (!avisouFalha && millis() - inicioConexao > 20000) {
     avisouFalha = true;
     snprintf(endereco, sizeof endereco, "sem Wi-Fi");
-    Serial.println("Wi-Fi            : nao conectou em 20 s, seguindo sem rede");
+    diario.println("Wi-Fi            : nao conectou em 20 s, seguindo sem rede");
   }
 }
 

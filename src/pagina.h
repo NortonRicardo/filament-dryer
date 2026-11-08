@@ -219,6 +219,7 @@ footer.ruim{color:var(--laranja)}
 </div>
 
 <footer id="estado">carregando…</footer>
+<p style="text-align:center;margin:6px 0 0"><a href="log" style="color:var(--rodape);font:700 10px var(--mono);letter-spacing:1.2px">VER LOG</a></p>
 
 <!-- ======================= Modais. Abrem ao tocar no cartao. ======================= -->
 <div class="fundo" id="m-t" hidden><div class="modal">

@@ -34,6 +34,7 @@
 #include <Preferences.h>
 
 #include "controle.h"
+#include "diario.h"
 #include "servidor.h"
 #include "tela.h"
 
@@ -66,6 +67,18 @@ static const uint8_t PIN_SCL = 22;
 static const uint8_t ENDERECOS[] = {0x76, 0x77};
 
 static const uint32_t INTERVALO_LEITURA = 2000;      // ms entre leituras
+
+// I2C a 20 kHz em vez dos 100 kHz padrao. O sensor fica a ~1 m da placa, e
+// I2C foi feito para centimetros: cabo longo tem capacitancia, deixa as bordas
+// do sinal moles e pega o ruido do cartucho chaveando 4,2 A. Mais devagar, o
+// sinal tem tempo de assentar. Para uma leitura a cada 2 s sobra velocidade.
+static const uint32_t I2C_FREQ = 20000;
+
+// Leituras falhas seguidas antes de dar o sensor por perdido. Uma falha
+// isolada (ruido, ou o sensor reiniciado por um tranco de tensao) nao deve
+// derrubar a secagem; um sensor solto de verdade falha sempre e e pego em
+// 3 x 2 s = 6 s.
+static const uint8_t FALHAS_MAX = 3;
 static const uint32_t INTERVALO_RETENTATIVA = 5000;  // ms entre buscas do sensor
 
 static bool     sensorOk = false;
@@ -91,25 +104,26 @@ static const char *nomeChip(uint8_t id) {
 // Lista quem responde no barramento. Se o sensor nao aparecer, isso separa
 // "ligacao errada" de "endereco diferente do esperado".
 static void varreI2C() {
-  Serial.println("Varredura I2C:");
+  diario.println("Varredura I2C:");
   uint8_t achados = 0;
 
   for (uint8_t endereco = 1; endereco < 127; endereco++) {
     Wire.beginTransmission(endereco);
     if (Wire.endTransmission() == 0) {
-      Serial.printf("  0x%02X respondeu\n", endereco);
+      diario.printf("  0x%02X respondeu\n", endereco);
       achados++;
     }
   }
 
   if (achados == 0) {
-    Serial.println("  ninguem respondeu - confira SDA, SCL, GND e os 3V3");
+    diario.println("  ninguem respondeu - confira SDA, SCL, GND e os 3V3");
   }
 }
 
 static bool iniciaSensor() {
   for (uint8_t endereco : ENDERECOS) {
     if (!bme.begin(endereco, &Wire)) continue;
+    Wire.setClock(I2C_FREQ);  // a biblioteca pode reabrir o barramento
 
     enderecoSensor = endereco;
 
@@ -390,7 +404,7 @@ static void salvaMaxima(float valor) {
   nvs.putFloat(NVS_TMAX, valor);
   nvs.end();
 
-  Serial.printf("Temp. maxima     : %.1f C (salva)\n", valor);
+  diario.printf("Temp. maxima     : %.1f C (salva)\n", valor);
 }
 
 // Linha de baixo do cartao de temperatura. Em verde quando configurada, para
@@ -526,7 +540,7 @@ void telaDefineLigada(bool ligada) {
   else        tft.fillScreen(TFT_BLACK);
   aplicaLuz();
 
-  Serial.printf("Tela             : %s\n", ligada ? "ligada" : "apagada");
+  diario.printf("Tela             : %s\n", ligada ? "ligada" : "apagada");
 }
 
 bool telaEstaLigada() { return telaLigada; }
@@ -545,6 +559,46 @@ void telaDefineBrilho(uint8_t pct) {
 
 uint8_t telaBrilho() { return brilho; }
 
+// Tela de atualizacao: titulo e barra de progresso. Desenhada direto, sem os
+// cartoes, porque durante a gravacao o loop nao roda e o painel ficaria
+// congelado com valores velhos - e parecendo que o aquecedor ainda funciona.
+void telaAtualizando(uint8_t pct) {
+  static bool montada = false;
+  const int16_t bx = 30, by = ALTURA / 2 + 10, bl = LARGURA - 60, ba = 18;
+
+  if (pct == 0 || !montada) {
+    montada = true;
+    tft.fillScreen(FUNDO);
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(TEXTO, FUNDO);
+    tft.drawString("ATUALIZANDO", LARGURA / 2, ALTURA / 2 - 40, 4);
+    tft.setTextColor(MUDO, FUNDO);
+    tft.drawString("aquecedor desligado - nao desligue a energia",
+                   LARGURA / 2, ALTURA / 2 - 12, 2);
+    tft.drawRoundRect(bx, by, bl, ba, 6, BORDA);
+  }
+
+  tft.fillRoundRect(bx + 2, by + 2, (bl - 4) * pct / 100, ba - 4, 4, CIANO);
+
+  char buf[8];
+  snprintf(buf, sizeof buf, "%u%%", pct);
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextColor(TEXTO, FUNDO);
+  tft.setTextPadding(60);
+  tft.drawString(buf, LARGURA / 2, by + ba + 22, 4);
+  tft.setTextPadding(0);
+
+  if (!telaLigada) {          // imagem apagada pelo painel: mostra mesmo assim
+    telaLigada = true;
+    aplicaLuz();
+  }
+}
+
+void telaFimAtualizacao() {
+  desenhaPainel();
+  aplicaLuz();
+}
+
 bool painelTempMaxima(float &valor) {
   valor = tempMaxima;
   return temMaxima;
@@ -561,36 +615,39 @@ void setup() {
   Serial.begin(115200);
   delay(400);  // da tempo ao monitor serial de abrir
 
-  Serial.println();
-  Serial.println("==================================================");
-  Serial.println("  Estufa de filamento - painel THERMO");
-  Serial.println("==================================================");
-  Serial.printf("Driver da tela   : %s\n", DRIVER);
-  Serial.printf("Inversao de cor  : %s\n", INVERSAO);
-  Serial.printf("Barramento SPI   : %d MHz\n", SPI_FREQUENCY / 1000000);
-  Serial.printf("Pinos da tela    : SCK=%d MOSI=%d CS=%d DC=%d RST=%d\n",
+  diario.println();
+  diario.println("==================================================");
+  diario.println("  Estufa de filamento - painel THERMO");
+  diario.println("==================================================");
+  diario.printf("Driver da tela   : %s\n", DRIVER);
+  diario.printf("Inversao de cor  : %s\n", INVERSAO);
+  diario.printf("Barramento SPI   : %d MHz\n", SPI_FREQUENCY / 1000000);
+  diario.printf("Pinos da tela    : SCK=%d MOSI=%d CS=%d DC=%d RST=%d\n",
                 TFT_SCLK, TFT_MOSI, TFT_CS, TFT_DC, TFT_RST);
-  Serial.printf("Pinos do sensor  : SDA=%d SCL=%d\n", PIN_SDA, PIN_SCL);
+  diario.printf("Pinos do sensor  : SDA=%d SCL=%d\n", PIN_SDA, PIN_SCL);
 
   controleInicia();
   servidorInicia();  // nao bloqueia: a rede sobe em paralelo ao resto
   carregaMaxima();
-  Serial.printf("Temp. maxima     : %.1f C\n", tempMaxima);
+  diario.printf("Temp. maxima     : %.1f C\n", tempMaxima);
 
   Wire.begin(PIN_SDA, PIN_SCL);
+  Wire.setClock(I2C_FREQ);
+  diario.printf("I2C              : %lu kHz (cabo longo ate o sensor)\n",
+                (unsigned long)(I2C_FREQ / 1000));
   varreI2C();
 
   sensorOk = iniciaSensor();
   if (sensorOk) {
     const uint8_t id = bme.sensorID();
-    Serial.printf("Sensor           : 0x%02X, chip ID 0x%02X (%s)\n",
+    diario.printf("Sensor           : 0x%02X, chip ID 0x%02X (%s)\n",
                   enderecoSensor, id, nomeChip(id));
     if (id != 0x60) {
-      Serial.println("ATENCAO: nao e um BME280. A umidade vai sair invalida.");
+      diario.println("ATENCAO: nao e um BME280. A umidade vai sair invalida.");
     }
   } else {
-    Serial.println("Sensor           : NAO encontrado em 0x76 nem 0x77");
-    Serial.println("                   seguindo sem ele, tentando de novo a cada 5 s");
+    diario.println("Sensor           : NAO encontrado em 0x76 nem 0x77");
+    diario.println("                   seguindo sem ele, tentando de novo a cada 5 s");
   }
 
   iniciaLuz();  // antes do init: a luz so acende com a imagem pronta
@@ -600,9 +657,9 @@ void setup() {
   // layout de tela.h foi feito para retrato.
   tft.setRotation(0);
 
-  Serial.printf("Resolucao em uso : %d x %d\n", tft.width(), tft.height());
-  Serial.printf("Luz de fundo     : PWM no GPIO%u, brilho %u%%\n", PIN_LUZ, brilho);
-  Serial.println("--------------------------------------------------");
+  diario.printf("Resolucao em uso : %d x %d\n", tft.width(), tft.height());
+  diario.printf("Luz de fundo     : PWM no GPIO%u, brilho %u%%\n", PIN_LUZ, brilho);
+  diario.println("--------------------------------------------------");
 
   desenhaPainel();
   aplicaLuz();
@@ -638,16 +695,33 @@ void loop() {
     if (agora - ultimaLeitura >= INTERVALO_LEITURA) {
       ultimaLeitura = agora;
 
+      static uint8_t falhasSeguidas = 0;
+
       float temperatura, umidade;
       if (leSensor(temperatura, umidade)) {
+        if (falhasSeguidas > 0) {
+          diario.printf("Sensor           : voltou a ler (%.1f C)\n", temperatura);
+        }
+        falhasSeguidas = 0;
         mostraLeitura(temperatura, umidade);
         servidorRegistra(temperatura, umidade);
         controleNovaLeitura(true, temperatura);
         if (telaLigada) pintaControle();
+      } else if (++falhasSeguidas < FALHAS_MAX) {
+        // Falha isolada: ruido no cabo, ou o sensor se reiniciou num tranco
+        // de tensao e perdeu a configuracao (volta sem medir umidade).
+        // Reconfigura e tenta na proxima leitura. Ate la o controle segue
+        // com a ultima potencia - sao 2 s.
+        diario.printf("Sensor           : leitura falhou (%u de %u), reconfigurando\n",
+                      falhasSeguidas, FALHAS_MAX);
+        iniciaSensor();
       } else {
-        // Parou de responder: cabo solto, provavelmente. Volta a procurar
-        // em vez de repetir o ultimo valor, que pareceria um sensor travado.
-        Serial.println("Sensor parou de responder - voltando a procurar");
+        // Falhou FALHAS_MAX vezes seguidas: cabo solto, provavelmente. Volta
+        // a procurar em vez de repetir o ultimo valor, que pareceria um
+        // sensor travado.
+        diario.printf("Sensor           : %u leituras falhas seguidas - perdido, voltando a procurar\n",
+                      FALHAS_MAX);
+        falhasSeguidas = 0;
         sensorOk = false;
         mostraSemSensor();
         servidorSemSensor();
@@ -660,7 +734,7 @@ void loop() {
 
     if (iniciaSensor()) {
       sensorOk = true;
-      Serial.printf("Sensor apareceu em 0x%02X\n", enderecoSensor);
+      diario.printf("Sensor apareceu em 0x%02X\n", enderecoSensor);
     }
   }
 

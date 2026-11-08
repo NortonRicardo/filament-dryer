@@ -1,4 +1,5 @@
 #include "controle.h"
+#include "diario.h"
 
 #include <Arduino.h>
 #include <Preferences.h>
@@ -91,6 +92,8 @@ static bool     saturado = false;
 static uint32_t desdeSaturado = 0;
 static float    tempAoSaturar = 0;
 
+static float    ultimaTemp = NAN;   // so para o registro da protecao
+
 // ---------------------------------------------------------------------------
 // PWM
 // ---------------------------------------------------------------------------
@@ -124,7 +127,7 @@ static void definePotencia(float pct) {
     desdeDesligou = millis();
     digitalWrite(PIN_AQUECEDOR, LOW);  // nao espera o fim da janela
   }
-  Serial.printf("Aquecedor        : %s\n", liga ? "aquecendo" : "parado (0%)");
+  diario.printf("Aquecedor        : %s\n", liga ? "aquecendo" : "parado (0%)");
 }
 
 static void zeraPid() {
@@ -134,12 +137,14 @@ static void zeraPid() {
 }
 
 static void falha(const char *porque) {
+  const float potenciaAntes = potencia;
   definePotencia(0);
   zeraPid();
   autorizado = false;       // queda de protecao derruba a autorizacao junto
   estado = EST_FALHA;
   motivo = porque;
-  Serial.printf("PROTECAO         : %s\n", porque);
+  diario.printf("PROTECAO         : %s (ultima leitura %.1f C, potencia era %.0f%%)\n",
+                porque, ultimaTemp, potenciaAntes);
 }
 
 // ---------------------------------------------------------------------------
@@ -222,15 +227,15 @@ void controleInicia() {
   cfg.fan2Ligado = false;
   estado = EST_BLOQUEADO;
 
-  Serial.printf("Aquecedor        : DESLIGADO no boot, por regra\n");
-  Serial.printf("Cartucho         : GPIO%u, PWM em janela de %lu ms, alvo %.1f C, teto %.0f C\n",
+  diario.printf("Aquecedor        : DESLIGADO no boot, por regra\n");
+  diario.printf("Cartucho         : GPIO%u, PWM em janela de %lu ms, alvo %.1f C, teto %.0f C\n",
                 PIN_AQUECEDOR, (unsigned long)JANELA_MS, cfg.alvo, TETO_ABSOLUTO);
-  Serial.printf("PID              : kp %.2f  ki %.3f  kd %.1f\n", cfg.kp, cfg.ki, cfg.kd);
-  Serial.printf("Protecao         : corta se %u min no maximo sem subir 1 C\n",
+  diario.printf("PID              : kp %.2f  ki %.3f  kd %.1f\n", cfg.kp, cfg.ki, cfg.kd);
+  diario.printf("Protecao         : corta se %u min no maximo sem subir 1 C\n",
                 cfg.semSubirMin);
-  Serial.printf("Ventiladores     : P%d e P%d, PWM %lu Hz, piso %u%%\n",
+  diario.printf("Ventiladores     : P%d e P%d, PWM %lu Hz, piso %u%%\n",
                 PIN_FAN1, PIN_FAN2, (unsigned long)PWM_FREQ, cfg.pwmMin);
-  Serial.printf("Circulacao       : DESLIGADA no boot, max %u%%, min %u%%\n",
+  diario.printf("Circulacao       : DESLIGADA no boot, max %u%%, min %u%%\n",
                 cfg.fan2Max, cfg.fan2Min);
 
   atualizaVentiladores();  // tudo em 0% ate o painel web ligar
@@ -244,6 +249,8 @@ void controleNovaLeitura(bool sensorOk, float temperatura) {
     atualizaVentiladores();
     return;
   }
+
+  if (sensorOk) ultimaTemp = temperatura;
 
   if (!sensorOk) {
     falha("sensor sem leitura valida");
@@ -352,7 +359,7 @@ void controleAutoriza(bool v) {
   definePotencia(0);
   zeraPid();
   estado = v ? EST_OCIOSO : EST_BLOQUEADO;
-  Serial.printf("Autorizacao      : %s\n", v ? "concedida pelo painel" : "retirada");
+  diario.printf("Autorizacao      : %s\n", v ? "concedida pelo painel" : "retirada");
   atualizaVentiladores();
 }
 
@@ -397,7 +404,7 @@ bool controleDefineConfig(const Config &n, const char **porque) {
   nvs.putUShort("rmp1", cfg.rampa1);
   nvs.putUShort(NVS_SUBIR, cfg.semSubirMin);
 
-  Serial.printf("Config salva     : alvo %.1f C, PID %.2f/%.3f/%.1f, circulacao %s %u-%u%%\n",
+  diario.printf("Config salva     : alvo %.1f C, PID %.2f/%.3f/%.1f, circulacao %s %u-%u%%\n",
                 cfg.alvo, cfg.kp, cfg.ki, cfg.kd, cfg.fan2Ligado ? "ligada" : "desligada",
                 cfg.fan2Min, cfg.fan2Max);
   // Aplica na hora: ligar, desligar ou mudar a faixa nao espera a proxima

@@ -104,6 +104,11 @@ bool telaEstaLigada();
 void telaDefineBrilho(uint8_t pct);
 uint8_t telaBrilho();
 
+// Atualizacao de firmware pelo Wi-Fi: tela de progresso e volta ao painel se
+// ela falhar (no sucesso a placa reinicia sozinha).
+void telaAtualizando(uint8_t pct);
+void telaFimAtualizacao();
+
 // Temperatura maxima configurada no painel web. Salva na memoria e mostrada
 // em verde embaixo da temperatura. Ainda nao entra na regra do controle.
 static const float TMAX_MIN = 20.0f;  // vai ate TETO_ABSOLUTO (controle.h)
