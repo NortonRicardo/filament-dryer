@@ -42,9 +42,12 @@ static_assert(sizeof(SENHA_PADRAO) - 1 >= 8,
 // Texto da listra do rodape, alternando com "SEM REDE EXTERNA".
 static const char *AVISO_PORTAL = "REDE ESTUFA-SETUP \xC2\xB7 SENHA " SENHA_PADRAO;
 
-// 5 minutos de historico. O main le o sensor a cada 2 s, entao 150 amostras
-// cobrem a janela pedida com 600 bytes de RAM.
-static const uint16_t N_HIST = 150;
+// 1 hora de historico para o grafico: um ponto a cada 15 s, a media das
+// leituras daquele intervalo. Por tempo, e nao por leitura, porque o main le
+// a cada 2 s ou a cada 10 s (cartucho ligado) - por leitura, a largura do
+// grafico mudaria de significado. 240 pontos x 2 vetores = ~2 KB de RAM.
+static const uint16_t N_HIST = 240;
+static const uint32_t PONTO_MS = 15000;
 
 static WebServer servidor(PORTA);
 
@@ -52,6 +55,11 @@ static float histTemp[N_HIST];
 static float histUmid[N_HIST];
 static uint16_t nHist = 0;    // quantas entraram, satura em N_HIST
 static uint16_t proxima = 0;  // posicao de escrita no anel
+
+// Leituras acumuladas para o ponto em curso.
+static float    somaTemp = 0, somaUmid = 0;
+static uint16_t nSoma = 0;
+static uint32_t inicioPonto = 0;
 
 static float ultimaTemp = 0, ultimaUmid = 0;
 static bool temLeitura = false;
@@ -85,11 +93,28 @@ static uint32_t ultimaVarredura = 0;
 // Historico
 // ---------------------------------------------------------------------------
 
-void servidorRegistra(float temperatura, float umidade) {
-  histTemp[proxima] = temperatura;
-  histUmid[proxima] = umidade;
+// Fecha o ponto em curso: entra no grafico a media do intervalo. Sem
+// nenhuma leitura no intervalo (sensor perdido), nao entra nada.
+static void fechaPonto() {
+  if (nSoma == 0) return;
+  histTemp[proxima] = somaTemp / nSoma;
+  histUmid[proxima] = somaUmid / nSoma;
   proxima = (proxima + 1) % N_HIST;
   if (nHist < N_HIST) nHist++;
+  somaTemp = somaUmid = 0;
+  nSoma = 0;
+}
+
+void servidorRegistra(float temperatura, float umidade) {
+  // A primeira leitura vira ponto na hora, para o grafico nao nascer vazio.
+  const bool primeira = nHist == 0 && nSoma == 0;
+  somaTemp += temperatura;
+  somaUmid += umidade;
+  nSoma++;
+  if (primeira) {
+    fechaPonto();
+    inicioPonto = millis();
+  }
 
   ultimaTemp = temperatura;
   ultimaUmid = umidade;
@@ -124,7 +149,7 @@ static void rotaPagina() {
 // vetores, e isso dispensa uma dependencia inteira.
 static void rotaDados() {
   String json;
-  json.reserve(2048);  // 150 amostras x 2 vetores x ~6 caracteres, com folga
+  json.reserve(4096);  // 240 pontos x 2 vetores x ~6 caracteres, com folga
 
   json += "{\"sensor\":";
   json += temLeitura ? "true" : "false";
@@ -648,6 +673,13 @@ static void conectou() {
 
 void servidorAtende() {
   servidor.handleClient();
+
+  if (millis() - inicioPonto >= PONTO_MS) {
+    inicioPonto += PONTO_MS;
+    // Atrasou muito (loop parado)? Nao tenta recuperar pontos perdidos.
+    if (millis() - inicioPonto >= PONTO_MS) inicioPonto = millis();
+    fechaPonto();
+  }
 
   if (portal) {
     dns.processNextRequest();

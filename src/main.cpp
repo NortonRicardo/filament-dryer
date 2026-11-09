@@ -73,11 +73,43 @@ static const uint8_t ENDERECOS[] = {0x76, 0x77};
 
 static const uint32_t INTERVALO_LEITURA = 2000;      // ms entre leituras
 
-// Quanto tempo o cartucho fica desligado antes de cada leitura, para o
-// barramento do sensor ficar quieto. Carga resistiva corta na hora; esta
-// folga e para a fonte e a fiacao acomodarem. 20 ms a cada 2 s custam 1% da
-// potencia - invisivel num bloco com inercia de minutos.
+// Com o cartucho ligado e a caixa longe do teto, le menos: cada leitura com
+// os 4,2 A passando e uma chance de o I2C se corromper, e a caixa sobe
+// ~0,07 C/min - em 10 s nao muda nada que o PID ou o teto precisem ver.
+// Perto do teto, ou depois de uma falha, volta para INTERVALO_LEITURA.
+static const uint32_t INTERVALO_AQUECENDO = 10000;
+static const float    MARGEM_TETO = 10.0f;   // C abaixo do teto = "longe"
+
+// Com o cartucho ligado o I2C se corrompe de vez em quando (testado em
+// 09/11/2026, ja com o VIN ressoldado e os pull-ups de 4,7 k). Entao:
+//
+// 1. Abaixo de 100% de potencia, a leitura espera o trecho da janela de PWM
+//    em que o cartucho ja esta desligado: sem pausa nenhuma. LEITURA_MS e o
+//    quanto esse trecho precisa durar (medicao de ~10 ms + I2C a 20 kHz).
+//    Se em ESPERA_TRECHO_MS ele nao vier, le assim mesmo.
+// 2. A 100%, le com o cartucho ligado. Se falhar, escala:
+//      falhas 0 e 1 : cartucho ligado
+//      falha 2      : pausa curta - a medicao acontece com ele ligado e so
+//                     a busca dos dados (~8 ms) e feita com ele desligado,
+//                     depois de SILENCIO_CURTO_MS de folga
+//      falhas 3 e 4 : pausa longa - desligado por SILENCIO_MS antes e
+//                     durante a leitura inteira, reconfigurando se falhar
+//    Carga resistiva corta na hora; a folga e para a fonte e a fiacao
+//    acomodarem.
+static const uint32_t LEITURA_MS = 50;
+static const uint32_t ESPERA_TRECHO_MS = 4000;
+static const uint8_t  FALHA_PAUSA_CURTA = 2;
+static const uint8_t  FALHA_PAUSA_LONGA = 3;
+static const uint32_t SILENCIO_CURTO_MS = 5;
 static const uint32_t SILENCIO_MS = 20;
+
+// Uma leitura corrompida pode dar um valor plausivel (30,0 C entre leituras
+// de 29,5): passa pelos filtros de salto. A caixa muda ~0,07 C/min, entao
+// uma diferenca maior que CONFIRMA_C so e aceita se a leitura seguinte, 2 s
+// depois, confirmar. Depois de CONFIRMA_MAX leituras sem confirmar (mudanca
+// rapida de verdade, como porta aberta) aceita a ultima.
+static const float   CONFIRMA_C = 0.3f;
+static const uint8_t CONFIRMA_MAX = 3;
 
 // I2C a 20 kHz em vez dos 100 kHz padrao. O sensor fica a ~1 m da placa, e
 // I2C foi feito para centimetros: cabo longo tem capacitancia, deixa as bordas
@@ -98,6 +130,14 @@ static const uint32_t INTERVALO_RETENTATIVA = 5000;  // ms entre buscas do senso
 static bool     sensorOk = false;
 static uint8_t  enderecoSensor = 0;
 static uint32_t ultimaLeitura = 0;
+static uint8_t  falhasSeguidas = 0;
+
+// Leitura com diferenca grande esperando confirmacao (ver CONFIRMA_C).
+static bool     pendente = false;
+static float    tempPendente = 0;
+static uint8_t  naoConfirmadas = 0;
+
+enum ModoLeitura { COM_CARTUCHO, PAUSA_CURTA, PAUSA_LONGA };
 
 // ---------------------------------------------------------------------------
 // Sensor
@@ -208,6 +248,11 @@ static const float TEMP_PLAUSIVEL_MAX = 100.0f;
 // no maximo. Um salto maior que isso e ruido, nao temperatura.
 static const float SALTO_MAX_C = 5.0f;
 
+// Idem para a umidade. A leitura corrompida as vezes estraga so ela, e a
+// biblioteca entrega exatamente 100,0 % - a temperatura passava no filtro e
+// o 100 % ia para a tela. Abrir a porta muda alguns % em 2 s, nao 15.
+static const float SALTO_MAX_UR = 15.0f;
+
 // Descartar nao vira falha aqui: leSensor devolve false e o loop ja trata
 // isso com o seu proprio contador de falhas seguidas.
 
@@ -219,12 +264,22 @@ static bool leituraPlausivel(float t, float u) {
   if (t < TEMP_PLAUSIVEL_MIN || t > TEMP_PLAUSIVEL_MAX) return false;
   if (u < 0.0f || u > 100.0f) return false;
   if (temLeitura && fabsf(t - ultimaTemp) > SALTO_MAX_C) return false;
+  if (temLeitura && fabsf(u - ultimaUmid) > SALTO_MAX_UR) return false;
   return true;
 }
 
-static bool leSensor(float &temperatura, float &umidade) {
+// Quem chama religa o cartucho (controleSilenciaSaida(false)) depois.
+static bool leSensor(float &temperatura, float &umidade, ModoLeitura modo) {
+  if (modo == PAUSA_LONGA) {
+    controleSilenciaSaida(true);
+    delay(SILENCIO_MS);
+  }
   if (!bme.takeForcedMeasurement()) return false;
 
+  if (modo == PAUSA_CURTA) {
+    controleSilenciaSaida(true);
+    delay(SILENCIO_CURTO_MS);
+  }
   temperatura = bme.readTemperature();
   umidade     = bme.readHumidity();
 
@@ -922,25 +977,64 @@ void loop() {
     if (telaLigada) desenhaRodape(endereco);
   }
 
+  // Cartucho ligado, caixa longe do teto e nada pendente: le a cada 10 s.
+  // Em qualquer outro caso, a cada 2 s.
+  const bool leituraEspacada = falhasSeguidas == 0 && !pendente
+                               && controleAquecedorLigado()
+                               && ultimaTemp < TETO_ABSOLUTO - MARGEM_TETO;
+  const uint32_t intervalo = leituraEspacada ? INTERVALO_AQUECENDO
+                                             : INTERVALO_LEITURA;
+
+  // Abaixo de 100% espera o trecho em que o PWM ja desligou o cartucho -
+  // ate ESPERA_TRECHO_MS; depois disso le assim mesmo.
+  const bool esperaTrecho = !controleSaidaQuieta(LEITURA_MS)
+                            && controleTemTrechoQuieto(LEITURA_MS)
+                            && agora - ultimaLeitura < intervalo + ESPERA_TRECHO_MS;
+
   if (sensorOk) {
-    if (agora - ultimaLeitura >= INTERVALO_LEITURA) {
+    if (agora - ultimaLeitura >= intervalo && !esperaTrecho) {
       ultimaLeitura = agora;
 
-      static uint8_t falhasSeguidas = 0;
-
-      // Le com o cartucho desligado. Os 4,2 A corrompem o I2C deste cabo, e
-      // nenhuma blindagem, capacitor ou separacao de terra resolveu. Em vez
-      // de brigar com o acoplamento, a leitura acontece quando ele nao
-      // existe. O PID nem fica sabendo: a potencia pedida nao muda.
-      controleSilenciaSaida(true);
-      delay(SILENCIO_MS);
+      // Escala conforme as falhas seguidas (ver FALHA_PAUSA_CURTA). O PID
+      // nem fica sabendo das pausas: a potencia pedida nao muda.
+      const ModoLeitura modo = falhasSeguidas >= FALHA_PAUSA_LONGA ? PAUSA_LONGA
+                             : falhasSeguidas >= FALHA_PAUSA_CURTA ? PAUSA_CURTA
+                             : COM_CARTUCHO;
 
       float temperatura, umidade;
-      const bool leu = leSensor(temperatura, umidade);
+      bool leu = leSensor(temperatura, umidade, modo);
 
+      // Reconfigurar (bme.begin) espera a calibracao num laco sem limite de
+      // tempo: com o barramento corrompido pelo cartucho, nao sai nunca. Por
+      // isso so acontece na pausa longa, com ele desligado.
+      const bool reconfigurou = !leu && modo == PAUSA_LONGA
+                                && falhasSeguidas + 1 < FALHAS_MAX;
+      if (reconfigurou) iniciaSensor();
+
+      // Religa ja, sem esperar a proxima volta do loop.
       controleSilenciaSaida(false);
+      controleTick();
 
-      if (leu) {
+      // Diferenca grande e plausivel: so vale se a proxima confirmar.
+      bool aguardando = false;
+      if (leu && temLeitura && fabsf(temperatura - ultimaTemp) > CONFIRMA_C) {
+        const bool confirma = pendente
+                              && fabsf(temperatura - tempPendente) <= CONFIRMA_C;
+        if (!confirma && naoConfirmadas < CONFIRMA_MAX) {
+          diario.printf("Sensor           : %.2f C sem confirmar (ultima %.2f C), lendo de novo\n",
+                        temperatura, ultimaTemp);
+          pendente = true;
+          tempPendente = temperatura;
+          naoConfirmadas++;
+          aguardando = true;
+        }
+      }
+
+      if (aguardando) {
+        // Nem leitura boa nem falha: so espera a proxima, em 2 s.
+      } else if (leu) {
+        pendente = false;
+        naoConfirmadas = 0;
         if (falhasSeguidas > 0) {
           diario.printf("Sensor           : voltou a ler (%.1f C)\n", temperatura);
         }
@@ -951,24 +1045,17 @@ void loop() {
         controleNovaLeitura(true, temperatura);
         if (telaLigada) pintaControle();
       } else if (++falhasSeguidas < FALHAS_MAX) {
-        // Falha isolada: ruido no cabo, ou o sensor se reiniciou num tranco
-        // de tensao e perdeu a configuracao (volta sem medir umidade).
-        // Reconfigura e tenta na proxima leitura. Ate la o controle segue
-        // com a ultima potencia - sao 2 s.
-        // Uma falha isolada e glitch de barramento: o sensor nao perdeu nada,
-        // so a transferencia se corrompeu, e a proxima leitura vem boa.
-        // Reconfigurar significa bme.begin(), que faz um reset no sensor e
-        // espera a calibracao num laco SEM limite de tempo - com o barramento
-        // devolvendo 0xFF ali, ele nunca sai. So vale a pena a partir da
-        // segunda falha seguida, que ai o sensor pode ter reiniciado mesmo.
-        if (falhasSeguidas >= 2) {
-          diario.printf("Sensor           : leitura falhou (%u de %u), reconfigurando\n",
-                        falhasSeguidas, FALHAS_MAX);
-          iniciaSensor();
-        } else {
-          diario.printf("Sensor           : leitura falhou (%u de %u), tentando de novo\n",
-                        falhasSeguidas, FALHAS_MAX);
-        }
+        // Falha isolada: quase sempre o cartucho corrompendo a transferencia;
+        // o sensor nao perdeu nada e a proxima leitura vem boa. Tenta de novo
+        // em 2 s, escalando a pausa (e, na longa, reconfigurando - o sensor
+        // pode ter reiniciado num tranco de tensao). Ate la o controle segue
+        // com a ultima potencia.
+        const char *proxima = falhasSeguidas >= FALHA_PAUSA_LONGA ? "pausa longa"
+                            : falhasSeguidas >= FALHA_PAUSA_CURTA ? "pausa curta"
+                            : "cartucho ligado";
+        diario.printf("Sensor           : leitura falhou (%u de %u)%s, a proxima com %s\n",
+                      falhasSeguidas, FALHAS_MAX,
+                      reconfigurou ? ", reconfigurado" : "", proxima);
       } else {
         // Falhou FALHAS_MAX vezes seguidas: cabo solto, provavelmente. Volta
         // a procurar em vez de repetir o ultimo valor, que pareceria um
@@ -976,6 +1063,8 @@ void loop() {
         diario.printf("Sensor           : %u leituras falhas seguidas - perdido, voltando a procurar\n",
                       FALHAS_MAX);
         falhasSeguidas = 0;
+        pendente = false;
+        naoConfirmadas = 0;
         sensorOk = false;
         mostraSemSensor();
         servidorSemSensor();

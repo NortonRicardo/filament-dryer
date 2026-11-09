@@ -191,14 +191,14 @@ footer.ruim{color:var(--laranja)}
 </div>
 
 <div class="fig">
-  <svg viewBox="0 0 320 150" preserveAspectRatio="none" aria-label="Temperatura e umidade dos últimos 5 minutos">
+  <svg viewBox="0 0 320 150" preserveAspectRatio="none" aria-label="Temperatura e umidade da última hora">
     <line x1="0" y1="37.5" x2="320" y2="37.5" stroke="#202b38"/>
     <line x1="0" y1="75"   x2="320" y2="75"   stroke="#202b38"/>
     <line x1="0" y1="112.5" x2="320" y2="112.5" stroke="#202b38"/>
     <polyline id="lt" fill="none" stroke="#ff9b52" stroke-width="2" vector-effect="non-scaling-stroke" points=""/>
     <polyline id="lu" fill="none" stroke="#42d7f5" stroke-width="2" vector-effect="non-scaling-stroke" points=""/>
   </svg>
-  <div class="eixo"><span>5 MIN ATRÁS</span><span>AGORA</span></div>
+  <div class="eixo"><span>1 H ATRÁS</span><span>AGORA</span></div>
   <div class="leg">
     <span><s style="background:#ff9b52"></s>0–60 °C</span>
     <span><s style="background:#42d7f5"></s>0–100 %</span>

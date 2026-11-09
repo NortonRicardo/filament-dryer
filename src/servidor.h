@@ -16,7 +16,7 @@ void servidorInicia();
 // Chamar no loop. Cuida da conexao e atende os pedidos.
 void servidorAtende();
 
-// Guarda uma leitura no historico dos ultimos 5 minutos.
+// Guarda uma leitura no historico do grafico (1 hora, um ponto a cada 15 s).
 void servidorRegistra(float temperatura, float umidade);
 
 // Marca que o sensor sumiu, para a pagina dizer isso em vez de mostrar o

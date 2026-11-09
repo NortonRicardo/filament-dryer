@@ -348,14 +348,34 @@ void controleSilenciaSaida(bool silenciar) {
   if (silenciar) digitalWrite(PIN_AQUECEDOR, LOW);
 }
 
+// Quanto de cada janela o cartucho fica ligado, em ms.
+static uint32_t ligadoNaJanela() {
+  return (uint32_t)(potencia * JANELA_MS / 100.0f);
+}
+
+static bool podeLigar() {
+  return autorizado && estado != EST_FALHA && potencia > 0;
+}
+
 void controleTick() {
-  const bool pode = autorizado && estado != EST_FALHA && potencia > 0
-                    && !saidaSilenciada;
+  const bool pode = podeLigar() && !saidaSilenciada;
   const uint32_t fase = millis() % JANELA_MS;
-  const bool ligado = pode && fase < (uint32_t)(potencia * JANELA_MS / 100.0f);
+  const bool ligado = pode && fase < ligadoNaJanela();
   digitalWrite(PIN_AQUECEDOR, ligado ? HIGH : LOW);
 
   atualizaVentiladores();
+}
+
+bool controleSaidaQuieta(uint32_t ms) {
+  if (!podeLigar()) return true;
+  if (potencia >= 100.0f) return false;
+  const uint32_t fase = millis() % JANELA_MS;
+  return fase >= ligadoNaJanela() && JANELA_MS - fase >= ms;
+}
+
+bool controleTemTrechoQuieto(uint32_t ms) {
+  return podeLigar() && potencia < 100.0f
+         && JANELA_MS - ligadoNaJanela() >= ms;
 }
 
 EstadoAquecedor controleEstado() { return estado; }

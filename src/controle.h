@@ -75,6 +75,15 @@ void controleTick();
 // independente do que o PID pediu.
 void controleSilenciaSaida(bool silenciar);
 
+// Para ler o sensor no trecho em que o cartucho ja esta desligado pelo
+// proprio PWM, sem pausa extra.
+//   controleSaidaQuieta(ms): o cartucho esta desligado agora e continua
+//     desligado pelos proximos ms (ou nem esta ligado).
+//   controleTemTrechoQuieto(ms): a potencia esta entre 0 e 100% e a parte
+//     desligada de cada janela de 2 s tem pelo menos ms - vale esperar.
+bool controleSaidaQuieta(uint32_t ms);
+bool controleTemTrechoQuieto(uint32_t ms);
+
 EstadoAquecedor controleEstado();
 const char *controleEstadoTexto();
 const char *controleMotivo();      // vazio quando nao ha falha
