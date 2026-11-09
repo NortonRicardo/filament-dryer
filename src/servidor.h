@@ -29,3 +29,12 @@ const char *servidorEndereco();
 
 // Umidade absoluta da ultima leitura, em g/m3.
 float umidadeAbsolutaAtual();
+
+// Quantas leituras o filtro de plausibilidade jogou fora desde o boot.
+// Implementada no main.cpp. Numero subindo = ruido no barramento I2C,
+// tipicamente o cartucho chaveando perto do cabo do sensor.
+uint32_t leiturasDescartadas();
+
+// Rede propria aberta (a de casa sumiu ha mais de 2 min). O rodape do display
+// vira uma listra de aviso com o nome e a senha dela.
+bool servidorPortalAtivo();

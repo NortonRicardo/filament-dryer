@@ -28,6 +28,9 @@
 // ---------------------------------------------------------------------------
 
 #include <Arduino.h>
+#include <esp_system.h>
+#include <time.h>
+#include <esp_task_wdt.h>
 #include <TFT_eSPI.h>
 #include <Wire.h>
 #include <Adafruit_BME280.h>
@@ -68,6 +71,12 @@ static const uint8_t ENDERECOS[] = {0x76, 0x77};
 
 static const uint32_t INTERVALO_LEITURA = 2000;      // ms entre leituras
 
+// Quanto tempo o cartucho fica desligado antes de cada leitura, para o
+// barramento do sensor ficar quieto. Carga resistiva corta na hora; esta
+// folga e para a fonte e a fiacao acomodarem. 20 ms a cada 2 s custam 1% da
+// potencia - invisivel num bloco com inercia de minutos.
+static const uint32_t SILENCIO_MS = 20;
+
 // I2C a 20 kHz em vez dos 100 kHz padrao. O sensor fica a ~1 m da placa, e
 // I2C foi feito para centimetros: cabo longo tem capacitancia, deixa as bordas
 // do sinal moles e pega o ruido do cartucho chaveando 4,2 A. Mais devagar, o
@@ -78,7 +87,10 @@ static const uint32_t I2C_FREQ = 20000;
 // isolada (ruido, ou o sensor reiniciado por um tranco de tensao) nao deve
 // derrubar a secagem; um sensor solto de verdade falha sempre e e pego em
 // 3 x 2 s = 6 s.
-static const uint8_t FALHAS_MAX = 3;
+static const uint8_t FALHAS_MAX = 5;
+
+// Prazo do watchdog. Ver o comentario no fim do setup().
+static const uint32_t WATCHDOG_S = 30;
 static const uint32_t INTERVALO_RETENTATIVA = 5000;  // ms entre buscas do sensor
 
 static bool     sensorOk = false;
@@ -164,14 +176,76 @@ static float umidadeAbsoluta(float tempC, float umidadeRel) {
   return pressaoSat * umidadeRel * 2.1674f / (273.15f + tempC);
 }
 
+// ---------------------------------------------------------------------------
+// Validacao da leitura
+//
+// Quando o cartucho chaveia 4,2 A, o degrau de corrente acopla no cabo do
+// I2C e a transferencia se corrompe. O BME280 nao avisa: a biblioteca devolve
+// os bytes que leu, e a compensacao do datasheet transforma lixo em numero.
+//
+// Os valores nao sao aleatorios, sao assinaturas do barramento:
+//
+//   registradores em 0xFFFFF (barramento devolvendo 0xFF) -> ~182 a 190 C
+//   registradores em 0x00000 (barramento em curto)        -> ~-141 C
+//
+// E o 182 e o caso FELIZ: ele estoura o teto e a protecao corta. O -141
+// seria o perigoso - o PID leria "fazendo muito frio" e mandaria 100% de
+// potencia para sempre. Por isso a leitura e validada antes de qualquer
+// coisa olhar para ela: controle, display e grafico so veem numero plausivel.
+// ---------------------------------------------------------------------------
+
+// Ultima leitura boa: a validacao compara contra ela, e o display repinta
+// a partir dela ao religar.
+static float ultimaTemp = 0, ultimaUmid = 0;
+static bool temLeitura = false;
+
+static const float TEMP_PLAUSIVEL_MIN = -10.0f;
+static const float TEMP_PLAUSIVEL_MAX = 100.0f;
+
+// O ar de uma caixa fechada nao muda tanto assim em 2 s, nem com o cartucho
+// no maximo. Um salto maior que isso e ruido, nao temperatura.
+static const float SALTO_MAX_C = 5.0f;
+
+// Descartar nao vira falha aqui: leSensor devolve false e o loop ja trata
+// isso com o seu proprio contador de falhas seguidas.
+
+static uint8_t descartesSeguidos = 0;
+static uint32_t descartesTotal = 0;
+
+static bool leituraPlausivel(float t, float u) {
+  if (isnan(t) || isnan(u)) return false;
+  if (t < TEMP_PLAUSIVEL_MIN || t > TEMP_PLAUSIVEL_MAX) return false;
+  if (u < 0.0f || u > 100.0f) return false;
+  if (temLeitura && fabsf(t - ultimaTemp) > SALTO_MAX_C) return false;
+  return true;
+}
+
 static bool leSensor(float &temperatura, float &umidade) {
   if (!bme.takeForcedMeasurement()) return false;
 
   temperatura = bme.readTemperature();
   umidade     = bme.readHumidity();
 
-  return !isnan(temperatura) && !isnan(umidade);
+  if (leituraPlausivel(temperatura, umidade)) {
+    if (descartesSeguidos > 0) {
+      diario.printf("Sensor           : voltou ao normal apos %u leitura(s) descartada(s)\n",
+                    descartesSeguidos);
+    }
+    descartesSeguidos = 0;
+    return true;
+  }
+
+  descartesSeguidos++;
+  descartesTotal++;
+  diario.printf("Sensor           : leitura descartada (%.1f C, %.1f %%) - %u seguida(s), %lu no total\n",
+                temperatura, umidade, descartesSeguidos,
+                (unsigned long)descartesTotal);
+
+  // Aguenta alguns glitches sem derrubar nada. Passando disso, e falha.
+  return false;
 }
+
+uint32_t leiturasDescartadas() { return descartesTotal; }
 
 // ---------------------------------------------------------------------------
 // Desenho
@@ -258,55 +332,93 @@ static int16_t yDetalhe(const Cartao &c)    { return c.y + c.a - 18; }
 
 // Unidade ao lado do numero, em fonte pequena e cinza. O grau nao existe na
 // fonte, entao vai desenhado como dois circulos - que e o que ele e.
-static int16_t desenhaUnidade(int16_t x, int16_t y, const Cartao &c,
+// Template porque desenha tanto na tela quanto no sprite: na TFT_eSPI so
+// drawPixel e virtual, entao passar o sprite como TFT_eSPI& desenharia na
+// tela.
+template <typename Alvo>
+static int16_t desenhaUnidade(Alvo &a, int16_t x, int16_t y, const Cartao &c,
                               bool medir) {
   int16_t largura = 0;
 
   if (c.grau) {
     if (!medir) {
-      tft.drawCircle(x + 3, y - 5, 3, MUDO);
-      tft.drawCircle(x + 3, y - 5, 2, MUDO);
+      a.drawCircle(x + 3, y - 5, 3, MUDO);
+      a.drawCircle(x + 3, y - 5, 2, MUDO);
     }
     x += 9;
     largura += 9;
   }
 
-  tft.setTextFont(2);
-  largura += tft.textWidth(c.unidade);
+  a.setTextFont(2);
+  largura += a.textWidth(c.unidade);
   if (!medir) {
-    tft.setTextDatum(ML_DATUM);
-    tft.setTextColor(MUDO, CARTAO);
-    tft.drawString(c.unidade, x, y);
+    a.setTextDatum(ML_DATUM);
+    a.setTextColor(MUDO, CARTAO);
+    a.drawString(c.unidade, x, y);
   }
   return largura;
+}
+
+// O valor e montado num sprite fora da tela e empurrado de uma vez. Apagar a
+// faixa direto na tela e redesenhar deixava um quadro em branco visivel - a
+// piscada na troca de valor. Todos os cartoes tem a mesma largura, entao um
+// sprite so serve para todos (~13 KB).
+static TFT_eSprite faixa = TFT_eSprite(&tft);
+static bool faixaOk = false;
+
+// O que esta desenhado em cada cartao. Valor igual nao redesenha.
+static char valorNaTela[N_CARTOES][12];
+static bool dadoNaTela[N_CARTOES];
+
+static void esqueceValor(uint8_t i) { valorNaTela[i][0] = '\0'; }
+
+template <typename Alvo>
+static void montaValor(Alvo &a, int16_t ox, int16_t oy, const Cartao &c,
+                       const char *valor, bool temDado) {
+  a.fillRect(ox, oy, c.l - 6, faixaAltura(c), CARTAO);
+
+  a.setFreeFont(&FreeSansBold24pt7b);
+  const int16_t larguraValor = a.textWidth(valor);
+  const int16_t larguraUnidade = temDado ? desenhaUnidade(a, 0, 0, c, true) : 0;
+  const int16_t total = larguraValor + (temDado ? 3 + larguraUnidade : 0);
+
+  const int16_t x = ox + (c.l - 6) / 2 - total / 2;
+  const int16_t y = oy + faixaAltura(c) / 2;
+
+  // desenhaUnidade() trocou a fonte ao medir: reescolhe antes de desenhar.
+  a.setFreeFont(&FreeSansBold24pt7b);
+  a.setTextDatum(ML_DATUM);
+  a.setTextColor(temDado ? c.cor : MUDO, CARTAO);
+  a.drawString(valor, x, y);
+
+  if (temDado) desenhaUnidade(a, x + larguraValor + 3, y, c, false);
 }
 
 // Numero grande mais a unidade, centrados juntos no cartao. Sem dado, "--"
 // em cinza: o cartao existe no layout mas nao inventa leitura.
 static void desenhaValor(uint8_t i, const char *valor, bool temDado) {
+  if (dadoNaTela[i] == temDado && strcmp(valorNaTela[i], valor) == 0) return;
+  snprintf(valorNaTela[i], sizeof valorNaTela[i], "%s", valor);
+  dadoNaTela[i] = temDado;
+
   const Cartao &c = CARTOES[i];
-  const int16_t y = yValor(c);
 
-  tft.fillRect(c.x + 3, faixaTopo(c), c.l - 6, faixaAltura(c), CARTAO);
+  if (!faixaOk) {
+    faixa.setColorDepth(16);
+    faixaOk = faixa.createSprite(c.l - 6, faixaAltura(c)) != nullptr;
+  }
 
-  tft.setFreeFont(&FreeSansBold24pt7b);
-  const int16_t larguraValor = tft.textWidth(valor);
-  const int16_t larguraUnidade = temDado ? desenhaUnidade(0, 0, c, true) : 0;
-  const int16_t total = larguraValor + (temDado ? 3 + larguraUnidade : 0);
-
-  int16_t x = c.x + c.l / 2 - total / 2;
-
-  // desenhaUnidade() trocou a fonte ao medir: reescolhe antes de desenhar.
-  tft.setFreeFont(&FreeSansBold24pt7b);
-  tft.setTextDatum(ML_DATUM);
-  tft.setTextColor(temDado ? c.cor : MUDO, CARTAO);
-  tft.drawString(valor, x, y);
-
-  if (temDado) desenhaUnidade(x + larguraValor + 3, y, c, false);
+  if (faixaOk) {
+    montaValor(faixa, 0, 0, c, valor, temDado);
+    faixa.pushSprite(c.x + 3, faixaTopo(c));
+  } else {
+    montaValor(tft, c.x + 3, faixaTopo(c), c, valor, temDado);  // sem memoria: pisca, mas funciona
+  }
 }
 
 static void desenhaCartao(uint8_t i) {
   const Cartao &c = CARTOES[i];
+  esqueceValor(i);
 
   tft.fillRoundRect(c.x, c.y, c.l, c.a, 9, CARTAO);
   tft.drawRoundRect(c.x, c.y, c.l, c.a, 9, BORDA);
@@ -367,8 +479,6 @@ static void iniciaLuz() {
   if (brilho < BRILHO_MIN || brilho > 100) brilho = BRILHO_PADRAO;
 }
 
-static float ultimaTemp = 0, ultimaUmid = 0;
-static bool temLeitura = false;
 
 // --- temperatura maxima -------------------------------------------------------
 // Definida no painel web e salva na memoria, entao sobrevive a um reinicio.
@@ -511,15 +621,50 @@ static void pintaControle() {
 // "conectando..." quando a rede cai, o estado da conexao continua visivel
 // aqui sem precisar de um indicador separado.
 static void desenhaRodape(const char *endereco) {
-  tft.fillRect(MARGEM, Y_RODAPE - 8, LARGURA - 2 * MARGEM, 16, FUNDO);
+  // A faixa inteira do rodape, de borda a borda: a listra de aviso ocupa tudo,
+  // e ao sumir ela precisa ser apagada tambem nas laterais.
+  const int16_t topo = Y_RODAPE - ALTURA_RODAPE / 2;
 
+  if (servidorPortalAtivo()) {
+    // Sem a rede de casa: listra laranja com o nome e a senha da rede propria,
+    // alternando com o aviso a cada 3 s (servidorEndereco()).
+    tft.fillRect(0, topo, LARGURA, ALTURA_RODAPE, LARANJA);
+    tft.setTextFont(2);
+    textoCentrado(LARGURA / 2, Y_RODAPE, endereco, 1, FUNDO, LARANJA);
+    return;
+  }
+
+  tft.fillRect(0, topo, LARGURA, ALTURA_RODAPE, FUNDO);
   tft.setTextFont(2);
   textoCentrado(LARGURA / 2, Y_RODAPE, endereco, 1, RODAPE, FUNDO);
+}
+
+// Relogio pequeno no canto direito do topo. Horas e minutos so: redesenha uma
+// vez por minuto. "--:--" ate a hora chegar pela internet.
+static char relogioNaTela[8] = "";
+
+static void desenhaRelogio(bool forca) {
+  char texto[8] = "--:--";
+  if (horaCerta()) {
+    const time_t agora = time(nullptr);
+    struct tm t;
+    localtime_r(&agora, &t);
+    strftime(texto, sizeof texto, "%H:%M", &t);
+  }
+  if (!forca && strcmp(texto, relogioNaTela) == 0) return;
+  snprintf(relogioNaTela, sizeof relogioNaTela, "%s", texto);
+
+  tft.fillRect(LARGURA - MARGEM - 60, 0, 60, ALTURA_TOPO, FUNDO);
+  tft.setTextFont(2);
+  tft.setTextDatum(MR_DATUM);
+  tft.setTextColor(MUDO, FUNDO);
+  tft.drawString(texto, LARGURA - MARGEM, Y_TOPO);
 }
 
 // Painel inteiro: no boot e ao religar a imagem.
 static void desenhaPainel() {
   telaFixa();
+  desenhaRelogio(true);
   desenhaRodape(servidorEndereco());
   pintaControle();
   pintaMedidas();  // "--" ate a primeira leitura chegar
@@ -611,6 +756,22 @@ void painelDefineTempMaxima(float valor) {
 
 // ---------------------------------------------------------------------------
 
+// Por que a placa reiniciou. "WATCHDOG" significa que o loop travou e o chip
+// se reiniciou sozinho - e o cartucho, por regra, voltou bloqueado.
+static const char *motivoReinicio() {
+  switch (esp_reset_reason()) {
+    case ESP_RST_POWERON:  return "ligada na energia";
+    case ESP_RST_SW:       return "por software (ex.: fim de atualizacao)";
+    case ESP_RST_PANIC:    return "FALHA no firmware (excecao)";
+    case ESP_RST_INT_WDT:
+    case ESP_RST_TASK_WDT:
+    case ESP_RST_WDT:      return "WATCHDOG - o loop travou e a placa se reiniciou";
+    case ESP_RST_BROWNOUT: return "QUEDA DE TENSAO na alimentacao do ESP32";
+    case ESP_RST_EXT:      return "botao EN";
+    default:               return "outro";
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   delay(400);  // da tempo ao monitor serial de abrir
@@ -619,6 +780,7 @@ void setup() {
   diario.println("==================================================");
   diario.println("  Estufa de filamento - painel THERMO");
   diario.println("==================================================");
+  diario.printf("Reinicio         : %s\n", motivoReinicio());
   diario.printf("Driver da tela   : %s\n", DRIVER);
   diario.printf("Inversao de cor  : %s\n", INVERSAO);
   diario.printf("Barramento SPI   : %d MHz\n", SPI_FREQUENCY / 1000000);
@@ -663,6 +825,27 @@ void setup() {
 
   desenhaPainel();
   aplicaLuz();
+
+  // --- watchdog -------------------------------------------------------------
+  // Se o loop() parar de girar por 5 s, o chip se reinicia sozinho. Sem isso,
+  // um travamento com o cartucho a 100% o deixaria a 100% para sempre: todas
+  // as protecoes (teto, sensor, "nao esquenta") sao software, e software
+  // travado nao protege nada. Reiniciando, o GPIO25 solta, o 10 kOhm segura
+  // o gate em zero e o firmware nasce com o aquecedor bloqueado.
+  //
+  // O core ja vem com o watchdog de tarefas em modo "reinicia" (PANIC=y) e
+  // 5 s de prazo; enableLoopWDT() poe o loop() sob ele, e o proprio core o
+  // alimenta a cada volta. So o OTA bloqueia mais que isso - ele alimenta
+  // por conta propria (servidor.cpp).
+  enableLoopWDT();
+  // O prazo padrao do core e 5 s, e o WebServer espera ate 5 s por um cliente
+  // lento (HTTP_MAX_DATA_WAIT) - um celular saindo do alcance no meio de um
+  // pedido derrubaria a placa no meio da secagem. 30 s dao folga para isso e
+  // para o OTA, e termicamente nao fazem diferenca: 30 s a mais de cartucho
+  // num travamento real nao chegam perto do teto.
+  esp_task_wdt_init(WATCHDOG_S, true);
+  diario.printf("Watchdog         : ligado - loop travado por %u s reinicia a placa\n",
+                WATCHDOG_S);
 }
 
 void loop() {
@@ -683,6 +866,14 @@ void loop() {
 
   // O endereco muda sozinho: conectando -> IP, ou IP -> reconectando. A tela
   // acompanha comparando o texto, para nao repintar a linha a cada volta.
+  if (telaEstaLigada()) desenhaRelogio(false);
+
+  static bool avisouHora = false;
+  if (!avisouHora && horaCerta()) {
+    avisouHora = true;
+    diario.println("Hora             : acertada pela internet (Brasilia)");
+  }
+
   static char enderecoNaTela[40] = "";
   const char *endereco = servidorEndereco();
   if (strcmp(endereco, enderecoNaTela) != 0) {
@@ -697,8 +888,19 @@ void loop() {
 
       static uint8_t falhasSeguidas = 0;
 
+      // Le com o cartucho desligado. Os 4,2 A corrompem o I2C deste cabo, e
+      // nenhuma blindagem, capacitor ou separacao de terra resolveu. Em vez
+      // de brigar com o acoplamento, a leitura acontece quando ele nao
+      // existe. O PID nem fica sabendo: a potencia pedida nao muda.
+      controleSilenciaSaida(true);
+      delay(SILENCIO_MS);
+
       float temperatura, umidade;
-      if (leSensor(temperatura, umidade)) {
+      const bool leu = leSensor(temperatura, umidade);
+
+      controleSilenciaSaida(false);
+
+      if (leu) {
         if (falhasSeguidas > 0) {
           diario.printf("Sensor           : voltou a ler (%.1f C)\n", temperatura);
         }
@@ -712,9 +914,20 @@ void loop() {
         // de tensao e perdeu a configuracao (volta sem medir umidade).
         // Reconfigura e tenta na proxima leitura. Ate la o controle segue
         // com a ultima potencia - sao 2 s.
-        diario.printf("Sensor           : leitura falhou (%u de %u), reconfigurando\n",
-                      falhasSeguidas, FALHAS_MAX);
-        iniciaSensor();
+        // Uma falha isolada e glitch de barramento: o sensor nao perdeu nada,
+        // so a transferencia se corrompeu, e a proxima leitura vem boa.
+        // Reconfigurar significa bme.begin(), que faz um reset no sensor e
+        // espera a calibracao num laco SEM limite de tempo - com o barramento
+        // devolvendo 0xFF ali, ele nunca sai. So vale a pena a partir da
+        // segunda falha seguida, que ai o sensor pode ter reiniciado mesmo.
+        if (falhasSeguidas >= 2) {
+          diario.printf("Sensor           : leitura falhou (%u de %u), reconfigurando\n",
+                        falhasSeguidas, FALHAS_MAX);
+          iniciaSensor();
+        } else {
+          diario.printf("Sensor           : leitura falhou (%u de %u), tentando de novo\n",
+                        falhasSeguidas, FALHAS_MAX);
+        }
       } else {
         // Falhou FALHAS_MAX vezes seguidas: cabo solto, provavelmente. Volta
         // a procurar em vez de repetir o ultimo valor, que pareceria um

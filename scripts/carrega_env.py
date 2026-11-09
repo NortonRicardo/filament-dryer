@@ -10,7 +10,7 @@ Import("env")  # noqa: F821  (injetado pela PlatformIO)
 
 RAIZ = env["PROJECT_DIR"]  # noqa: F821
 CAMINHO = os.path.join(RAIZ, ".env")
-ESPERADAS = ("WIFI_SSID", "WIFI_PASSWORD")
+ESPERADAS = ("WIFI_SSID", "WIFI_PASSWORD", "SENHA_PADRAO")
 
 
 def falha(mensagem):

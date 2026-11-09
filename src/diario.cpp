@@ -1,5 +1,7 @@
 #include "diario.h"
 
+#include <time.h>
+
 // 6 KB: umas 100 linhas. Cabe com folga numa RAM de 320 KB e cobre o boot
 // mais um bom tempo de eventos.
 static const size_t TAMANHO = 6144;
@@ -23,11 +25,21 @@ size_t Diario::write(uint8_t c) {
   Serial.write(c);
 
   if (inicioDeLinha && c != '\n') {
-    const uint32_t s = millis() / 1000;
-    char marca[16];
-    snprintf(marca, sizeof marca, "[%02lu:%02lu:%02lu] ",
-             (unsigned long)(s / 3600), (unsigned long)((s / 60) % 60),
-             (unsigned long)(s % 60));
+    // Com a hora acertada pela internet: dia/mes e hora de Brasilia. Antes
+    // disso (boot, sem rede): tempo desde o boot, marcado com "+" para nao se
+    // confundir com hora real.
+    char marca[24];
+    if (horaCerta()) {
+      const time_t agora = time(nullptr);
+      struct tm t;
+      localtime_r(&agora, &t);
+      strftime(marca, sizeof marca, "[%d/%m %H:%M:%S] ", &t);
+    } else {
+      const uint32_t s = millis() / 1000;
+      snprintf(marca, sizeof marca, "[+%02lu:%02lu:%02lu] ",
+               (unsigned long)(s / 3600), (unsigned long)((s / 60) % 60),
+               (unsigned long)(s % 60));
+    }
     for (const char *p = marca; *p; p++) guarda(*p);
     inicioDeLinha = false;
   }
@@ -68,3 +80,7 @@ String Diario::texto() const {
   }
   return s;
 }
+
+// Qualquer instante depois de nov/2023 conta como acertado: sem NTP o relogio
+// do ESP32 comeca em 1970.
+bool horaCerta() { return time(nullptr) > 1700000000; }

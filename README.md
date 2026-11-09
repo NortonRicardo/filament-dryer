@@ -22,14 +22,29 @@ Abra e preencha:
 ```
 WIFI_SSID=nome-da-sua-rede
 WIFI_PASSWORD=senha-da-sua-rede
+SENHA_PADRAO=8-ou-mais-caracteres
 ```
 
 O `.env` está no `.gitignore` e nunca é versionado. O build o converte em
 `-DWIFI_SSID` e `-DWIFI_PASSWORD`; sem o arquivo, ele para com uma instrução
 em vez de um erro de compilador.
 
-> **A senha do Wi-Fi é também a senha da atualização.** Trocar uma troca a
-> outra.
+> **`SENHA_PADRAO` é a senha da atualização e da rede própria `ESTUFA-SETUP`.**
+> Fica separada da senha do Wi-Fi, que pode ser trocada pela própria placa.
+> Precisa de 8 caracteres ou mais (exigência do WPA2) — o build recusa menos.
+
+## Se a rede de casa mudar de nome ou senha
+
+Não precisa de cabo. Depois de 2 min sem a rede, a placa abre a própria rede
+**`ESTUFA-SETUP`**, com a senha `SENHA_PADRAO`, e o rodapé do display vira uma
+listra laranja mostrando os dois.
+
+Conecte o celular nela: a página de escolher rede abre sozinha. Toque na rede,
+digite a senha, **CONECTAR**. Se der certo, a `ESTUFA-SETUP` some e a estufa
+volta em `http://estufa.local`.
+
+Enquanto isso ela continua medindo e controlando normalmente. Por essa rede só
+se escolhe rede — o painel, com a autorização do aquecedor, não é servido ali.
 
 ---
 
@@ -86,7 +101,7 @@ pio run -e ota -t upload --upload-port 192.168.1.35
 |---|---|
 | A placa está ligada | A atualização é recebida pelo firmware que está rodando |
 | O computador está na mesma rede | É tráfego local, na porta 3232 |
-| O `.env` tem a senha certa | Ela autentica a atualização |
+| O `.env` tem a `SENHA_PADRAO` certa | Ela autentica a atualização |
 | O firmware atual tem OTA | Caso contrário, só pelo cabo |
 
 ### A senha nunca aparece

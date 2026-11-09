@@ -487,3 +487,120 @@ ciclo();
 setInterval(ciclo, 2000);
 </script>
 )HTML";
+
+// ---------------------------------------------------------------------------
+// Pagina da rede propria (ESTUFA-SETUP): so escolhe a rede de casa. O painel
+// nao e servido por aqui - quem conecta nesta rede nao autoriza aquecedor.
+// ---------------------------------------------------------------------------
+static const char PAGINA_PORTAL[] PROGMEM = R"HTML(<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Estufa - escolher rede</title>
+<style>
+:root{--bg:#080b10;--card:#111720;--borda:#202b38;--texto:#f3f6fa;--mudo:#8290a1;
+  --ciano:#42d7f5;--laranja:#ff9b52;--verde:#55e0a0;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0 auto;max-width:430px;padding:18px 14px 28px;background:var(--bg);
+  color:var(--texto);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+h1{font-size:20px;margin:0 0 4px}
+p{color:var(--mudo);font-size:13.5px;margin:0 0 16px}
+.rotulo{color:var(--mudo);font:800 9px var(--mono);letter-spacing:1.5px;
+  text-transform:uppercase;margin:0 0 8px}
+.lista{border:1px solid var(--borda);border-radius:14px;background:var(--card);
+  overflow:hidden;margin-bottom:16px}
+.rede{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:13px 14px;border-bottom:1px solid var(--borda);cursor:pointer}
+.rede:last-child{border-bottom:none}
+.rede.sel{background:#16202c}
+.rede small{color:var(--mudo);font:650 11px var(--mono)}
+.vazio{padding:14px;color:var(--mudo);font-size:13px}
+.form{border:1px solid var(--borda);border-radius:14px;background:var(--card);padding:14px}
+label{display:block;color:var(--mudo);font-size:12.5px;margin:0 0 5px}
+input{width:100%;background:var(--bg);color:var(--texto);border:1px solid var(--borda);
+  border-radius:9px;padding:10px 11px;font:600 15px var(--mono);margin-bottom:12px}
+button{width:100%;appearance:none;border:1px solid var(--verde);background:var(--bg);
+  color:var(--verde);font:800 12px var(--mono);letter-spacing:1.2px;padding:12px;
+  border-radius:9px;cursor:pointer}
+button.sec{border-color:var(--borda);color:var(--mudo);margin-bottom:16px}
+#msg{margin-top:12px;font:650 12px var(--mono);color:var(--mudo)}
+#msg.ok{color:var(--verde)} #msg.erro{color:var(--laranja)}
+</style>
+
+<h1>Escolher a rede</h1>
+<p>A estufa não encontrou a rede <b id="atual">—</b>. Escolha a rede da casa e
+digite a senha. Ela continua medindo e controlando normalmente enquanto isso.</p>
+
+<div class="rotulo">Redes encontradas</div>
+<div class="lista" id="lista"><div class="vazio">procurando…</div></div>
+<button class="sec" id="denovo">PROCURAR DE NOVO</button>
+
+<div class="form">
+  <label for="ssid">Nome da rede</label>
+  <input id="ssid" maxlength="32" autocomplete="off" autocapitalize="off">
+  <label for="senha">Senha</label>
+  <input id="senha" type="password" maxlength="63" autocomplete="off">
+  <button id="salvar">CONECTAR</button>
+  <div id="msg"></div>
+</div>
+
+<script>
+function barras(r) { return r > -55 ? "▂▄▆█" : r > -67 ? "▂▄▆" : r > -78 ? "▂▄" : "▂"; }
+
+function carrega() {
+  fetch("redes", { cache: "no-store" }).then(function (r) { return r.json(); })
+  .then(function (d) {
+    document.getElementById("atual").textContent = d.atual || "—";
+    var l = document.getElementById("lista");
+    if (!d.redes.length) {
+      l.innerHTML = '<div class="vazio">' + (d.procurando ? "procurando…" : "nenhuma rede encontrada") + "</div>";
+      if (d.procurando) setTimeout(carrega, 2000);
+      return;
+    }
+    l.innerHTML = "";
+    d.redes.forEach(function (n) {
+      var e = document.createElement("div");
+      e.className = "rede";
+      var nome = document.createElement("span");
+      nome.textContent = n.ssid;
+      var info = document.createElement("small");
+      info.textContent = (n.aberta ? "aberta  " : "") + barras(n.rssi);
+      e.appendChild(nome); e.appendChild(info);
+      e.onclick = function () {
+        document.querySelectorAll(".rede").forEach(function (x) { x.classList.remove("sel"); });
+        e.classList.add("sel");
+        document.getElementById("ssid").value = n.ssid;
+        document.getElementById("senha").focus();
+      };
+      l.appendChild(e);
+    });
+  }).catch(function () { setTimeout(carrega, 3000); });
+}
+
+document.getElementById("denovo").onclick = function () {
+  document.getElementById("lista").innerHTML = '<div class="vazio">procurando…</div>';
+  setTimeout(carrega, 4000);
+};
+
+document.getElementById("salvar").onclick = function () {
+  var m = document.getElementById("msg");
+  var ssid = document.getElementById("ssid").value.trim();
+  var senha = document.getElementById("senha").value;
+  if (!ssid) { m.className = "erro"; m.textContent = "escolha ou digite o nome da rede"; return; }
+  if (senha && senha.length < 8) { m.className = "erro"; m.textContent = "a senha precisa de pelo menos 8 caracteres"; return; }
+  m.className = ""; m.textContent = "salvando…";
+  var corpo = "ssid=" + encodeURIComponent(ssid) + "&senha=" + encodeURIComponent(senha);
+  fetch("rede", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: corpo })
+  .then(function (r) { return r.ok ? r.json() : r.text().then(function (t) { throw t; }); })
+  .then(function () {
+    m.className = "ok";
+    m.textContent = "Conectando em " + ssid + ". Se a senha estiver certa, esta rede vai sumir em alguns segundos e a estufa volta em http://estufa.local";
+  }).catch(function (t) { m.className = "erro"; m.textContent = typeof t === "string" ? t : "sem resposta da estufa"; });
+};
+
+carrega();
+</script>
+)HTML";
+

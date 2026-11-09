@@ -787,6 +787,71 @@ void loop() {
     </div>
   </section>
 
+
+  <section>
+    <h2>Fortalecer o barramento: pull-ups de 4,7 kΩ</h2>
+    <p>O log mostrou leituras corrompidas <b>com o cartucho desligado</b>: o
+    barramento já estava no limite, e a corrente do aquecedor só o derrubava de
+    vez. A causa é o cabo longo com pull-ups fracos.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Pull-up no barramento</th><th>Tempo de subida</th><th>Norma I2C (máx. 1 µs)</th></tr></thead>
+      <tbody>
+        <tr><td><small>só o interno do ESP32 (~45 kΩ)</small></td><td class="q">8,4 µs</td><td><span class="chip" style="color:var(--pwr);border-color:var(--pwr)">8× fora</span></td></tr>
+        <tr><td><small>10 kΩ do módulo</small></td><td class="q">1,9 µs</td><td><span class="chip" style="color:var(--pwr);border-color:var(--pwr)">fora</span></td></tr>
+        <tr><td><small><b>4,7 kΩ</b></small></td><td class="q">0,9 µs</td><td><span class="chip" style="color:var(--in);border-color:var(--in)">dentro</span></td></tr>
+        <tr><td><small>4,7 kΩ + 10 kΩ do módulo em paralelo</small></td><td class="q">0,6 µs</td><td><span class="chip" style="color:var(--in);border-color:var(--in)">dentro</span></td></tr>
+      </tbody>
+    </table></div>
+    <p class="cap">Calculado com ~220 pF no barramento (cerca de 2 m de cabo mais as entradas).</p>
+    <div class="fig">
+      <svg viewBox="0 0 940 300" role="img" aria-label="Dois resistores de 4,7 quilo-ohm: de SDA para 3V3 e de SCL para 3V3, junto ao ESP32">
+        <line x1="120" y1="50" x2="620" y2="50" stroke="var(--v33)" stroke-width="2.5"/>
+        <text x="126" y="40" class="t-b" fill="var(--v33)">3V3 do ESP32</text>
+
+        <rect x="40" y="110" width="160" height="150" rx="6" class="box"/>
+        <text x="120" y="150" text-anchor="middle" class="t-b">NodeMCU</text>
+        <text x="120" y="170" text-anchor="middle" class="t-s t-mut">ESP-32S</text>
+        <text x="190" y="205" text-anchor="end" class="t-s t-mut">P21 · SDA</text>
+        <text x="190" y="245" text-anchor="end" class="t-s t-mut">P22 · SCL</text>
+
+        <line x1="200" y1="200" x2="720" y2="200" stroke="var(--sys)" stroke-width="2.5"/>
+        <line x1="200" y1="240" x2="720" y2="240" stroke="var(--sys)" stroke-width="2.5"/>
+
+        <line x1="320" y1="50" x2="320" y2="90" stroke="var(--v33)" stroke-width="2.5"/>
+        <rect x="310" y="90" width="20" height="60" rx="3" fill="var(--board)" stroke="var(--v33)" stroke-width="1.5"/>
+        <line x1="320" y1="150" x2="320" y2="200" stroke="var(--sys)" stroke-width="2.5"/>
+        <text x="340" y="125" class="t-s" fill="var(--v33)">4,7 kΩ</text>
+
+        <line x1="460" y1="50" x2="460" y2="90" stroke="var(--v33)" stroke-width="2.5"/>
+        <rect x="450" y="90" width="20" height="60" rx="3" fill="var(--board)" stroke="var(--v33)" stroke-width="1.5"/>
+        <line x1="460" y1="150" x2="460" y2="240" stroke="var(--sys)" stroke-width="2.5"/>
+        <text x="480" y="125" class="t-s" fill="var(--v33)">4,7 kΩ</text>
+
+        <rect x="720" y="170" width="170" height="100" rx="6" class="box"/>
+        <text x="805" y="212" text-anchor="middle" class="t-b">BME280</text>
+        <text x="805" y="232" text-anchor="middle" class="t-s t-mut">na ponta do cabo</text>
+        <text x="610" y="192" text-anchor="middle" class="t-s t-mut">cabo longo</text>
+
+        <circle cx="320" cy="50" r="4.5" fill="var(--v33)"/>
+        <circle cx="460" cy="50" r="4.5" fill="var(--v33)"/>
+        <circle cx="320" cy="200" r="4.5" fill="var(--sys)"/>
+        <circle cx="460" cy="240" r="4.5" fill="var(--sys)"/>
+      </svg>
+    </div>
+    <ol class="steps">
+      <li><div><b>Desligue tudo.</b><small>Fonte fora da tomada.</small></div></li>
+      <li><div><b>Um 4,7 kΩ entre o P21 (SDA) e o 3V3.</b><small>Na placa do ESP32, perto dos pinos. Resistor não tem polaridade.</small></div></li>
+      <li><div><b>Outro 4,7 kΩ entre o P22 (SCL) e o 3V3.</b><small>Mesmo lado. Só um par no barramento inteiro — não ponha outro na ponta do sensor.</small></div></li>
+      <li><div><b>Confira com o multímetro, ainda desligado.</b><small>Ohmímetro entre P21 e 3V3: entre 3 e 4,7 kΩ. Se o módulo já tiver 10 kΩ próprio, vai marcar ~3,2 kΩ — está certo, os dois ficam em paralelo.</small></div></li>
+      <li><div><b>Ligue e acompanhe o log por uma hora.</b><small>A meta é zero descartes com o cartucho desligado. Depois repita com ele ligado.</small></div></li>
+    </ol>
+    <div class="notes">
+      <div class="note"><b>Por que no lado do ESP32</b><p>Com um único par de pull-ups, a posição pouco muda o tempo de subida — o que importa é a resistência total contra a capacitância do cabo. Do lado do ESP32 fica mais fácil de soldar e de trocar depois.</p></div>
+      <div class="note"><b>Não use menos que 2,2 kΩ</b><p>Pull-up forte demais obriga os pinos a afundar mais corrente para fazer o nível baixo. 4,7 kΩ é o meio-termo: rápido o bastante para o cabo, leve para os pinos.</p></div>
+      <div class="note"><b>Se ainda sobrar algum descarte</b><p>Torça o fio do SDA com um fio de GND e o do SCL com outro GND, ao longo de todo o cabo. É o próximo degrau, depois dos pull-ups.</p></div>
+    </div>
+  </section>
+
   <section>
     <h2>Modo forçado, e por que isso importa</h2>
     <p>O BME280 sabe medir sozinho, continuamente. O firmware <b>não</b> usa esse
@@ -821,7 +886,9 @@ monitor_filters = esp32_exception_decoder, time
 
 <span class="cmt">; Le o .env e vira -DWIFI_SSID / -DWIFI_PASSWORD. As credenciais ficam fora</span>
 <span class="cmt">; do repositorio; o modelo versionado e o .env.exemplo.</span>
-extra_scripts = pre:scripts/carrega_env.py
+extra_scripts =
+  pre:scripts/carrega_env.py
+  post:scripts/senha_ota.py
 
 lib_deps =
   bodmer/TFT_eSPI@^2.5.43
@@ -873,7 +940,17 @@ build_flags =
   -DLOAD_FONT7=1
   -DLOAD_GFXFF=1
 
-  -DSPI_FREQUENCY=40000000</code></pre>
+  -DSPI_FREQUENCY=40000000
+
+<span class="cmt">; --- atualizacao pelo Wi-Fi ---------------------------------------------------</span>
+<span class="cmt">; Grava com a caixa fechada: pio run -e ota -t upload</span>
+<span class="cmt">; Precisa do firmware com OTA ja gravado uma vez pelo USB (ambiente acima), da</span>
+<span class="cmt">; placa ligada e na mesma rede. A senha vem do .env (scripts/senha_ota.py).</span>
+<span class="cmt">; Se estufa.local nao resolver, troque pelo IP que aparece no rodape do display.</span>
+[env:ota]
+extends = env:esp32doit-devkit-v1
+upload_protocol = espota
+upload_port = estufa.local</code></pre>
     <div class="note"><b>Dependências</b><p><code>adafruit/Adafruit BME280 Library</code> traz atrás de si a <b>Adafruit Unified Sensor</b> e a <b>Adafruit BusIO</b>, sem precisar declarar: a PlatformIO lê o <code>library.json</code> dela e baixa as duas. A <code>Wire</code> já vem com o core.</p></div>
   </section>
 
@@ -930,12 +1007,15 @@ build_flags =
 <span class="cmt">// ---------------------------------------------------------------------------</span>
 
 #include &lt;Arduino.h&gt;
+#include &lt;esp_system.h&gt;
+#include &lt;esp_task_wdt.h&gt;
 #include &lt;TFT_eSPI.h&gt;
 #include &lt;Wire.h&gt;
 #include &lt;Adafruit_BME280.h&gt;
 #include &lt;Preferences.h&gt;
 
 #include "controle.h"
+#include "diario.h"
 #include "servidor.h"
 #include "tela.h"
 
@@ -968,6 +1048,27 @@ static const uint8_t PIN_SCL = 22;
 static const uint8_t ENDERECOS[] = {0x76, 0x77};
 
 static const uint32_t INTERVALO_LEITURA = 2000;      <span class="cmt">// ms entre leituras</span>
+
+<span class="cmt">// Quanto tempo o cartucho fica desligado antes de cada leitura, para o</span>
+<span class="cmt">// barramento do sensor ficar quieto. Carga resistiva corta na hora; esta</span>
+<span class="cmt">// folga e para a fonte e a fiacao acomodarem. 20 ms a cada 2 s custam 1% da</span>
+<span class="cmt">// potencia - invisivel num bloco com inercia de minutos.</span>
+static const uint32_t SILENCIO_MS = 20;
+
+<span class="cmt">// I2C a 20 kHz em vez dos 100 kHz padrao. O sensor fica a ~1 m da placa, e</span>
+<span class="cmt">// I2C foi feito para centimetros: cabo longo tem capacitancia, deixa as bordas</span>
+<span class="cmt">// do sinal moles e pega o ruido do cartucho chaveando 4,2 A. Mais devagar, o</span>
+<span class="cmt">// sinal tem tempo de assentar. Para uma leitura a cada 2 s sobra velocidade.</span>
+static const uint32_t I2C_FREQ = 20000;
+
+<span class="cmt">// Leituras falhas seguidas antes de dar o sensor por perdido. Uma falha</span>
+<span class="cmt">// isolada (ruido, ou o sensor reiniciado por um tranco de tensao) nao deve</span>
+<span class="cmt">// derrubar a secagem; um sensor solto de verdade falha sempre e e pego em</span>
+<span class="cmt">// 3 x 2 s = 6 s.</span>
+static const uint8_t FALHAS_MAX = 5;
+
+<span class="cmt">// Prazo do watchdog. Ver o comentario no fim do setup().</span>
+static const uint32_t WATCHDOG_S = 30;
 static const uint32_t INTERVALO_RETENTATIVA = 5000;  <span class="cmt">// ms entre buscas do sensor</span>
 
 static bool     sensorOk = false;
@@ -993,25 +1094,26 @@ static const char *nomeChip(uint8_t id) {
 <span class="cmt">// Lista quem responde no barramento. Se o sensor nao aparecer, isso separa</span>
 <span class="cmt">// "ligacao errada" de "endereco diferente do esperado".</span>
 static void varreI2C() {
-  Serial.println("Varredura I2C:");
+  diario.println("Varredura I2C:");
   uint8_t achados = 0;
 
   for (uint8_t endereco = 1; endereco &lt; 127; endereco++) {
     Wire.beginTransmission(endereco);
     if (Wire.endTransmission() == 0) {
-      Serial.printf("  0x%02X respondeu\n", endereco);
+      diario.printf("  0x%02X respondeu\n", endereco);
       achados++;
     }
   }
 
   if (achados == 0) {
-    Serial.println("  ninguem respondeu - confira SDA, SCL, GND e os 3V3");
+    diario.println("  ninguem respondeu - confira SDA, SCL, GND e os 3V3");
   }
 }
 
 static bool iniciaSensor() {
   for (uint8_t endereco : ENDERECOS) {
     if (!bme.begin(endereco, &amp;Wire)) continue;
+    Wire.setClock(I2C_FREQ);  <span class="cmt">// a biblioteca pode reabrir o barramento</span>
 
     enderecoSensor = endereco;
 
@@ -1052,14 +1154,76 @@ static float umidadeAbsoluta(float tempC, float umidadeRel) {
   return pressaoSat * umidadeRel * 2.1674f / (273.15f + tempC);
 }
 
+<span class="cmt">// ---------------------------------------------------------------------------</span>
+<span class="cmt">// Validacao da leitura</span>
+<span class="cmt">//</span>
+<span class="cmt">// Quando o cartucho chaveia 4,2 A, o degrau de corrente acopla no cabo do</span>
+<span class="cmt">// I2C e a transferencia se corrompe. O BME280 nao avisa: a biblioteca devolve</span>
+<span class="cmt">// os bytes que leu, e a compensacao do datasheet transforma lixo em numero.</span>
+<span class="cmt">//</span>
+<span class="cmt">// Os valores nao sao aleatorios, sao assinaturas do barramento:</span>
+<span class="cmt">//</span>
+<span class="cmt">//   registradores em 0xFFFFF (barramento devolvendo 0xFF) -&gt; ~182 a 190 C</span>
+<span class="cmt">//   registradores em 0x00000 (barramento em curto)        -&gt; ~-141 C</span>
+<span class="cmt">//</span>
+<span class="cmt">// E o 182 e o caso FELIZ: ele estoura o teto e a protecao corta. O -141</span>
+<span class="cmt">// seria o perigoso - o PID leria "fazendo muito frio" e mandaria 100% de</span>
+<span class="cmt">// potencia para sempre. Por isso a leitura e validada antes de qualquer</span>
+<span class="cmt">// coisa olhar para ela: controle, display e grafico so veem numero plausivel.</span>
+<span class="cmt">// ---------------------------------------------------------------------------</span>
+
+<span class="cmt">// Ultima leitura boa: a validacao compara contra ela, e o display repinta</span>
+<span class="cmt">// a partir dela ao religar.</span>
+static float ultimaTemp = 0, ultimaUmid = 0;
+static bool temLeitura = false;
+
+static const float TEMP_PLAUSIVEL_MIN = -10.0f;
+static const float TEMP_PLAUSIVEL_MAX = 100.0f;
+
+<span class="cmt">// O ar de uma caixa fechada nao muda tanto assim em 2 s, nem com o cartucho</span>
+<span class="cmt">// no maximo. Um salto maior que isso e ruido, nao temperatura.</span>
+static const float SALTO_MAX_C = 5.0f;
+
+<span class="cmt">// Descartar nao vira falha aqui: leSensor devolve false e o loop ja trata</span>
+<span class="cmt">// isso com o seu proprio contador de falhas seguidas.</span>
+
+static uint8_t descartesSeguidos = 0;
+static uint32_t descartesTotal = 0;
+
+static bool leituraPlausivel(float t, float u) {
+  if (isnan(t) || isnan(u)) return false;
+  if (t &lt; TEMP_PLAUSIVEL_MIN || t &gt; TEMP_PLAUSIVEL_MAX) return false;
+  if (u &lt; 0.0f || u &gt; 100.0f) return false;
+  if (temLeitura &amp;&amp; fabsf(t - ultimaTemp) &gt; SALTO_MAX_C) return false;
+  return true;
+}
+
 static bool leSensor(float &amp;temperatura, float &amp;umidade) {
   if (!bme.takeForcedMeasurement()) return false;
 
   temperatura = bme.readTemperature();
   umidade     = bme.readHumidity();
 
-  return !isnan(temperatura) &amp;&amp; !isnan(umidade);
+  if (leituraPlausivel(temperatura, umidade)) {
+    if (descartesSeguidos &gt; 0) {
+      diario.printf("Sensor           : voltou ao normal apos %u leitura(s) descartada(s)\n",
+                    descartesSeguidos);
+    }
+    descartesSeguidos = 0;
+    return true;
+  }
+
+  descartesSeguidos++;
+  descartesTotal++;
+  diario.printf("Sensor           : leitura descartada (%.1f C, %.1f %%) - %u seguida(s), %lu no total\n",
+                temperatura, umidade, descartesSeguidos,
+                (unsigned long)descartesTotal);
+
+  <span class="cmt">// Aguenta alguns glitches sem derrubar nada. Passando disso, e falha.</span>
+  return false;
 }
+
+uint32_t leiturasDescartadas() { return descartesTotal; }
 
 <span class="cmt">// ---------------------------------------------------------------------------</span>
 <span class="cmt">// Desenho</span>
@@ -1146,55 +1310,93 @@ static int16_t yDetalhe(const Cartao &amp;c)    { return c.y + c.a - 18; }
 
 <span class="cmt">// Unidade ao lado do numero, em fonte pequena e cinza. O grau nao existe na</span>
 <span class="cmt">// fonte, entao vai desenhado como dois circulos - que e o que ele e.</span>
-static int16_t desenhaUnidade(int16_t x, int16_t y, const Cartao &amp;c,
+<span class="cmt">// Template porque desenha tanto na tela quanto no sprite: na TFT_eSPI so</span>
+<span class="cmt">// drawPixel e virtual, entao passar o sprite como TFT_eSPI&amp; desenharia na</span>
+<span class="cmt">// tela.</span>
+template &lt;typename Alvo&gt;
+static int16_t desenhaUnidade(Alvo &amp;a, int16_t x, int16_t y, const Cartao &amp;c,
                               bool medir) {
   int16_t largura = 0;
 
   if (c.grau) {
     if (!medir) {
-      tft.drawCircle(x + 3, y - 5, 3, MUDO);
-      tft.drawCircle(x + 3, y - 5, 2, MUDO);
+      a.drawCircle(x + 3, y - 5, 3, MUDO);
+      a.drawCircle(x + 3, y - 5, 2, MUDO);
     }
     x += 9;
     largura += 9;
   }
 
-  tft.setTextFont(2);
-  largura += tft.textWidth(c.unidade);
+  a.setTextFont(2);
+  largura += a.textWidth(c.unidade);
   if (!medir) {
-    tft.setTextDatum(ML_DATUM);
-    tft.setTextColor(MUDO, CARTAO);
-    tft.drawString(c.unidade, x, y);
+    a.setTextDatum(ML_DATUM);
+    a.setTextColor(MUDO, CARTAO);
+    a.drawString(c.unidade, x, y);
   }
   return largura;
+}
+
+<span class="cmt">// O valor e montado num sprite fora da tela e empurrado de uma vez. Apagar a</span>
+<span class="cmt">// faixa direto na tela e redesenhar deixava um quadro em branco visivel - a</span>
+<span class="cmt">// piscada na troca de valor. Todos os cartoes tem a mesma largura, entao um</span>
+<span class="cmt">// sprite so serve para todos (~13 KB).</span>
+static TFT_eSprite faixa = TFT_eSprite(&amp;tft);
+static bool faixaOk = false;
+
+<span class="cmt">// O que esta desenhado em cada cartao. Valor igual nao redesenha.</span>
+static char valorNaTela[N_CARTOES][12];
+static bool dadoNaTela[N_CARTOES];
+
+static void esqueceValor(uint8_t i) { valorNaTela[i][0] = '\0'; }
+
+template &lt;typename Alvo&gt;
+static void montaValor(Alvo &amp;a, int16_t ox, int16_t oy, const Cartao &amp;c,
+                       const char *valor, bool temDado) {
+  a.fillRect(ox, oy, c.l - 6, faixaAltura(c), CARTAO);
+
+  a.setFreeFont(&amp;FreeSansBold24pt7b);
+  const int16_t larguraValor = a.textWidth(valor);
+  const int16_t larguraUnidade = temDado ? desenhaUnidade(a, 0, 0, c, true) : 0;
+  const int16_t total = larguraValor + (temDado ? 3 + larguraUnidade : 0);
+
+  const int16_t x = ox + (c.l - 6) / 2 - total / 2;
+  const int16_t y = oy + faixaAltura(c) / 2;
+
+  <span class="cmt">// desenhaUnidade() trocou a fonte ao medir: reescolhe antes de desenhar.</span>
+  a.setFreeFont(&amp;FreeSansBold24pt7b);
+  a.setTextDatum(ML_DATUM);
+  a.setTextColor(temDado ? c.cor : MUDO, CARTAO);
+  a.drawString(valor, x, y);
+
+  if (temDado) desenhaUnidade(a, x + larguraValor + 3, y, c, false);
 }
 
 <span class="cmt">// Numero grande mais a unidade, centrados juntos no cartao. Sem dado, "--"</span>
 <span class="cmt">// em cinza: o cartao existe no layout mas nao inventa leitura.</span>
 static void desenhaValor(uint8_t i, const char *valor, bool temDado) {
+  if (dadoNaTela[i] == temDado &amp;&amp; strcmp(valorNaTela[i], valor) == 0) return;
+  snprintf(valorNaTela[i], sizeof valorNaTela[i], "%s", valor);
+  dadoNaTela[i] = temDado;
+
   const Cartao &amp;c = CARTOES[i];
-  const int16_t y = yValor(c);
 
-  tft.fillRect(c.x + 3, faixaTopo(c), c.l - 6, faixaAltura(c), CARTAO);
+  if (!faixaOk) {
+    faixa.setColorDepth(16);
+    faixaOk = faixa.createSprite(c.l - 6, faixaAltura(c)) != nullptr;
+  }
 
-  tft.setFreeFont(&amp;FreeSansBold24pt7b);
-  const int16_t larguraValor = tft.textWidth(valor);
-  const int16_t larguraUnidade = temDado ? desenhaUnidade(0, 0, c, true) : 0;
-  const int16_t total = larguraValor + (temDado ? 3 + larguraUnidade : 0);
-
-  int16_t x = c.x + c.l / 2 - total / 2;
-
-  <span class="cmt">// desenhaUnidade() trocou a fonte ao medir: reescolhe antes de desenhar.</span>
-  tft.setFreeFont(&amp;FreeSansBold24pt7b);
-  tft.setTextDatum(ML_DATUM);
-  tft.setTextColor(temDado ? c.cor : MUDO, CARTAO);
-  tft.drawString(valor, x, y);
-
-  if (temDado) desenhaUnidade(x + larguraValor + 3, y, c, false);
+  if (faixaOk) {
+    montaValor(faixa, 0, 0, c, valor, temDado);
+    faixa.pushSprite(c.x + 3, faixaTopo(c));
+  } else {
+    montaValor(tft, c.x + 3, faixaTopo(c), c, valor, temDado);  <span class="cmt">// sem memoria: pisca, mas funciona</span>
+  }
 }
 
 static void desenhaCartao(uint8_t i) {
   const Cartao &amp;c = CARTOES[i];
+  esqueceValor(i);
 
   tft.fillRoundRect(c.x, c.y, c.l, c.a, 9, CARTAO);
   tft.drawRoundRect(c.x, c.y, c.l, c.a, 9, BORDA);
@@ -1255,8 +1457,6 @@ static void iniciaLuz() {
   if (brilho &lt; BRILHO_MIN || brilho &gt; 100) brilho = BRILHO_PADRAO;
 }
 
-static float ultimaTemp = 0, ultimaUmid = 0;
-static bool temLeitura = false;
 
 <span class="cmt">// --- temperatura maxima -------------------------------------------------------</span>
 <span class="cmt">// Definida no painel web e salva na memoria, entao sobrevive a um reinicio.</span>
@@ -1292,7 +1492,7 @@ static void salvaMaxima(float valor) {
   nvs.putFloat(NVS_TMAX, valor);
   nvs.end();
 
-  Serial.printf("Temp. maxima     : %.1f C (salva)\n", valor);
+  diario.printf("Temp. maxima     : %.1f C (salva)\n", valor);
 }
 
 <span class="cmt">// Linha de baixo do cartao de temperatura. Em verde quando configurada, para</span>
@@ -1399,8 +1599,20 @@ static void pintaControle() {
 <span class="cmt">// "conectando..." quando a rede cai, o estado da conexao continua visivel</span>
 <span class="cmt">// aqui sem precisar de um indicador separado.</span>
 static void desenhaRodape(const char *endereco) {
-  tft.fillRect(MARGEM, Y_RODAPE - 8, LARGURA - 2 * MARGEM, 16, FUNDO);
+  <span class="cmt">// A faixa inteira do rodape, de borda a borda: a listra de aviso ocupa tudo,</span>
+  <span class="cmt">// e ao sumir ela precisa ser apagada tambem nas laterais.</span>
+  const int16_t topo = Y_RODAPE - ALTURA_RODAPE / 2;
 
+  if (servidorPortalAtivo()) {
+    <span class="cmt">// Sem a rede de casa: listra laranja com o nome e a senha da rede propria,</span>
+    <span class="cmt">// alternando com o aviso a cada 3 s (servidorEndereco()).</span>
+    tft.fillRect(0, topo, LARGURA, ALTURA_RODAPE, LARANJA);
+    tft.setTextFont(2);
+    textoCentrado(LARGURA / 2, Y_RODAPE, endereco, 1, FUNDO, LARANJA);
+    return;
+  }
+
+  tft.fillRect(0, topo, LARGURA, ALTURA_RODAPE, FUNDO);
   tft.setTextFont(2);
   textoCentrado(LARGURA / 2, Y_RODAPE, endereco, 1, RODAPE, FUNDO);
 }
@@ -1428,7 +1640,7 @@ void telaDefineLigada(bool ligada) {
   else        tft.fillScreen(TFT_BLACK);
   aplicaLuz();
 
-  Serial.printf("Tela             : %s\n", ligada ? "ligada" : "apagada");
+  diario.printf("Tela             : %s\n", ligada ? "ligada" : "apagada");
 }
 
 bool telaEstaLigada() { return telaLigada; }
@@ -1447,6 +1659,46 @@ void telaDefineBrilho(uint8_t pct) {
 
 uint8_t telaBrilho() { return brilho; }
 
+<span class="cmt">// Tela de atualizacao: titulo e barra de progresso. Desenhada direto, sem os</span>
+<span class="cmt">// cartoes, porque durante a gravacao o loop nao roda e o painel ficaria</span>
+<span class="cmt">// congelado com valores velhos - e parecendo que o aquecedor ainda funciona.</span>
+void telaAtualizando(uint8_t pct) {
+  static bool montada = false;
+  const int16_t bx = 30, by = ALTURA / 2 + 10, bl = LARGURA - 60, ba = 18;
+
+  if (pct == 0 || !montada) {
+    montada = true;
+    tft.fillScreen(FUNDO);
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(TEXTO, FUNDO);
+    tft.drawString("ATUALIZANDO", LARGURA / 2, ALTURA / 2 - 40, 4);
+    tft.setTextColor(MUDO, FUNDO);
+    tft.drawString("aquecedor desligado - nao desligue a energia",
+                   LARGURA / 2, ALTURA / 2 - 12, 2);
+    tft.drawRoundRect(bx, by, bl, ba, 6, BORDA);
+  }
+
+  tft.fillRoundRect(bx + 2, by + 2, (bl - 4) * pct / 100, ba - 4, 4, CIANO);
+
+  char buf[8];
+  snprintf(buf, sizeof buf, "%u%%", pct);
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextColor(TEXTO, FUNDO);
+  tft.setTextPadding(60);
+  tft.drawString(buf, LARGURA / 2, by + ba + 22, 4);
+  tft.setTextPadding(0);
+
+  if (!telaLigada) {          <span class="cmt">// imagem apagada pelo painel: mostra mesmo assim</span>
+    telaLigada = true;
+    aplicaLuz();
+  }
+}
+
+void telaFimAtualizacao() {
+  desenhaPainel();
+  aplicaLuz();
+}
+
 bool painelTempMaxima(float &amp;valor) {
   valor = tempMaxima;
   return temMaxima;
@@ -1459,40 +1711,60 @@ void painelDefineTempMaxima(float valor) {
 
 <span class="cmt">// ---------------------------------------------------------------------------</span>
 
+<span class="cmt">// Por que a placa reiniciou. "WATCHDOG" significa que o loop travou e o chip</span>
+<span class="cmt">// se reiniciou sozinho - e o cartucho, por regra, voltou bloqueado.</span>
+static const char *motivoReinicio() {
+  switch (esp_reset_reason()) {
+    case ESP_RST_POWERON:  return "ligada na energia";
+    case ESP_RST_SW:       return "por software (ex.: fim de atualizacao)";
+    case ESP_RST_PANIC:    return "FALHA no firmware (excecao)";
+    case ESP_RST_INT_WDT:
+    case ESP_RST_TASK_WDT:
+    case ESP_RST_WDT:      return "WATCHDOG - o loop travou e a placa se reiniciou";
+    case ESP_RST_BROWNOUT: return "QUEDA DE TENSAO na alimentacao do ESP32";
+    case ESP_RST_EXT:      return "botao EN";
+    default:               return "outro";
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   delay(400);  <span class="cmt">// da tempo ao monitor serial de abrir</span>
 
-  Serial.println();
-  Serial.println("==================================================");
-  Serial.println("  Estufa de filamento - painel THERMO");
-  Serial.println("==================================================");
-  Serial.printf("Driver da tela   : %s\n", DRIVER);
-  Serial.printf("Inversao de cor  : %s\n", INVERSAO);
-  Serial.printf("Barramento SPI   : %d MHz\n", SPI_FREQUENCY / 1000000);
-  Serial.printf("Pinos da tela    : SCK=%d MOSI=%d CS=%d DC=%d RST=%d\n",
+  diario.println();
+  diario.println("==================================================");
+  diario.println("  Estufa de filamento - painel THERMO");
+  diario.println("==================================================");
+  diario.printf("Reinicio         : %s\n", motivoReinicio());
+  diario.printf("Driver da tela   : %s\n", DRIVER);
+  diario.printf("Inversao de cor  : %s\n", INVERSAO);
+  diario.printf("Barramento SPI   : %d MHz\n", SPI_FREQUENCY / 1000000);
+  diario.printf("Pinos da tela    : SCK=%d MOSI=%d CS=%d DC=%d RST=%d\n",
                 TFT_SCLK, TFT_MOSI, TFT_CS, TFT_DC, TFT_RST);
-  Serial.printf("Pinos do sensor  : SDA=%d SCL=%d\n", PIN_SDA, PIN_SCL);
+  diario.printf("Pinos do sensor  : SDA=%d SCL=%d\n", PIN_SDA, PIN_SCL);
 
   controleInicia();
   servidorInicia();  <span class="cmt">// nao bloqueia: a rede sobe em paralelo ao resto</span>
   carregaMaxima();
-  Serial.printf("Temp. maxima     : %.1f C\n", tempMaxima);
+  diario.printf("Temp. maxima     : %.1f C\n", tempMaxima);
 
   Wire.begin(PIN_SDA, PIN_SCL);
+  Wire.setClock(I2C_FREQ);
+  diario.printf("I2C              : %lu kHz (cabo longo ate o sensor)\n",
+                (unsigned long)(I2C_FREQ / 1000));
   varreI2C();
 
   sensorOk = iniciaSensor();
   if (sensorOk) {
     const uint8_t id = bme.sensorID();
-    Serial.printf("Sensor           : 0x%02X, chip ID 0x%02X (%s)\n",
+    diario.printf("Sensor           : 0x%02X, chip ID 0x%02X (%s)\n",
                   enderecoSensor, id, nomeChip(id));
     if (id != 0x60) {
-      Serial.println("ATENCAO: nao e um BME280. A umidade vai sair invalida.");
+      diario.println("ATENCAO: nao e um BME280. A umidade vai sair invalida.");
     }
   } else {
-    Serial.println("Sensor           : NAO encontrado em 0x76 nem 0x77");
-    Serial.println("                   seguindo sem ele, tentando de novo a cada 5 s");
+    diario.println("Sensor           : NAO encontrado em 0x76 nem 0x77");
+    diario.println("                   seguindo sem ele, tentando de novo a cada 5 s");
   }
 
   iniciaLuz();  <span class="cmt">// antes do init: a luz so acende com a imagem pronta</span>
@@ -1502,12 +1774,33 @@ void setup() {
   <span class="cmt">// layout de tela.h foi feito para retrato.</span>
   tft.setRotation(0);
 
-  Serial.printf("Resolucao em uso : %d x %d\n", tft.width(), tft.height());
-  Serial.printf("Luz de fundo     : PWM no GPIO%u, brilho %u%%\n", PIN_LUZ, brilho);
-  Serial.println("--------------------------------------------------");
+  diario.printf("Resolucao em uso : %d x %d\n", tft.width(), tft.height());
+  diario.printf("Luz de fundo     : PWM no GPIO%u, brilho %u%%\n", PIN_LUZ, brilho);
+  diario.println("--------------------------------------------------");
 
   desenhaPainel();
   aplicaLuz();
+
+  <span class="cmt">// --- watchdog -------------------------------------------------------------</span>
+  <span class="cmt">// Se o loop() parar de girar por 5 s, o chip se reinicia sozinho. Sem isso,</span>
+  <span class="cmt">// um travamento com o cartucho a 100% o deixaria a 100% para sempre: todas</span>
+  <span class="cmt">// as protecoes (teto, sensor, "nao esquenta") sao software, e software</span>
+  <span class="cmt">// travado nao protege nada. Reiniciando, o GPIO25 solta, o 10 kOhm segura</span>
+  <span class="cmt">// o gate em zero e o firmware nasce com o aquecedor bloqueado.</span>
+  <span class="cmt">//</span>
+  <span class="cmt">// O core ja vem com o watchdog de tarefas em modo "reinicia" (PANIC=y) e</span>
+  <span class="cmt">// 5 s de prazo; enableLoopWDT() poe o loop() sob ele, e o proprio core o</span>
+  <span class="cmt">// alimenta a cada volta. So o OTA bloqueia mais que isso - ele alimenta</span>
+  <span class="cmt">// por conta propria (servidor.cpp).</span>
+  enableLoopWDT();
+  <span class="cmt">// O prazo padrao do core e 5 s, e o WebServer espera ate 5 s por um cliente</span>
+  <span class="cmt">// lento (HTTP_MAX_DATA_WAIT) - um celular saindo do alcance no meio de um</span>
+  <span class="cmt">// pedido derrubaria a placa no meio da secagem. 30 s dao folga para isso e</span>
+  <span class="cmt">// para o OTA, e termicamente nao fazem diferenca: 30 s a mais de cartucho</span>
+  <span class="cmt">// num travamento real nao chegam perto do teto.</span>
+  esp_task_wdt_init(WATCHDOG_S, true);
+  diario.printf("Watchdog         : ligado - loop travado por %u s reinicia a placa\n",
+                WATCHDOG_S);
 }
 
 void loop() {
@@ -1540,16 +1833,55 @@ void loop() {
     if (agora - ultimaLeitura &gt;= INTERVALO_LEITURA) {
       ultimaLeitura = agora;
 
+      static uint8_t falhasSeguidas = 0;
+
+      <span class="cmt">// Le com o cartucho desligado. Os 4,2 A corrompem o I2C deste cabo, e</span>
+      <span class="cmt">// nenhuma blindagem, capacitor ou separacao de terra resolveu. Em vez</span>
+      <span class="cmt">// de brigar com o acoplamento, a leitura acontece quando ele nao</span>
+      <span class="cmt">// existe. O PID nem fica sabendo: a potencia pedida nao muda.</span>
+      controleSilenciaSaida(true);
+      delay(SILENCIO_MS);
+
       float temperatura, umidade;
-      if (leSensor(temperatura, umidade)) {
+      const bool leu = leSensor(temperatura, umidade);
+
+      controleSilenciaSaida(false);
+
+      if (leu) {
+        if (falhasSeguidas &gt; 0) {
+          diario.printf("Sensor           : voltou a ler (%.1f C)\n", temperatura);
+        }
+        falhasSeguidas = 0;
         mostraLeitura(temperatura, umidade);
         servidorRegistra(temperatura, umidade);
         controleNovaLeitura(true, temperatura);
         if (telaLigada) pintaControle();
+      } else if (++falhasSeguidas &lt; FALHAS_MAX) {
+        <span class="cmt">// Falha isolada: ruido no cabo, ou o sensor se reiniciou num tranco</span>
+        <span class="cmt">// de tensao e perdeu a configuracao (volta sem medir umidade).</span>
+        <span class="cmt">// Reconfigura e tenta na proxima leitura. Ate la o controle segue</span>
+        <span class="cmt">// com a ultima potencia - sao 2 s.</span>
+        <span class="cmt">// Uma falha isolada e glitch de barramento: o sensor nao perdeu nada,</span>
+        <span class="cmt">// so a transferencia se corrompeu, e a proxima leitura vem boa.</span>
+        <span class="cmt">// Reconfigurar significa bme.begin(), que faz um reset no sensor e</span>
+        <span class="cmt">// espera a calibracao num laco SEM limite de tempo - com o barramento</span>
+        <span class="cmt">// devolvendo 0xFF ali, ele nunca sai. So vale a pena a partir da</span>
+        <span class="cmt">// segunda falha seguida, que ai o sensor pode ter reiniciado mesmo.</span>
+        if (falhasSeguidas &gt;= 2) {
+          diario.printf("Sensor           : leitura falhou (%u de %u), reconfigurando\n",
+                        falhasSeguidas, FALHAS_MAX);
+          iniciaSensor();
+        } else {
+          diario.printf("Sensor           : leitura falhou (%u de %u), tentando de novo\n",
+                        falhasSeguidas, FALHAS_MAX);
+        }
       } else {
-        <span class="cmt">// Parou de responder: cabo solto, provavelmente. Volta a procurar</span>
-        <span class="cmt">// em vez de repetir o ultimo valor, que pareceria um sensor travado.</span>
-        Serial.println("Sensor parou de responder - voltando a procurar");
+        <span class="cmt">// Falhou FALHAS_MAX vezes seguidas: cabo solto, provavelmente. Volta</span>
+        <span class="cmt">// a procurar em vez de repetir o ultimo valor, que pareceria um</span>
+        <span class="cmt">// sensor travado.</span>
+        diario.printf("Sensor           : %u leituras falhas seguidas - perdido, voltando a procurar\n",
+                      FALHAS_MAX);
+        falhasSeguidas = 0;
         sensorOk = false;
         mostraSemSensor();
         servidorSemSensor();
@@ -1562,7 +1894,7 @@ void loop() {
 
     if (iniciaSensor()) {
       sensorOk = true;
-      Serial.printf("Sensor apareceu em 0x%02X\n", enderecoSensor);
+      diario.printf("Sensor apareceu em 0x%02X\n", enderecoSensor);
     }
   }
 
@@ -2068,8 +2400,8 @@ void loop() {
         <line x1="800" y1="60" x2="800" y2="420" stroke="var(--v33)" stroke-width="2.5"/>
         <line x1="782" y1="228" x2="818" y2="228" stroke="var(--v33)" stroke-width="4"/>
         <line x1="782" y1="246" x2="818" y2="246" stroke="var(--v33)" stroke-width="4"/>
-        <text x="828" y="226" class="t-s" fill="var(--v33)">470–1000 µF</text>
-        <text x="828" y="244" class="t-s" fill="var(--v33)">25 V · + no topo</text>
+        <text x="828" y="226" class="t-s" fill="var(--v33)">470–1000 µF  +  104</text>
+        <text x="828" y="244" class="t-s" fill="var(--v33)">25 V · + no topo · em paralelo</text>
         <text x="828" y="262" class="t-s t-mut">o mais perto possível</text>
         <text x="828" y="280" class="t-s t-mut">do MOSFET</text>
 
@@ -2174,6 +2506,82 @@ void loop() {
       <div class="note"><b>Dica de montagem: o 10 kΩ entre G e S</b><p>O resistor de 10 kΩ vai do gate ao GND, e o S já é o GND. Dá para soldá-lo direto entre as pernas <b>G</b> e <b>S</b>, por trás, pulando a do meio. Fica curto, sem fio solto, e o gate nunca fica no ar, nem com o fio do <code>P25</code> desconectado.</p></div>
       <div class="note"><b>Confirme com o multímetro</b><p>Escala de <b>diodo</b>. Ponta <b>vermelha no S</b> e <b>preta no D</b>: marca uns 0,4 a 0,7 V, que é o diodo interno do MOSFET. Invertendo as pontas, não marca nada. O <b>G</b> não conduz para nenhuma das outras duas, em nenhum sentido. E a aba dá continuidade com a perna do meio. Assim você confere o D, o S e o G sem depender de desenho.</p></div>
       <div class="note warn"><b>A aba está no potencial do D</b><p>Se a aba encostar em metal ligado ao terra (gabinete, dissipador sem isolador), o cartucho liga direto e fica ligado, sem o firmware conseguir desligar. A 0,3 W ele não precisa de dissipador: deixe a aba livre, ou use mica e bucha isolante se for parafusar.</p></div>
+    </div>
+  </section>
+
+
+  <section>
+    <h2>Onde soldar os capacitores</h2>
+    <p>O borne do hotend tem dois parafusos, e é aqui que a montagem engana:
+    o parafuso que parece "negativo" <b>não é o terra</b> — ele é o
+    <code>D</code>, que vai ao MOSFET. O capacitor precisa do
+    <code>+12 V</code> e do <b>GND de verdade</b>.</p>
+    <div class="fig">
+      <svg viewBox="0 0 940 400" role="img" aria-label="Onde ligar os capacitores no borne do hotend: certo e errado">
+        <text x="240" y="40" text-anchor="middle" class="t-b" fill="var(--in)">CERTO</text>
+        <text x="240" y="60" text-anchor="middle" class="t-s t-mut">do +12 V até o GND da fonte</text>
+        <rect x="150" y="80" width="180" height="55" rx="5" class="box"/>
+        <text x="240" y="113" text-anchor="middle" class="t-s t-mut">borne do hotend</text>
+        <circle cx="195" cy="88" r="5" fill="var(--pwr)"/>
+        <circle cx="285" cy="88" r="5" fill="var(--sig)"/>
+        <text x="195" y="78" text-anchor="middle" class="t-s" fill="var(--pwr)">+12 V</text>
+        <text x="300" y="78" class="t-s t-mut">D</text>
+
+        <line x1="195" y1="135" x2="195" y2="175" stroke="var(--pwr)" stroke-width="2.5"/>
+        <line x1="160" y1="175" x2="275" y2="175" stroke="var(--pwr)" stroke-width="2.5"/>
+        <line x1="180" y1="175" x2="180" y2="200" stroke="var(--pwr)" stroke-width="2.5"/>
+        <line x1="166" y1="200" x2="194" y2="200" stroke="var(--v33)" stroke-width="4"/>
+        <line x1="166" y1="214" x2="194" y2="214" stroke="var(--v33)" stroke-width="4"/>
+        <line x1="180" y1="214" x2="180" y2="285" stroke="var(--sig)" stroke-width="2.5"/>
+        <text x="158" y="198" text-anchor="end" class="t-s" fill="var(--v33)">1000 µF</text>
+        <text x="158" y="216" text-anchor="end" class="t-s t-mut">+ para cima</text>
+
+        <line x1="255" y1="175" x2="255" y2="200" stroke="var(--pwr)" stroke-width="2.5"/>
+        <line x1="241" y1="200" x2="269" y2="200" stroke="var(--v33)" stroke-width="4"/>
+        <line x1="241" y1="214" x2="269" y2="214" stroke="var(--v33)" stroke-width="4"/>
+        <line x1="255" y1="214" x2="255" y2="285" stroke="var(--sig)" stroke-width="2.5"/>
+        <text x="280" y="209" class="t-s" fill="var(--v33)">104</text>
+
+        <line x1="120" y1="285" x2="340" y2="285" stroke="var(--sig)" stroke-width="2.5"/>
+        <text x="230" y="308" text-anchor="middle" class="t-s t-mut">GND — negativo da fonte</text>
+        <circle cx="180" cy="285" r="4" fill="var(--sig)"/>
+        <circle cx="255" cy="285" r="4" fill="var(--sig)"/>
+
+        <polyline points="285,135 390,135 390,240" fill="none" stroke="var(--sig)" stroke-width="2.5"/>
+        <polygon points="385,240 395,240 390,252" fill="var(--sig)"/>
+        <text x="400" y="200" class="t-s t-mut">ao D do</text>
+        <text x="400" y="218" class="t-s t-mut">MOSFET</text>
+        <text x="400" y="240" class="t-s" fill="var(--pwr)">nada aqui</text>
+
+        <line x1="480" y1="30" x2="480" y2="330" stroke="var(--line)" stroke-width="1"/>
+
+        <text x="700" y="40" text-anchor="middle" class="t-b" fill="var(--pwr)">ERRADO</text>
+        <text x="700" y="60" text-anchor="middle" class="t-s t-mut">entre os dois parafusos do borne</text>
+        <rect x="610" y="80" width="180" height="55" rx="5" class="box"/>
+        <text x="700" y="113" text-anchor="middle" class="t-s t-mut">borne do hotend</text>
+        <circle cx="655" cy="88" r="5" fill="var(--pwr)"/>
+        <circle cx="745" cy="88" r="5" fill="var(--sig)"/>
+        <text x="655" y="78" text-anchor="middle" class="t-s" fill="var(--pwr)">+12 V</text>
+        <text x="760" y="78" class="t-s t-mut">D</text>
+
+        <line x1="655" y1="135" x2="655" y2="195" stroke="var(--pwr)" stroke-width="2.5"/>
+        <line x1="745" y1="135" x2="745" y2="195" stroke="var(--sig)" stroke-width="2.5"/>
+        <line x1="655" y1="195" x2="686" y2="195" stroke="var(--pwr)" stroke-width="2.5"/>
+        <line x1="714" y1="195" x2="745" y2="195" stroke="var(--sig)" stroke-width="2.5"/>
+        <line x1="686" y1="181" x2="686" y2="209" stroke="var(--v33)" stroke-width="4"/>
+        <line x1="700" y1="181" x2="700" y2="209" stroke="var(--v33)" stroke-width="4"/>
+        <line x1="660" y1="155" x2="740" y2="235" stroke="var(--pwr)" stroke-width="5"/>
+        <line x1="740" y1="155" x2="660" y2="235" stroke="var(--pwr)" stroke-width="5"/>
+        <text x="700" y="275" text-anchor="middle" class="t-s" fill="var(--pwr)">fica em paralelo com o cartucho</text>
+        <text x="700" y="293" text-anchor="middle" class="t-s t-mut">e descarrega dentro do MOSFET</text>
+        <text x="700" y="311" text-anchor="middle" class="t-s t-mut">toda vez que ele liga</text>
+      </svg>
+    </div>
+    <div class="notes">
+      <div class="note ok"><b>Na prática</b><p>A perna <b>+</b> do eletrolítico e uma perna do <code>104</code> vão no <b>parafuso do +12 V</b> do borne. A perna <b>−</b> do eletrolítico e a outra perna do <code>104</code> vão no <b>ponto de GND mais próximo</b> da placa — não no outro parafuso do borne.</p></div>
+      <div class="note warn"><b>Por que entre os dois parafusos é ruim</b><p>Ali o capacitor fica em paralelo com o cartucho, não com a fonte. Quando o MOSFET liga, ele puxa o <code>D</code> para perto de zero e o capacitor carregado despeja tudo pelo canal de uma vez — um pico muito maior que os 4,2 A do cartucho. Faz o oposto do que se quer e maltrata o MOSFET a cada ciclo.</p></div>
+      <div class="note"><b>Os dois no mesmo par de pontos</b><p>Não é um no 12 V e outro no <code>D</code>: os dois ficam entre <code>+12 V</code> e <code>GND</code>, lado a lado. Eles cobrem tempos diferentes do mesmo transitório — o eletrolítico é grande e lento, o cerâmico é pequeno e rápido.</p></div>
+      <div class="note"><b>Pernas curtas importam</b><p>O que o capacitor combate é um degrau de 4,2 A em alguns microssegundos. Cada centímetro de perna é indutância em série, e indutância é exatamente o que atrapalha nessa escala. Corte as pernas no limite do que der para soldar.</p></div>
     </div>
   </section>
 

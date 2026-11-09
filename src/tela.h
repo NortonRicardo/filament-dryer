@@ -38,12 +38,16 @@ static const int16_t COL_L   = (LARGURA - 2 * MARGEM - VAO) / 2;  // 146
 static const int16_t ALTURA_RODAPE = 24;
 static const int16_t Y_RODAPE = ALTURA - ALTURA_RODAPE / 2;  // 468
 
-// Tres linhas de cartoes iguais preenchendo o que sobra acima do rodape:
-// (480 - margem - rodape - 3 vaos) / 3 = 140 px cada. A ultima linha
-// termina em y 446, e o rodape fica sozinho na faixa de 456 a 480.
+// Faixa de topo com o relogio, no canto direito.
+static const int16_t ALTURA_TOPO = 20;
+static const int16_t Y_TOPO = ALTURA_TOPO / 2;  // 10
+
+// Tres linhas de cartoes iguais entre o topo e o rodape:
+// (480 - topo - rodape - 3 vaos) / 3 = 137 px cada. A ultima linha termina
+// em y 447, e o rodape fica sozinho na faixa de 456 a 480.
 static const int16_t LINHA_A =
-    (ALTURA - MARGEM - ALTURA_RODAPE - 3 * VAO) / 3;  // 140
-static const int16_t Y_L1 = MARGEM;
+    (ALTURA - ALTURA_TOPO - ALTURA_RODAPE - 3 * VAO) / 3;  // 137
+static const int16_t Y_L1 = ALTURA_TOPO;
 static const int16_t Y_L2 = Y_L1 + LINHA_A + VAO;
 static const int16_t Y_L3 = Y_L2 + LINHA_A + VAO;
 

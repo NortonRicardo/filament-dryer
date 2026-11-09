@@ -66,6 +66,15 @@ void controleNovaLeitura(bool sensorOk, float temperatura);
 // Chamar sempre no loop: e quem faz a rampa descer suavemente.
 void controleTick();
 
+// Desliga o cartucho por um instante para a leitura do sensor acontecer com
+// o barramento quieto. O I2C deste projeto nao sobrevive aos 4,2 A passando;
+// como o bloco aquecedor tem inercia de minutos e a pausa e de dezenas de
+// milissegundos, o custo termico e nulo.
+//
+// controleTick() respeita o silencio: com ele ligado, o pino fica baixo
+// independente do que o PID pediu.
+void controleSilenciaSaida(bool silenciar);
+
 EstadoAquecedor controleEstado();
 const char *controleEstadoTexto();
 const char *controleMotivo();      // vazio quando nao ha falha

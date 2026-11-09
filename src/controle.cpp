@@ -76,6 +76,11 @@ static bool aquecedorLigado = false;  // PID pedindo mais que 0%
 static float potencia = 0;            // 0 a 100 %, saida do PID
 static uint8_t velocidade[2] = {0, 0};
 
+// Verdadeiro durante a leitura do sensor: o cartucho fica desligado para o
+// barramento ficar limpo. Nao mexe em "potencia" nem no estado - do ponto de
+// vista do PID nada aconteceu, e o log nao enche de liga/desliga.
+static bool saidaSilenciada = false;
+
 static uint32_t desdeDesligou = 0;   // millis em que a potencia foi a 0
 static bool     jaAqueceu = false;   // houve ao menos um ciclo nesta sessao
 
@@ -326,8 +331,15 @@ void controleNovaLeitura(bool sensorOk, float temperatura) {
 // Chamar sempre no loop: faz a janela de PWM do cartucho e a rampa dos
 // ventiladores. O cartucho fica ligado na fracao inicial de cada janela de
 // 2 s igual a potencia pedida.
+void controleSilenciaSaida(bool silenciar) {
+  if (silenciar == saidaSilenciada) return;
+  saidaSilenciada = silenciar;
+  if (silenciar) digitalWrite(PIN_AQUECEDOR, LOW);
+}
+
 void controleTick() {
-  const bool pode = autorizado && estado != EST_FALHA && potencia > 0;
+  const bool pode = autorizado && estado != EST_FALHA && potencia > 0
+                    && !saidaSilenciada;
   const uint32_t fase = millis() % JANELA_MS;
   const bool ligado = pode && fase < (uint32_t)(potencia * JANELA_MS / 100.0f);
   digitalWrite(PIN_AQUECEDOR, ligado ? HIGH : LOW);

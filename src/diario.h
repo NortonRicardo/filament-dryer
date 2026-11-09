@@ -25,3 +25,7 @@ class Diario : public Print {
 };
 
 extern Diario diario;
+
+// A hora do relogio interno ja foi acertada pela internet (NTP)? Antes disso
+// ela marca 1970, e o diario carimba o tempo desde o boot.
+bool horaCerta();
