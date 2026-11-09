@@ -1015,8 +1015,10 @@ upload_port = estufa.local</code></pre>
 #include &lt;Adafruit_BME280.h&gt;
 #include &lt;Preferences.h&gt;
 
+#include "aviso.h"
 #include "controle.h"
 #include "diario.h"
+#include "registro.h"
 #include "servidor.h"
 #include "tela.h"
 
@@ -1755,11 +1757,36 @@ void setup() {
   Serial.begin(115200);
   delay(400);  <span class="cmt">// da tempo ao monitor serial de abrir</span>
 
+  <span class="cmt">// Antes da primeira linha do diario: assim o boot tambem fica gravado.</span>
+  registroInicia();
+
   diario.println();
   diario.println("==================================================");
   diario.println("  Estufa de filamento - painel THERMO");
   diario.println("==================================================");
   diario.printf("Reinicio         : %s\n", motivoReinicio());
+  diario.printf("Registro         : %u de %u KB usados na flash\n",
+                (unsigned)(registroUsado() / 1024),
+                (unsigned)(registroTotal() / 1024));
+
+  avisoInicia();
+  diario.printf("Avisos           : %s\n",
+                avisoLigado() ? "ligados (ntfy)" : "desligados - sem NTFY_TOPICO no .env");
+
+  <span class="cmt">// Reinicio que nao foi por energia nem por atualizacao merece aviso: e o</span>
+  <span class="cmt">// tipo de coisa que acontece de madrugada sem ninguem ver. Fica na fila ate</span>
+  <span class="cmt">// o Wi-Fi subir.</span>
+  switch (esp_reset_reason()) {
+    case ESP_RST_INT_WDT:
+    case ESP_RST_TASK_WDT:
+    case ESP_RST_WDT:
+    case ESP_RST_BROWNOUT:
+    case ESP_RST_PANIC:
+      avisa("Estufa reiniciou", motivoReinicio(), 4);
+      break;
+    default:
+      break;
+  }
   diario.printf("Driver da tela   : %s\n", DRIVER);
   diario.printf("Inversao de cor  : %s\n", INVERSAO);
   diario.printf("Barramento SPI   : %d MHz\n", SPI_FREQUENCY / 1000000);
@@ -1847,6 +1874,14 @@ void loop() {
   <span class="cmt">// acompanha comparando o texto, para nao repintar a linha a cada volta.</span>
   if (telaEstaLigada()) desenhaRelogio(false);
 
+  int codigoAviso;
+  if (avisoResultado(codigoAviso)) {
+    if (codigoAviso == 200)
+      diario.println("Aviso            : entregue ao celular");
+    else
+      diario.printf("Aviso            : FALHOU (codigo %d)\n", codigoAviso);
+  }
+
   static bool avisouHora = false;
   if (!avisouHora &amp;&amp; horaCerta()) {
     avisouHora = true;
@@ -1885,6 +1920,7 @@ void loop() {
         }
         falhasSeguidas = 0;
         mostraLeitura(temperatura, umidade);
+        registroMedida(temperatura, umidade);
         servidorRegistra(temperatura, umidade);
         controleNovaLeitura(true, temperatura);
         if (telaLigada) pintaControle();
