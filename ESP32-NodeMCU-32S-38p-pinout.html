@@ -1008,6 +1008,7 @@ upload_port = estufa.local</code></pre>
 
 #include &lt;Arduino.h&gt;
 #include &lt;esp_system.h&gt;
+#include &lt;time.h&gt;
 #include &lt;esp_task_wdt.h&gt;
 #include &lt;TFT_eSPI.h&gt;
 #include &lt;Wire.h&gt;
@@ -1617,9 +1618,32 @@ static void desenhaRodape(const char *endereco) {
   textoCentrado(LARGURA / 2, Y_RODAPE, endereco, 1, RODAPE, FUNDO);
 }
 
+<span class="cmt">// Relogio pequeno no canto direito do topo. Horas e minutos so: redesenha uma</span>
+<span class="cmt">// vez por minuto. "--:--" ate a hora chegar pela internet.</span>
+static char relogioNaTela[8] = "";
+
+static void desenhaRelogio(bool forca) {
+  char texto[8] = "--:--";
+  if (horaCerta()) {
+    const time_t agora = time(nullptr);
+    struct tm t;
+    localtime_r(&amp;agora, &amp;t);
+    strftime(texto, sizeof texto, "%H:%M", &amp;t);
+  }
+  if (!forca &amp;&amp; strcmp(texto, relogioNaTela) == 0) return;
+  snprintf(relogioNaTela, sizeof relogioNaTela, "%s", texto);
+
+  tft.fillRect(LARGURA - MARGEM - 60, 0, 60, ALTURA_TOPO, FUNDO);
+  tft.setTextFont(2);
+  tft.setTextDatum(MR_DATUM);
+  tft.setTextColor(MUDO, FUNDO);
+  tft.drawString(texto, LARGURA - MARGEM, Y_TOPO);
+}
+
 <span class="cmt">// Painel inteiro: no boot e ao religar a imagem.</span>
 static void desenhaPainel() {
   telaFixa();
+  desenhaRelogio(true);
   desenhaRodape(servidorEndereco());
   pintaControle();
   pintaMedidas();  <span class="cmt">// "--" ate a primeira leitura chegar</span>
@@ -1821,6 +1845,14 @@ void loop() {
 
   <span class="cmt">// O endereco muda sozinho: conectando -&gt; IP, ou IP -&gt; reconectando. A tela</span>
   <span class="cmt">// acompanha comparando o texto, para nao repintar a linha a cada volta.</span>
+  if (telaEstaLigada()) desenhaRelogio(false);
+
+  static bool avisouHora = false;
+  if (!avisouHora &amp;&amp; horaCerta()) {
+    avisouHora = true;
+    diario.println("Hora             : acertada pela internet (Brasilia)");
+  }
+
   static char enderecoNaTela[40] = "";
   const char *endereco = servidorEndereco();
   if (strcmp(endereco, enderecoNaTela) != 0) {
