@@ -11,6 +11,8 @@ Import("env")  # noqa: F821  (injetado pela PlatformIO)
 RAIZ = env["PROJECT_DIR"]  # noqa: F821
 CAMINHO = os.path.join(RAIZ, ".env")
 ESPERADAS = ("WIFI_SSID", "WIFI_PASSWORD", "SENHA_PADRAO")
+# Opcionais: so viram -D se estiverem preenchidas.
+OPCIONAIS = ("NTFY_TOPICO",)
 
 
 def falha(mensagem):
@@ -40,6 +42,10 @@ with open(CAMINHO, encoding="utf-8") as arquivo:
 faltando = [c for c in ESPERADAS if not valores.get(c)]
 if faltando:
     falha("O .env nao define: %s" % ", ".join(faltando))
+
+for chave in OPCIONAIS:
+    if valores.get(chave):
+        env.Append(CPPDEFINES=[(chave, env.StringifyMacro(valores[chave]))])  # noqa: F821
 
 for chave in ESPERADAS:
     # StringifyMacro cuida das aspas e do escape: a senha pode ter @, $ ou \.

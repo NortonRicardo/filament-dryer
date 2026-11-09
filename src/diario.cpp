@@ -1,5 +1,7 @@
 #include "diario.h"
 
+#include "registro.h"
+
 #include <time.h>
 
 // 6 KB: umas 100 linhas. Cabe com folga numa RAM de 320 KB e cobre o boot
@@ -10,6 +12,10 @@ static char anel[TAMANHO];
 static size_t posicao = 0;     // onde entra o proximo caractere
 static bool cheio = false;     // ja deu a volta pelo menos uma vez
 static bool inicioDeLinha = true;
+
+// Linha em montagem, com o carimbo: vai inteira para a flash no fim de linha.
+static char linha[200];
+static size_t nLinha = 0;
 
 Diario diario;
 
@@ -40,12 +46,21 @@ size_t Diario::write(uint8_t c) {
                (unsigned long)(s / 3600), (unsigned long)((s / 60) % 60),
                (unsigned long)(s % 60));
     }
-    for (const char *p = marca; *p; p++) guarda(*p);
+    for (const char *p = marca; *p; p++) {
+      guarda(*p);
+      if (nLinha < sizeof linha - 1) linha[nLinha++] = *p;
+    }
     inicioDeLinha = false;
   }
 
   guarda((char)c);
-  if (c == '\n') inicioDeLinha = true;
+  if (nLinha < sizeof linha - 1) linha[nLinha++] = (char)c;
+  if (c == '\n') {
+    if (linha[nLinha - 1] != '\n') linha[nLinha++] = '\n';  // linha cortada
+    registroLinha(linha, nLinha);
+    nLinha = 0;
+    inicioDeLinha = true;
+  }
   return 1;
 }
 

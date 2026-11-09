@@ -1,4 +1,5 @@
 #include "controle.h"
+#include "aviso.h"
 #include "diario.h"
 
 #include <Arduino.h>
@@ -150,6 +151,16 @@ static void falha(const char *porque) {
   motivo = porque;
   diario.printf("PROTECAO         : %s (ultima leitura %.1f C, potencia era %.0f%%)\n",
                 porque, ultimaTemp, potenciaAntes);
+
+  // Aviso urgente no celular (no Android fura o modo silencioso; no iPhone
+  // nao - isso exige autorizacao da Apple que o ntfy nao tem). A estufa pode
+  // estar secando sozinha de madrugada.
+  char texto[160];
+  snprintf(texto, sizeof texto,
+           "%s. Ultima leitura %.1f C, potencia %.0f%%. Aquecedor desligado - "
+           "autorize de novo pelo painel.",
+           porque, ultimaTemp, potenciaAntes);
+  avisa("Estufa: PROTECAO", texto, 5);
 }
 
 // ---------------------------------------------------------------------------

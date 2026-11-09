@@ -219,7 +219,7 @@ footer.ruim{color:var(--laranja)}
 </div>
 
 <footer id="estado">carregando…</footer>
-<p style="text-align:center;margin:6px 0 0"><a href="log" style="color:var(--rodape);font:700 10px var(--mono);letter-spacing:1.2px">VER LOG</a></p>
+<p style="text-align:center;margin:6px 0 0"><a href="log" style="color:var(--rodape);font:700 10px var(--mono);letter-spacing:1.2px">VER LOG</a> &nbsp;·&nbsp; <a href="historico" style="color:var(--rodape);font:700 10px var(--mono);letter-spacing:1.2px">HISTÓRICO 24 H</a> &nbsp;·&nbsp; <a href="historico?horas=0" style="color:var(--rodape);font:700 10px var(--mono);letter-spacing:1.2px">HISTÓRICO TODO</a> &nbsp;·&nbsp; <a href="#" id="testaAviso" style="color:var(--rodape);font:700 10px var(--mono);letter-spacing:1.2px">TESTAR AVISO</a></p>
 
 <!-- ======================= Modais. Abrem ao tocar no cartao. ======================= -->
 <div class="fundo" id="m-t" hidden><div class="modal">
@@ -406,6 +406,14 @@ todos(".fundo").forEach(function (m) {
 document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") fecha(); });
 
 // --- atualizacao ------------------------------------------------------------
+document.getElementById("testaAviso").addEventListener("click", function (e) {
+  e.preventDefault();
+  var a = this;
+  fetch("aviso-teste", { method: "POST" }).then(function (r) {
+    a.textContent = r.ok ? "AVISO ENVIADO" : "AVISOS DESLIGADOS";
+  }).catch(function () { a.textContent = "SEM RESPOSTA"; });
+});
+
 function ciclo() {
   return fetch("dados", { cache: "no-store" }).then(function (r) {
     return r.json();

@@ -127,6 +127,34 @@ imprimiria todas as opções do `espota`, senha inclusive.
 
 ---
 
+## Avisos no celular
+
+A estufa avisa quando uma **proteção dispara** (prioridade urgente; no
+Android toca mesmo no silencioso, no iPhone chega como notificação normal) e quando **reinicia sozinha** — watchdog, queda de tensão ou falha.
+
+1. Instale o app **ntfy** (iPhone ou Android)
+2. Toque em **+** e assine o tópico que está em `NTFY_TOPICO`, no `.env`
+3. No painel, toque em **TESTAR AVISO**
+
+O nome do tópico funciona como senha: quem souber, lê os avisos. Sem a linha
+`NTFY_TOPICO` no `.env`, os avisos ficam desligados. Pelo Safari direto não dá:
+notificação web no iPhone exige HTTPS com certificado, e a página da estufa é
+`http://estufa.local`.
+
+## Histórico e log que sobrevivem a reinício
+
+Gravados na flash (1,4 MB que estavam livres). Quando enchem, o mais antigo sai
+primeiro.
+
+| | Espaço | Cobre |
+|---|---|---|
+| Log | 8% (~115 KB) | ~1900 linhas |
+| Temperatura e umidade | 70% (~1 MB) | ~87 dias, 1 medida por minuto |
+| Livre, de folga | 22% | — |
+
+No painel: **HISTÓRICO 24 H** ou **HISTÓRICO TODO** baixam um CSV que o Excel
+abre direto (separador `;`, vírgula decimal), já com a umidade absoluta.
+
 ## Acompanhar sem cabo
 
 Com a caixa fechada o monitor serial deixa de existir. O mesmo conteúdo fica

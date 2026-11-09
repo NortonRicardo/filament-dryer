@@ -9,7 +9,9 @@
 #include <ESPmDNS.h>
 #include <ArduinoOTA.h>
 
+#include "aviso.h"
 #include "pagina.h"
+#include "registro.h"
 #include "tela.h"
 #include "controle.h"
 
@@ -295,9 +297,24 @@ static void rotaConfig() {
 
 // O diario: o que sairia no monitor serial, para ver com a caixa fechada.
 // Texto puro, do mais antigo ao mais novo; o mais novo fica no fim.
-static void rotaLog() {
-  servidor.sendHeader("Cache-Control", "no-store");
-  servidor.send(200, "text/plain; charset=utf-8", diario.texto());
+// O diario gravado na flash: atravessa reinicios. Se for um travamento, as
+// linhas de antes dele continuam aqui.
+static void rotaLog() { registroEnviaLog(servidor); }
+
+// Medidas em CSV. ?horas=24 (padrao) ou ?horas=0 para tudo.
+static void rotaHistorico() {
+  const uint32_t horas = servidor.hasArg("horas") ? servidor.arg("horas").toInt() : 24;
+  registroEnviaHistorico(servidor, horas);
+}
+
+static void rotaAvisoTeste() {
+  if (!avisoLigado()) {
+    servidor.send(503, "text/plain; charset=utf-8",
+                  "avisos desligados: falta NTFY_TOPICO no .env\n");
+    return;
+  }
+  avisa("Estufa: teste", "Se chegou, os avisos da estufa funcionam.", 3);
+  servidor.send(200, "application/json; charset=utf-8", "{\"ok\":true}");
 }
 
 static void rotaPerdida() {
@@ -514,6 +531,8 @@ static void registraRotas() {
   servidor.on("/autorizar", soPainel(rotaAutorizar));
   servidor.on("/config", soPainel(rotaConfig));
   servidor.on("/log", soPainel(rotaLog));
+  servidor.on("/historico", soPainel(rotaHistorico));
+  servidor.on("/aviso-teste", soPainel(rotaAvisoTeste));
   servidor.on("/redes", rotaRedes);
   servidor.on("/rede", HTTP_POST, rotaSalvaRede);
 

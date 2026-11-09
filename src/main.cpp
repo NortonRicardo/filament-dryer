@@ -36,8 +36,10 @@
 #include <Adafruit_BME280.h>
 #include <Preferences.h>
 
+#include "aviso.h"
 #include "controle.h"
 #include "diario.h"
+#include "registro.h"
 #include "servidor.h"
 #include "tela.h"
 
@@ -776,11 +778,41 @@ void setup() {
   Serial.begin(115200);
   delay(400);  // da tempo ao monitor serial de abrir
 
+  // Antes da primeira linha do diario: assim o boot tambem fica gravado.
+  registroInicia();
+
   diario.println();
   diario.println("==================================================");
   diario.println("  Estufa de filamento - painel THERMO");
   diario.println("==================================================");
   diario.printf("Reinicio         : %s\n", motivoReinicio());
+  diario.printf("Registro         : %u de %u KB usados na flash\n",
+                (unsigned)(registroUsado() / 1024),
+                (unsigned)(registroTotal() / 1024));
+
+  avisoInicia();
+  diario.printf("Avisos           : %s\n",
+                avisoLigado() ? "ligados (ntfy)" : "desligados - sem NTFY_TOPICO no .env");
+
+  // Todo boot avisa: e assim que se fica sabendo de uma queda de energia, de
+  // uma atualizacao que entrou ou de um travamento. E em todos o aquecedor
+  // volta bloqueado, entao o aviso lembra disso. Fica na fila ate o Wi-Fi subir.
+  {
+    const char *titulo = "Estufa reiniciou";
+    uint8_t prioridade = 4;  // padrao: reinicio inesperado
+    switch (esp_reset_reason()) {
+      case ESP_RST_POWERON: titulo = "Estufa ligada";     prioridade = 3; break;
+      case ESP_RST_SW:      titulo = "Estufa atualizada"; prioridade = 3; break;
+      case ESP_RST_EXT:     titulo = "Estufa reiniciada"; prioridade = 3; break;
+      default: break;
+    }
+    char texto[160];
+    snprintf(texto, sizeof texto,
+             "Motivo: %s. Firmware de %s %s. Aquecedor desligado - autorize "
+             "pelo painel.",
+             motivoReinicio(), __DATE__, __TIME__);
+    avisa(titulo, texto, prioridade);
+  }
   diario.printf("Driver da tela   : %s\n", DRIVER);
   diario.printf("Inversao de cor  : %s\n", INVERSAO);
   diario.printf("Barramento SPI   : %d MHz\n", SPI_FREQUENCY / 1000000);
@@ -868,6 +900,14 @@ void loop() {
   // acompanha comparando o texto, para nao repintar a linha a cada volta.
   if (telaEstaLigada()) desenhaRelogio(false);
 
+  int codigoAviso;
+  if (avisoResultado(codigoAviso)) {
+    if (codigoAviso == 200)
+      diario.println("Aviso            : entregue ao celular");
+    else
+      diario.printf("Aviso            : FALHOU (codigo %d)\n", codigoAviso);
+  }
+
   static bool avisouHora = false;
   if (!avisouHora && horaCerta()) {
     avisouHora = true;
@@ -906,6 +946,7 @@ void loop() {
         }
         falhasSeguidas = 0;
         mostraLeitura(temperatura, umidade);
+        registroMedida(temperatura, umidade);
         servidorRegistra(temperatura, umidade);
         controleNovaLeitura(true, temperatura);
         if (telaLigada) pintaControle();
