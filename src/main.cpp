@@ -87,20 +87,13 @@ static const float    MARGEM_TETO = 10.0f;   // C abaixo do teto = "longe"
 //    em que o cartucho ja esta desligado: sem pausa nenhuma. LEITURA_MS e o
 //    quanto esse trecho precisa durar (medicao de ~10 ms + I2C a 20 kHz).
 //    Se em ESPERA_TRECHO_MS ele nao vier, le assim mesmo.
-// 2. A 100%, le com o cartucho ligado. Se falhar, escala:
-//      falhas 0 e 1 : cartucho ligado
-//      falha 2      : pausa curta - a medicao acontece com ele ligado e so
-//                     a busca dos dados (~8 ms) e feita com ele desligado,
-//                     depois de SILENCIO_CURTO_MS de folga
-//      falhas 3 e 4 : pausa longa - desligado por SILENCIO_MS antes e
-//                     durante a leitura inteira, reconfigurando se falhar
-//    Carga resistiva corta na hora; a folga e para a fonte e a fiacao
-//    acomodarem.
+// 2. A 100%, le com o cartucho ligado. As FALHA_PAUSA primeiras tentativas
+//    seguidas sao assim; so a seguinte desliga o cartucho - SILENCIO_MS
+//    antes e durante a leitura inteira. Carga resistiva corta na hora; a
+//    folga e para a fonte e a fiacao acomodarem.
 static const uint32_t LEITURA_MS = 50;
 static const uint32_t ESPERA_TRECHO_MS = 4000;
-static const uint8_t  FALHA_PAUSA_CURTA = 2;
-static const uint8_t  FALHA_PAUSA_LONGA = 3;
-static const uint32_t SILENCIO_CURTO_MS = 5;
+static const uint8_t  FALHA_PAUSA = 4;
 static const uint32_t SILENCIO_MS = 20;
 
 // Uma leitura corrompida pode dar um valor plausivel (30,0 C entre leituras
@@ -137,7 +130,7 @@ static bool     pendente = false;
 static float    tempPendente = 0;
 static uint8_t  naoConfirmadas = 0;
 
-enum ModoLeitura { COM_CARTUCHO, PAUSA_CURTA, PAUSA_LONGA };
+enum ModoLeitura { COM_CARTUCHO, PAUSA_LONGA };
 
 // ---------------------------------------------------------------------------
 // Sensor
@@ -276,10 +269,6 @@ static bool leSensor(float &temperatura, float &umidade, ModoLeitura modo) {
   }
   if (!bme.takeForcedMeasurement()) return false;
 
-  if (modo == PAUSA_CURTA) {
-    controleSilenciaSaida(true);
-    delay(SILENCIO_CURTO_MS);
-  }
   temperatura = bme.readTemperature();
   umidade     = bme.readHumidity();
 
@@ -995,11 +984,10 @@ void loop() {
     if (agora - ultimaLeitura >= intervalo && !esperaTrecho) {
       ultimaLeitura = agora;
 
-      // Escala conforme as falhas seguidas (ver FALHA_PAUSA_CURTA). O PID
+      // Desliga o cartucho so depois de FALHA_PAUSA falhas seguidas. O PID
       // nem fica sabendo das pausas: a potencia pedida nao muda.
-      const ModoLeitura modo = falhasSeguidas >= FALHA_PAUSA_LONGA ? PAUSA_LONGA
-                             : falhasSeguidas >= FALHA_PAUSA_CURTA ? PAUSA_CURTA
-                             : COM_CARTUCHO;
+      const ModoLeitura modo = falhasSeguidas >= FALHA_PAUSA ? PAUSA_LONGA
+                                                             : COM_CARTUCHO;
 
       float temperatura, umidade;
       bool leu = leSensor(temperatura, umidade, modo);
@@ -1047,12 +1035,10 @@ void loop() {
       } else if (++falhasSeguidas < FALHAS_MAX) {
         // Falha isolada: quase sempre o cartucho corrompendo a transferencia;
         // o sensor nao perdeu nada e a proxima leitura vem boa. Tenta de novo
-        // em 2 s, escalando a pausa (e, na longa, reconfigurando - o sensor
-        // pode ter reiniciado num tranco de tensao). Ate la o controle segue
-        // com a ultima potencia.
-        const char *proxima = falhasSeguidas >= FALHA_PAUSA_LONGA ? "pausa longa"
-                            : falhasSeguidas >= FALHA_PAUSA_CURTA ? "pausa curta"
-                            : "cartucho ligado";
+        // em 2 s; depois de FALHA_PAUSA falhas, com o cartucho desligado.
+        // Ate la o controle segue com a ultima potencia.
+        const char *proxima = falhasSeguidas >= FALHA_PAUSA ? "cartucho desligado"
+                                                            : "cartucho ligado";
         diario.printf("Sensor           : leitura falhou (%u de %u)%s, a proxima com %s\n",
                       falhasSeguidas, FALHAS_MAX,
                       reconfigurou ? ", reconfigurado" : "", proxima);
