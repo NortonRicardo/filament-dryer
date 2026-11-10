@@ -42,6 +42,9 @@ void registroEnviaHistorico(WebServer &s, uint32_t horas);
 // Apaga todas as medidas gravadas (o diario fica).
 void registroLimpaHistorico();
 
+// Apaga o diario gravado (as medidas ficam).
+void registroLimpaLog();
+
 // Quanto da particao esta em uso, para o cabecalho do boot.
 size_t registroUsado();
 size_t registroTotal();

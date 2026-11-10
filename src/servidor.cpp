@@ -353,6 +353,16 @@ static void rotaLimpaHistorico() {
   servidor.send(200, "application/json; charset=utf-8", "{\"ok\":true}");
 }
 
+// Apaga o log gravado. So POST, pelo mesmo motivo.
+static void rotaLimpaLog() {
+  if (servidor.method() != HTTP_POST) {
+    servidor.send(405, "text/plain; charset=utf-8", "use POST\n");
+    return;
+  }
+  registroLimpaLog();
+  servidor.send(200, "application/json; charset=utf-8", "{\"ok\":true}");
+}
+
 static void rotaPerdida() {
   servidor.send(404, "text/plain; charset=utf-8", "nao existe\n");
 }
@@ -570,6 +580,7 @@ static void registraRotas() {
   servidor.on("/historico", soPainel(rotaHistorico));
   servidor.on("/aviso-teste", soPainel(rotaAvisoTeste));
   servidor.on("/historico-limpar", soPainel(rotaLimpaHistorico));
+  servidor.on("/log-limpar", soPainel(rotaLimpaLog));
   servidor.on("/redes", rotaRedes);
   servidor.on("/rede", HTTP_POST, rotaSalvaRede);
 

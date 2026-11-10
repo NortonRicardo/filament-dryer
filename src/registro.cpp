@@ -86,6 +86,14 @@ void registroLimpaHistorico() {
   diario.println("Historico        : apagado pelo painel");
 }
 
+void registroLimpaLog() {
+  if (!montado) return;
+  LittleFS.remove(LOG_ANTIGO);
+  LittleFS.remove(LOG_ATUAL);
+  // Primeira linha do log novo: diz por que o resto sumiu.
+  diario.println("Log              : apagado pelo painel");
+}
+
 size_t registroUsado() { return montado ? LittleFS.usedBytes() : 0; }
 size_t registroTotal() { return montado ? LittleFS.totalBytes() : 0; }
 
