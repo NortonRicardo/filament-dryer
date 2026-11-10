@@ -73,11 +73,14 @@ static const uint8_t ENDERECOS[] = {0x76, 0x77};
 
 static const uint32_t INTERVALO_LEITURA = 2000;      // ms entre leituras
 
-// Com o cartucho ligado e a caixa longe do teto, le menos: cada leitura com
-// os 4,2 A passando e uma chance de o I2C se corromper, e a caixa sobe
-// ~0,07 C/min - em 10 s nao muda nada que o PID ou o teto precisem ver.
-// Perto do teto, ou depois de uma falha, volta para INTERVALO_LEITURA.
-static const uint32_t INTERVALO_AQUECENDO = 10000;
+// Com o cartucho a 100% e a caixa longe do teto, le menos: com os 4,2 A
+// passando o I2C nao responde, e cada ciclo de leitura acaba desligando o
+// cartucho uma vez (ver FALHA_PAUSA). 50 s de espera + as tentativas dao ~1
+// desligamento por minuto. A caixa sobe ~0,07 C/min, e a 100% o PID ja esta
+// no maximo - nao tem o que ajustar entre uma leitura e outra.
+// Abaixo de 100% a leitura cai no trecho desligado do PWM, sem desligar nada
+// a mais, e volta a INTERVALO_LEITURA - o PID precisa dela para regular.
+static const uint32_t INTERVALO_AQUECENDO = 50000;
 static const float    MARGEM_TETO = 10.0f;   // C abaixo do teto = "longe"
 
 // Com o cartucho ligado o I2C se corrompe de vez em quando (testado em
@@ -966,10 +969,10 @@ void loop() {
     if (telaLigada) desenhaRodape(endereco);
   }
 
-  // Cartucho ligado, caixa longe do teto e nada pendente: le a cada 10 s.
+  // Cartucho a 100%, caixa longe do teto e nada pendente: le a cada 50 s.
   // Em qualquer outro caso, a cada 2 s.
   const bool leituraEspacada = falhasSeguidas == 0 && !pendente
-                               && controleAquecedorLigado()
+                               && controlePotencia() >= 100
                                && ultimaTemp < TETO_ABSOLUTO - MARGEM_TETO;
   const uint32_t intervalo = leituraEspacada ? INTERVALO_AQUECENDO
                                              : INTERVALO_LEITURA;
