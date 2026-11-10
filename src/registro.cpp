@@ -79,6 +79,13 @@ void registroMedida(float temperatura, float umidade) {
   anexa(DADOS_ATUAL, DADOS_ANTIGO, limiteDados, (const uint8_t *)&m, sizeof m);
 }
 
+void registroLimpaHistorico() {
+  if (!montado) return;
+  LittleFS.remove(DADOS_ANTIGO);
+  LittleFS.remove(DADOS_ATUAL);
+  diario.println("Historico        : apagado pelo painel");
+}
+
 size_t registroUsado() { return montado ? LittleFS.usedBytes() : 0; }
 size_t registroTotal() { return montado ? LittleFS.totalBytes() : 0; }
 
@@ -101,26 +108,92 @@ static void comecaEnvio(WebServer &s, const char *tipo) {
   s.send(200, tipo, "");
 }
 
-static void enviaArquivo(WebServer &s, const char *nome) {
-  File f = LittleFS.open(nome, FILE_READ);
-  if (!f) return;
-  char buf[1024];
-  while (f.available()) {
-    const size_t n = f.read((uint8_t *)buf, sizeof buf);
-    s.sendContent(buf, n);
+// Junta as linhas num bloco antes de mandar: uma sendContent por linha
+// seria um pedaco de rede para cada 80 bytes.
+struct Saida {
+  WebServer &s;
+  String bloco;
+  explicit Saida(WebServer &srv) : s(srv) { bloco.reserve(1200); }
+  void linha(const char *p, size_t n) {
+    if (n == 0) return;  // linha vazia (fim do arquivo) nao entra
+    bloco.concat(p, n);
+    bloco += '\n';
+    if (bloco.length() >= 1024) despeja();
+  }
+  void despeja() {
+    if (bloco.length()) s.sendContent(bloco);
+    bloco = "";
     respira();
   }
+};
+
+// Envia as linhas de um texto da ultima para a primeira.
+static void invertePedaco(Saida &out, const char *p, size_t n) {
+  size_t fim = n;
+  for (size_t i = n; i > 0; i--) {
+    if (p[i - 1] == '\n') {
+      out.linha(p + i, fim - i);
+      fim = i - 1;
+    }
+  }
+  out.linha(p, fim);
+}
+
+// Le o arquivo de tras para frente, em blocos, e manda as linhas na ordem
+// inversa: a mais nova primeiro. "resto" guarda o comeco de linha que ficou
+// cortado no inicio de um bloco, ate o bloco anterior completar a linha.
+static void enviaArquivoInvertido(Saida &out, const char *nome) {
+  File f = LittleFS.open(nome, FILE_READ);
+  if (!f) return;
+
+  String resto;
+  char buf[512];
+  size_t pos = f.size();
+
+  while (pos > 0) {
+    const size_t n = pos > sizeof buf ? sizeof buf : pos;
+    pos -= n;
+    f.seek(pos);
+    if (f.read((uint8_t *)buf, n) != n) break;
+
+    // Linhas completas deste bloco: tudo depois do primeiro '\n'. O resto do
+    // bloco seguinte (ja lido) completa a ultima delas.
+    size_t primeira = 0;
+    while (primeira < n && buf[primeira] != '\n') primeira++;
+
+    if (primeira == n) {        // nenhuma quebra: o bloco todo e meio de linha
+      String junto;
+      junto.reserve(n + resto.length());
+      junto.concat(buf, n);
+      junto += resto;
+      resto = junto;
+      continue;
+    }
+
+    String cauda;
+    cauda.reserve(n - primeira + resto.length());
+    cauda.concat(buf + primeira + 1, n - primeira - 1);
+    cauda += resto;
+    invertePedaco(out, cauda.c_str(), cauda.length());
+    resto = String();
+    resto.concat(buf, primeira);
+  }
+  out.linha(resto.c_str(), resto.length());
   f.close();
 }
 
+// A mais nova primeiro: abre o /log e o que importa esta no topo.
 void registroEnviaLog(WebServer &s) {
-  if (!montado) {  // sem flash: o que estiver na RAM
-    s.send(200, "text/plain; charset=utf-8", diario.texto());
-    return;
-  }
   comecaEnvio(s, "text/plain; charset=utf-8");
-  enviaArquivo(s, LOG_ANTIGO);
-  enviaArquivo(s, LOG_ATUAL);
+  Saida out(s);
+  if (montado) {
+    enviaArquivoInvertido(out, LOG_ATUAL);
+    enviaArquivoInvertido(out, LOG_ANTIGO);
+  } else {  // sem flash: o que estiver na RAM
+    const String t = diario.texto();
+    invertePedaco(out, t.c_str(), t.length());
+  }
+  out.despeja();
   s.sendContent("");
 }
 

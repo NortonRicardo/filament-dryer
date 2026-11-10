@@ -219,7 +219,7 @@ footer.ruim{color:var(--laranja)}
 </div>
 
 <footer id="estado">carregando…</footer>
-<p style="text-align:center;margin:6px 0 0"><a href="log" style="color:var(--rodape);font:700 10px var(--mono);letter-spacing:1.2px">VER LOG</a> &nbsp;·&nbsp; <a href="historico" style="color:var(--rodape);font:700 10px var(--mono);letter-spacing:1.2px">HISTÓRICO 24 H</a> &nbsp;·&nbsp; <a href="historico?horas=0" style="color:var(--rodape);font:700 10px var(--mono);letter-spacing:1.2px">HISTÓRICO TODO</a> &nbsp;·&nbsp; <a href="#" id="testaAviso" style="color:var(--rodape);font:700 10px var(--mono);letter-spacing:1.2px">TESTAR AVISO</a></p>
+<p style="text-align:center;margin:6px 0 0"><a href="log" style="color:var(--rodape);font:700 10px var(--mono);letter-spacing:1.2px">VER LOG</a> &nbsp;·&nbsp; <a href="historico" style="color:var(--rodape);font:700 10px var(--mono);letter-spacing:1.2px">HISTÓRICO 24 H</a> &nbsp;·&nbsp; <a href="historico?horas=0" style="color:var(--rodape);font:700 10px var(--mono);letter-spacing:1.2px">HISTÓRICO TODO</a> &nbsp;·&nbsp; <a href="#" id="testaAviso" style="color:var(--rodape);font:700 10px var(--mono);letter-spacing:1.2px">TESTAR AVISO</a> &nbsp;·&nbsp; <a href="#" id="limpaHist" style="color:var(--rodape);font:700 10px var(--mono);letter-spacing:1.2px">LIMPAR HISTÓRICO</a></p>
 
 <!-- ======================= Modais. Abrem ao tocar no cartao. ======================= -->
 <div class="fundo" id="m-t" hidden><div class="modal">
@@ -411,6 +411,15 @@ document.getElementById("testaAviso").addEventListener("click", function (e) {
   var a = this;
   fetch("aviso-teste", { method: "POST" }).then(function (r) {
     a.textContent = r.ok ? "AVISO ENVIADO" : "AVISOS DESLIGADOS";
+  }).catch(function () { a.textContent = "SEM RESPOSTA"; });
+});
+
+document.getElementById("limpaHist").addEventListener("click", function (e) {
+  e.preventDefault();
+  if (!confirm("Apagar todas as medidas gravadas? O log fica. Não dá para desfazer.")) return;
+  var a = this;
+  fetch("historico-limpar", { method: "POST" }).then(function (r) {
+    a.textContent = r.ok ? "HISTÓRICO APAGADO" : "NÃO APAGOU";
   }).catch(function () { a.textContent = "SEM RESPOSTA"; });
 });
 

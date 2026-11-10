@@ -342,6 +342,17 @@ static void rotaAvisoTeste() {
   servidor.send(200, "application/json; charset=utf-8", "{\"ok\":true}");
 }
 
+// Apaga as medidas gravadas. So POST: um link aberto por engano (ou o
+// navegador pre-carregando) nao pode apagar nada.
+static void rotaLimpaHistorico() {
+  if (servidor.method() != HTTP_POST) {
+    servidor.send(405, "text/plain; charset=utf-8", "use POST\n");
+    return;
+  }
+  registroLimpaHistorico();
+  servidor.send(200, "application/json; charset=utf-8", "{\"ok\":true}");
+}
+
 static void rotaPerdida() {
   servidor.send(404, "text/plain; charset=utf-8", "nao existe\n");
 }
@@ -558,6 +569,7 @@ static void registraRotas() {
   servidor.on("/log", soPainel(rotaLog));
   servidor.on("/historico", soPainel(rotaHistorico));
   servidor.on("/aviso-teste", soPainel(rotaAvisoTeste));
+  servidor.on("/historico-limpar", soPainel(rotaLimpaHistorico));
   servidor.on("/redes", rotaRedes);
   servidor.on("/rede", HTTP_POST, rotaSalvaRede);
 

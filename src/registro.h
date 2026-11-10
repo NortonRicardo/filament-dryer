@@ -32,12 +32,15 @@ void registroLinha(const char *linha, size_t n);
 // O main chama a cada leitura boa; grava no maximo uma por minuto.
 void registroMedida(float temperatura, float umidade);
 
-// /log: o diario gravado, do mais antigo ao mais novo.
+// /log: o diario gravado, do mais novo (no topo) ao mais antigo.
 void registroEnviaLog(WebServer &s);
 
 // /historico: as medidas em CSV (separador ";" e virgula decimal, para o
 // Excel em portugues abrir direto). horas = 0 envia tudo.
 void registroEnviaHistorico(WebServer &s, uint32_t horas);
+
+// Apaga todas as medidas gravadas (o diario fica).
+void registroLimpaHistorico();
 
 // Quanto da particao esta em uso, para o cabecalho do boot.
 size_t registroUsado();
