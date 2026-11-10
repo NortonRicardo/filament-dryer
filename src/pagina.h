@@ -200,8 +200,8 @@ footer.ruim{color:var(--laranja)}
   </svg>
   <div class="eixo"><span>1 H ATRÁS</span><span>AGORA</span></div>
   <div class="leg">
-    <span><s style="background:#ff9b52"></s>0–60 °C</span>
-    <span><s style="background:#42d7f5"></s>0–100 %</span>
+    <span><s style="background:#ff9b52"></s><b id="faixaT" style="font-weight:inherit">-- °C</b></span>
+    <span><s style="background:#42d7f5"></s><b id="faixaU" style="font-weight:inherit">-- %</b></span>
   </div>
 </div>
 
@@ -450,8 +450,25 @@ function ciclo() {
       : "SENSOR NÃO ENCONTRADO";
     e.className = d.sensor ? "" : "ruim";
 
-    $("lt").setAttribute("points", pontos(d.hist.t, 0, 60));
-    $("lu").setAttribute("points", pontos(d.hist.u, 0, 100));
+    // Temperatura: a escala acompanha os dados em vez de ficar presa em
+    // 0-60 C - na caixa nunca fica abaixo de ~20, e numa escala de 60 graus
+    // uma subida de 1 C some. Vai do menor ao maior valor da ultima hora, com
+    // 1 C de folga e no minimo 4 C de altura.
+    var tMin = Math.min.apply(null, d.hist.t), tMax = Math.max.apply(null, d.hist.t);
+    if (!isFinite(tMin)) { tMin = 20; tMax = 30; }
+    tMin = Math.floor(tMin) - 1;
+    tMax = Math.max(Math.ceil(tMax) + 1, tMin + 4);
+    $("lt").setAttribute("points", pontos(d.hist.t, tMin, tMax));
+    $("faixaT").textContent = tMin + "–" + tMax + " °C";
+    // Umidade: mesma ideia, com 2 % de folga, no minimo 10 % de altura e
+    // sem sair de 0-100.
+    var uMin = Math.min.apply(null, d.hist.u), uMax = Math.max.apply(null, d.hist.u);
+    if (!isFinite(uMin)) { uMin = 40; uMax = 60; }
+    uMin = Math.max(0, Math.floor(uMin) - 2);
+    uMax = Math.min(100, Math.max(Math.ceil(uMax) + 2, uMin + 10));
+    if (uMax - uMin < 10) uMin = uMax - 10;
+    $("lu").setAttribute("points", pontos(d.hist.u, uMin, uMax));
+    $("faixaU").textContent = uMin + "–" + uMax + " %";
 
     // Aquecedor: o estado e o botao aparecem no cartao e no modal.
     var classeAq = d.estado === "PROTECAO" ? "falha" : d.aquecendo ? "quente" : "";
