@@ -73,31 +73,32 @@ static const uint8_t ENDERECOS[] = {0x76, 0x77};
 
 static const uint32_t INTERVALO_LEITURA = 2000;      // ms entre leituras
 
-// Com o cartucho a 100% e a caixa longe do teto, le menos: com os 4,2 A
-// passando o I2C nao responde, e cada ciclo de leitura acaba desligando o
-// cartucho uma vez (ver FALHA_PAUSA). 50 s de espera + as tentativas dao ~1
-// desligamento por minuto. A caixa sobe ~0,07 C/min, e a 100% o PID ja esta
+// Com o cartucho a 100% e a caixa longe do teto, le uma vez por minuto: com
+// os 4,2 A passando o I2C nao responde, entao cada leitura desliga o
+// cartucho por ~50 ms. A caixa sobe ~0,07 C/min, e a 100% o PID ja esta
 // no maximo - nao tem o que ajustar entre uma leitura e outra.
 // Abaixo de 100% a leitura cai no trecho desligado do PWM, sem desligar nada
 // a mais, e volta a INTERVALO_LEITURA - o PID precisa dela para regular.
-static const uint32_t INTERVALO_AQUECENDO = 50000;
+static const uint32_t INTERVALO_AQUECENDO = 60000;
 static const float    MARGEM_TETO = 10.0f;   // C abaixo do teto = "longe"
 
-// Com o cartucho ligado o I2C se corrompe de vez em quando (testado em
-// 09/11/2026, ja com o VIN ressoldado e os pull-ups de 4,7 k). Entao:
+// Com o cartucho ligado o I2C nao responde (testado em 09/11/2026, ja com o
+// VIN ressoldado, os pull-ups de 4,7 k e o cabo a 25 cm do cartucho). Entao:
 //
 // 1. Abaixo de 100% de potencia, a leitura espera o trecho da janela de PWM
 //    em que o cartucho ja esta desligado: sem pausa nenhuma. LEITURA_MS e o
 //    quanto esse trecho precisa durar (medicao de ~10 ms + I2C a 20 kHz).
 //    Se em ESPERA_TRECHO_MS ele nao vier, le assim mesmo.
-// 2. A 100%, le com o cartucho ligado. As FALHA_PAUSA primeiras tentativas
-//    seguidas sao assim; so a seguinte desliga o cartucho - SILENCIO_MS
-//    antes e durante a leitura inteira. Carga resistiva corta na hora; a
-//    folga e para a fonte e a fiacao acomodarem.
+// 2. A 100% nao existe trecho desligado: a leitura desliga o cartucho por
+//    SILENCIO_MS antes e durante a leitura inteira, direto, sem tentar com
+//    ele ligado. Carga resistiva corta na hora; a folga e para a fonte e a
+//    fiacao acomodarem.
+// 3. Fora isso (leitura que nao achou o trecho desligado), le com ele
+//    ligado; depois de FALHA_PAUSA falhas seguidas, com ele desligado.
 static const uint32_t LEITURA_MS = 50;
 static const uint32_t ESPERA_TRECHO_MS = 4000;
 static const uint8_t  FALHA_PAUSA = 4;
-static const uint32_t SILENCIO_MS = 20;
+static const uint32_t SILENCIO_MS = 5;   // era 20; baixado em 10/11/2026 para testar
 
 // Uma leitura corrompida pode dar um valor plausivel (30,0 C entre leituras
 // de 29,5): passa pelos filtros de salto. A caixa muda ~0,07 C/min, entao
@@ -987,10 +988,12 @@ void loop() {
     if (agora - ultimaLeitura >= intervalo && !esperaTrecho) {
       ultimaLeitura = agora;
 
-      // Desliga o cartucho so depois de FALHA_PAUSA falhas seguidas. O PID
-      // nem fica sabendo das pausas: a potencia pedida nao muda.
-      const ModoLeitura modo = falhasSeguidas >= FALHA_PAUSA ? PAUSA_LONGA
-                                                             : COM_CARTUCHO;
+      // A 100%, ou depois de FALHA_PAUSA falhas seguidas, desliga o
+      // cartucho para ler. O PID nem fica sabendo das pausas: a potencia
+      // pedida nao muda.
+      const bool pausa = controlePotencia() >= 100
+                         || falhasSeguidas >= FALHA_PAUSA;
+      const ModoLeitura modo = pausa ? PAUSA_LONGA : COM_CARTUCHO;
 
       float temperatura, umidade;
       bool leu = leSensor(temperatura, umidade, modo);
@@ -1040,8 +1043,8 @@ void loop() {
         // o sensor nao perdeu nada e a proxima leitura vem boa. Tenta de novo
         // em 2 s; depois de FALHA_PAUSA falhas, com o cartucho desligado.
         // Ate la o controle segue com a ultima potencia.
-        const char *proxima = falhasSeguidas >= FALHA_PAUSA ? "cartucho desligado"
-                                                            : "cartucho ligado";
+        const char *proxima = controlePotencia() >= 100 || falhasSeguidas >= FALHA_PAUSA
+                              ? "cartucho desligado" : "cartucho ligado";
         diario.printf("Sensor           : leitura falhou (%u de %u)%s, a proxima com %s\n",
                       falhasSeguidas, FALHAS_MAX,
                       reconfigurou ? ", reconfigurado" : "", proxima);
