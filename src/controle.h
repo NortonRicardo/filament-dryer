@@ -16,8 +16,9 @@
 // ESP32, aquecedor e ventiladores comecam todos desligados, e so o painel web
 // liga. Tudo o mais (alvo, faixas, tempos) e salvo.
 //
-// O aquecedor e o cartucho de 12 V / 50 W, chaveado por um IRLB8721 no
-// GPIO25. A potencia sai de um PID (0 a 100%) e chega ao cartucho por PWM
+// O aquecedor e o PTC de 12 V / 180 W (~15 A), chaveado por um MOSFET de
+// nivel logico (IRLB3034 ou IRLB8721) no GPIO25. A potencia sai de um PID
+// (0 a 100%) e chega ao aquecedor por PWM
 // lento: janela de 2 s, ligado a fracao da janela que o PID pedir. Mesmo
 // principio do Dry Fila Box do Marlon Nardi, que usa PID com analogWrite a
 // ~490 Hz; aqui a janela e longa porque o aquecedor tem inercia de sobra e
@@ -25,8 +26,8 @@
 //
 // Protecoes no firmware: teto absoluto de 60 C, sensor sem leitura, e PID
 // pedindo potencia maxima por semSubirMin minutos sem a temperatura subir
-// 1 C. A unica protecao de hardware e o fusivel de 7,5 A na linha do
-// cartucho (o termostato KSD301 do projeto original e recomendado).
+// 1 C. Protecao de hardware, independente do firmware: fusivel de 20 A e um
+// rele cortado pelo termostato KSD301 (70 C) no +12 V do aquecedor.
 // ---------------------------------------------------------------------------
 
 #pragma once
@@ -50,8 +51,8 @@ struct Config {
   float    ki;          // PID: % por grau por segundo de erro acumulado
   float    kd;          // PID: % por grau/s de subida (freia a chegada)
   bool     fan2Ligado;  // circulacao ligada; nasce falso a cada boot, nao e salvo
-  uint8_t  fan2Max;     // % da circulacao com o aquecedor ligado
-  uint8_t  fan2Min;     // % da circulacao com o aquecedor desligado
+  uint8_t  fan2Vel;     // % da circulacao. Vai a 100 ao ligar a circulacao ou
+                        // o aquecedor; da para baixar depois. Nao e salvo.
   uint8_t  pwmMin;      // % abaixo do qual o ventilador nao parte
   uint16_t pos1;        // s que o ventilador do aquecedor fica a 100% apos desligar
   uint16_t rampa1;      // s que ele leva descendo de 100% ate parar
@@ -65,24 +66,6 @@ void controleNovaLeitura(bool sensorOk, float temperatura);
 
 // Chamar sempre no loop: e quem faz a rampa descer suavemente.
 void controleTick();
-
-// Desliga o cartucho por um instante para a leitura do sensor acontecer com
-// o barramento quieto. O barramento do sensor nao sobrevivia aos 4,2 A passando;
-// como o bloco aquecedor tem inercia de minutos e a pausa e de dezenas de
-// milissegundos, o custo termico e nulo.
-//
-// controleTick() respeita o silencio: com ele ligado, o pino fica baixo
-// independente do que o PID pediu.
-void controleSilenciaSaida(bool silenciar);
-
-// Para ler o sensor no trecho em que o cartucho ja esta desligado pelo
-// proprio PWM, sem pausa extra.
-//   controleSaidaQuieta(ms): o cartucho esta desligado agora e continua
-//     desligado pelos proximos ms (ou nem esta ligado).
-//   controleTemTrechoQuieto(ms): a potencia esta entre 0 e 100% e a parte
-//     desligada de cada janela de 2 s tem pelo menos ms - vale esperar.
-bool controleSaidaQuieta(uint32_t ms);
-bool controleTemTrechoQuieto(uint32_t ms);
 
 EstadoAquecedor controleEstado();
 const char *controleEstadoTexto();

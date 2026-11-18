@@ -33,7 +33,7 @@ static const float KP_MAX = 100.0f, KI_MAX = 5.0f, KD_MAX = 1000.0f;
 // --- PWM do cartucho ----------------------------------------------------------
 // Janela de 2 s: com 60% de potencia, 1,2 s ligado e 0,8 s desligado. O
 // cartucho e o bloco tem inercia de sobra, entao o resultado termico e o mesmo
-// de um PWM rapido, com muito menos chaveamento de 4,2 A. Pulsos curtos demais
+// de um PWM rapido, com muito menos chaveamento de ~15 A. Pulsos curtos demais
 // nao valem o tranco: abaixo de 2% vira 0, acima de 98% vira 100.
 static const uint32_t JANELA_MS = 2000;
 
@@ -56,24 +56,30 @@ static Preferences nvs;
 static Config cfg = {
   55.0f,  // alvo: PETG, o filamento usado aqui. Recomendado 55 a 70 C;
           // 55 e o maximo que a caixa permite (ALVO_MAX)
-  // Ganhos iniciais conservadores, para afinar no teste: a caixa tem so 5 C
-  // de folga entre o alvo e o teto. Com 10 %/C, 5 C abaixo do alvo ja da
-  // metade da potencia; a integral cobre o que falta para manter a
-  // temperatura. Num modelo da caixa (50 W, constante de ~30 min, atraso do
-  // bloco de ~2 min) estes valores chegam ao alvo em 20-30 min passando
-  // ~1,5 C dele; ki 0,05 passava ~2,3 C, e derivada nao ajudou. E so um
-  // modelo: o teste de fogo e que diz.
-  10.0f,  // kp
-  0.03f,  // ki
+  // Ganhos para o PTC de 180 W. Medido em 10/11/2026: a geladeira perde
+  // ~5 W por grau acima do ambiente, entao manter 55 C com ~27 C fora pede
+  // ~140 W, uns 78% da potencia. Com 4 %/C, 10 C abaixo do alvo ja da 40%;
+  // a integral cobre o que falta para segurar a temperatura. Ganhos maiores
+  // (os 10/0,03 da epoca do cartucho de 50 W) passariam do alvo com o
+  // triplo da potencia - e o teto esta so 5 C acima. Afinar olhando o
+  // grafico: passou do alvo e oscila, baixe o Ki; demora, suba o Kp.
+  4.0f,   // kp
+  0.01f,  // ki
   0.0f,   // kd
   false,  // circulacao: desligada no boot, so o painel web liga
-  100,    // circulacao maxima, com o aquecedor ligado
-  70,     // circulacao minima, com o aquecedor desligado
+  100,    // circulacao: 100% ao ligar
   30,     // piso de PWM: abaixo disso a helice nao parte
   180,    // 3 min a 100% depois de desligar
   120,    // mais 2 min descendo ate parar
-  15,     // guarda de "nao esquenta": 15 min ligado sem subir 1 C corta
+  10,     // guarda de "nao esquenta": 10 min no maximo sem subir 1 C corta.
+          // Com 180 W a caixa sobe varios graus nesse tempo; se nao subir,
+          // e aquecedor solto, sensor fora do lugar ou porta aberta.
 };
+
+// Marca na memoria de que os ganhos e a protecao ja foram trocados pelos do
+// PTC de 180 W. Sem ela, o primeiro boot com este firmware descarta os
+// valores salvos na epoca do cartucho de 50 W, que passariam do alvo.
+static const char *NVS_PTC = "ptc180";
 
 static EstadoAquecedor estado = EST_BLOQUEADO;
 static const char *motivo = "";
@@ -81,11 +87,6 @@ static bool autorizado = false;
 static bool aquecedorLigado = false;  // PID pedindo mais que 0%
 static float potencia = 0;            // 0 a 100 %, saida do PID
 static uint8_t velocidade[2] = {0, 0};
-
-// Verdadeiro durante a leitura do sensor: o cartucho fica desligado para o
-// barramento ficar limpo. Nao mexe em "potencia" nem no estado - do ponto de
-// vista do PID nada aconteceu, e o log nao enche de liga/desliga.
-static bool saidaSilenciada = false;
 
 static uint32_t desdeDesligou = 0;   // millis em que a potencia foi a 0
 static bool     jaAqueceu = false;   // houve ao menos um ciclo nesta sessao
@@ -177,12 +178,12 @@ static void falha(const char *porque) {
 // calor parado em cima do metal.
 //
 // Ventilador de circulacao: comeca desligado a cada boot. Depois de ligado no
-// painel, gira direto, independente do aquecedor estar autorizado: na maxima
-// enquanto o PID pede potencia, na minima quando ela esta em zero.
+// painel, gira direto, independente do aquecedor: liga a 100% para o ar
+// circular rapido, e ligar o aquecedor tambem a poe a 100% (e liga, se
+// estiver desligada). Da para baixar a velocidade no painel depois.
 // ---------------------------------------------------------------------------
 static uint8_t velocidadeCirculacao() {
-  if (!cfg.fan2Ligado) return 0;
-  return aquecedorLigado ? cfg.fan2Max : cfg.fan2Min;
+  return cfg.fan2Ligado ? cfg.fan2Vel : 0;
 }
 
 static void atualizaVentiladores() {
@@ -235,13 +236,21 @@ void controleInicia() {
   if (nvs.isKey("kp")) cfg.kp = nvs.getFloat("kp", cfg.kp);
   if (nvs.isKey("ki")) cfg.ki = nvs.getFloat("ki", cfg.ki);
   if (nvs.isKey("kd")) cfg.kd = nvs.getFloat("kd", cfg.kd);
-  cfg.fan2Max     = nvs.getUChar("f2max", cfg.fan2Max);
-  cfg.fan2Min     = nvs.getUChar("f2min", cfg.fan2Min);
   cfg.pwmMin      = nvs.getUChar("pwmin", cfg.pwmMin);
   cfg.pos1        = nvs.getUShort("pos1", cfg.pos1);
   cfg.rampa1      = nvs.getUShort("rmp1", cfg.rampa1);
   cfg.semSubirMin = nvs.getUShort(NVS_SUBIR, cfg.semSubirMin);
-  if (cfg.semSubirMin < SUBIR_MIN || cfg.semSubirMin > SUBIR_MAX) cfg.semSubirMin = 15;
+  if (cfg.semSubirMin < SUBIR_MIN || cfg.semSubirMin > SUBIR_MAX) cfg.semSubirMin = 10;
+
+  if (!nvs.isKey(NVS_PTC)) {   // primeiro boot com o PTC de 180 W
+    cfg.kp = 4.0f; cfg.ki = 0.01f; cfg.kd = 0.0f; cfg.semSubirMin = 10;
+    nvs.putFloat("kp", cfg.kp);
+    nvs.putFloat("ki", cfg.ki);
+    nvs.putFloat("kd", cfg.kd);
+    nvs.putUShort(NVS_SUBIR, cfg.semSubirMin);
+    nvs.putBool(NVS_PTC, true);
+    diario.println("PID              : ganhos trocados pelos do PTC de 180 W");
+  }
 
   // Nao se le da memoria nem a autorizacao nem o liga/desliga do FAN 02:
   // os dois nascem falsos toda vez, por regra. Tudo comeca desligado.
@@ -250,15 +259,14 @@ void controleInicia() {
   estado = EST_BLOQUEADO;
 
   diario.printf("Aquecedor        : DESLIGADO no boot, por regra\n");
-  diario.printf("Cartucho         : GPIO%u, PWM em janela de %lu ms, alvo %.1f C, teto %.0f C\n",
+  diario.printf("Aquecedor PTC    : GPIO%u, PWM em janela de %lu ms, alvo %.1f C, teto %.0f C\n",
                 PIN_AQUECEDOR, (unsigned long)JANELA_MS, cfg.alvo, TETO_ABSOLUTO);
   diario.printf("PID              : kp %.2f  ki %.3f  kd %.1f\n", cfg.kp, cfg.ki, cfg.kd);
   diario.printf("Protecao         : corta se %u min no maximo sem subir 1 C\n",
                 cfg.semSubirMin);
   diario.printf("Ventiladores     : aquecedor P%d, circulacao P%d+P%d, PWM %lu Hz, piso %u%%\n",
                 PIN_FAN_AQUEC, PIN_CIRC_A, PIN_CIRC_B, (unsigned long)PWM_FREQ, cfg.pwmMin);
-  diario.printf("Circulacao       : DESLIGADA no boot, max %u%%, min %u%%\n",
-                cfg.fan2Max, cfg.fan2Min);
+  diario.printf("Circulacao       : DESLIGADA no boot, liga a 100%%\n");
 
   atualizaVentiladores();  // tudo em 0% ate o painel web ligar
 }
@@ -345,14 +353,6 @@ void controleNovaLeitura(bool sensorOk, float temperatura) {
   atualizaVentiladores();
 }
 
-// Chamar sempre no loop: faz a janela de PWM do cartucho e a rampa dos
-// ventiladores. O cartucho fica ligado na fracao inicial de cada janela de
-// 2 s igual a potencia pedida.
-void controleSilenciaSaida(bool silenciar) {
-  if (silenciar == saidaSilenciada) return;
-  saidaSilenciada = silenciar;
-  if (silenciar) digitalWrite(PIN_AQUECEDOR, LOW);
-}
 
 // Quanto de cada janela o cartucho fica ligado, em ms.
 static uint32_t ligadoNaJanela() {
@@ -363,25 +363,16 @@ static bool podeLigar() {
   return autorizado && estado != EST_FALHA && potencia > 0;
 }
 
+// Chamar sempre no loop: faz a janela de PWM do cartucho e a rampa dos
+// ventiladores. O cartucho fica ligado na fracao inicial de cada janela de
+// 2 s igual a potencia pedida.
 void controleTick() {
-  const bool pode = podeLigar() && !saidaSilenciada;
+  const bool pode = podeLigar();
   const uint32_t fase = millis() % JANELA_MS;
   const bool ligado = pode && fase < ligadoNaJanela();
   digitalWrite(PIN_AQUECEDOR, ligado ? HIGH : LOW);
 
   atualizaVentiladores();
-}
-
-bool controleSaidaQuieta(uint32_t ms) {
-  if (!podeLigar()) return true;
-  if (potencia >= 100.0f) return false;
-  const uint32_t fase = millis() % JANELA_MS;
-  return fase >= ligadoNaJanela() && JANELA_MS - fase >= ms;
-}
-
-bool controleTemTrechoQuieto(uint32_t ms) {
-  return podeLigar() && potencia < 100.0f
-         && JANELA_MS - ligadoNaJanela() >= ms;
 }
 
 EstadoAquecedor controleEstado() { return estado; }
@@ -409,6 +400,10 @@ void controleAutoriza(bool v) {
   zeraPid();
   estado = v ? EST_OCIOSO : EST_BLOQUEADO;
   diario.printf("Autorizacao      : %s\n", v ? "concedida pelo painel" : "retirada");
+  if (v) {           // ligou o aquecedor: circulacao ligada e a 100%
+    cfg.fan2Ligado = true;
+    cfg.fan2Vel = 100;
+  }
   atualizaVentiladores();
 }
 
@@ -427,12 +422,9 @@ bool controleDefineConfig(const Config &n, const char **porque) {
   }
   if (n.pwmMin > 80)      { *porque = "piso de PWM acima de 80%"; return false; }
   // Abaixo do piso a helice nao parte, e aplica() subiria o valor sozinha:
-  // o numero salvo deixaria de ser o que o ventilador recebe.
-  if (n.fan2Min < n.pwmMin || n.fan2Min > 100) {
-    *porque = "circulacao minima fora do piso a 100%"; return false;
-  }
-  if (n.fan2Max < n.fan2Min || n.fan2Max > 100) {
-    *porque = "circulacao maxima fora da minima a 100%"; return false;
+  // o numero pedido deixaria de ser o que o ventilador recebe.
+  if (n.fan2Vel < n.pwmMin || n.fan2Vel > 100) {
+    *porque = "velocidade da circulacao fora do piso a 100%"; return false;
   }
   if (n.pos1 > 3600 || n.rampa1 > 3600) {
     *porque = "tempo longo demais"; return false;
@@ -441,21 +433,21 @@ bool controleDefineConfig(const Config &n, const char **porque) {
     *porque = "protecao sem subir fora de 5 a 60 min"; return false;
   }
 
+  const bool ligouCirculacao = n.fan2Ligado && !cfg.fan2Ligado;
   cfg = n;
+  if (ligouCirculacao) cfg.fan2Vel = 100;   // ligar e sempre a 100%
   nvs.putFloat("alvo", cfg.alvo);
   nvs.putFloat("kp", cfg.kp);
   nvs.putFloat("ki", cfg.ki);
   nvs.putFloat("kd", cfg.kd);
-  nvs.putUChar("f2max", cfg.fan2Max);
-  nvs.putUChar("f2min", cfg.fan2Min);
   nvs.putUChar("pwmin", cfg.pwmMin);
   nvs.putUShort("pos1", cfg.pos1);
   nvs.putUShort("rmp1", cfg.rampa1);
   nvs.putUShort(NVS_SUBIR, cfg.semSubirMin);
 
-  diario.printf("Config salva     : alvo %.1f C, PID %.2f/%.3f/%.1f, circulacao %s %u-%u%%\n",
+  diario.printf("Config salva     : alvo %.1f C, PID %.2f/%.3f/%.1f, circulacao %s %u%%\n",
                 cfg.alvo, cfg.kp, cfg.ki, cfg.kd, cfg.fan2Ligado ? "ligada" : "desligada",
-                cfg.fan2Min, cfg.fan2Max);
+                cfg.fan2Vel);
   // Aplica na hora: ligar, desligar ou mudar a faixa nao espera a proxima
   // leitura do sensor.
   atualizaVentiladores();

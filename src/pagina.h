@@ -8,8 +8,8 @@
 // Sem framework, sem CDN e sem arquivo externo: um GET entrega tudo.
 //
 // Convencoes da pagina:
-//   - O corpo so mostra; configurar e nos modais. Tocar num cartao com "›"
-//     abre a configuracao dele.
+//   - O corpo so mostra; configurar e nos modais. Tocar num cartao abre a
+//     configuracao dele. Os interruptores (aquecedor, display) agem direto.
 //   - Liga/desliga: o texto ao lado diz o estado; o botao diz a ACAO. Ligado
 //     mostra a acao de desligar em vermelho; desligado, a de ligar em verde.
 //   - Campos salvam sozinhos ao sair deles (evento change). Cada campo manda
@@ -66,11 +66,9 @@ button,.clicavel,input{touch-action:manipulation}
   gap:6px;color:var(--verde);font-size:10px;font-weight:600;white-space:nowrap}
 .conexao.ruim{color:var(--vermelho)}
 .conexao svg{width:17px;height:17px}
-.titulo{margin:0 0 5px;font-size:12px;font-weight:600;letter-spacing:.13em;
-  text-transform:uppercase;color:var(--mudo)}
 .descricao{margin:0 0 19px;font-size:11px;color:#d5d1d0}
 
-/* Cartoes claros. Tocar num cartao com "›" abre a configuracao dele. */
+/* Cartoes claros. Tocar num cartao clicavel abre a configuracao dele. */
 .grade{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
 .cartao{min-width:0;min-height:104px;padding:15px 14px 13px;border:1.5px solid var(--claro);
   border-radius:10px;background:var(--claro);color:var(--escuro);text-align:center;
@@ -84,11 +82,9 @@ button,.clicavel,input{touch-action:manipulation}
 .leitura{display:flex;align-items:baseline;justify-content:center;gap:5px;margin-top:10px;
   white-space:nowrap;font-variant-numeric:tabular-nums}
 .valor{font-size:29px;line-height:1;font-weight:650;letter-spacing:-.055em}
-.valor u,.un{font-size:11px;font-weight:600;opacity:.72;text-decoration:none;
+.un{font-size:11px;font-weight:600;opacity:.72;text-decoration:none;
   letter-spacing:0;margin-left:4px}
 .detalhe{font-size:10.5px;font-weight:600;color:#6f6a69;margin-top:8px}
-.detalhe b{color:var(--escuro);font-weight:700}
-.detalhe.cfg,.detalhe.cfg b{color:#16a34a}
 .sem .valor{color:#a39e9d}
 
 .temperatura{grid-column:1/-1}
@@ -122,33 +118,35 @@ button,.clicavel,input{touch-action:manipulation}
 .coluna{position:relative;min-height:124px;border-radius:10px;color:var(--escuro);
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:10px;text-align:center;padding:16px 10px}
-.grande{font-size:32px;line-height:1;font-weight:700;font-variant-numeric:tabular-nums}
-.st{font-size:11px;font-weight:700;letter-spacing:.04em;color:#dc2626}
-.st.ativo{color:#16a34a}
-.st.quente{color:#ea580c}
-/* Parado: sem bolinha, texto claro numa pilula vermelha */
-.st.parado{color:var(--claro);background:#dc2626;border-radius:999px;padding:3px 10px}
+/* Estado: pilula da cor dele, texto claro - vermelho parado, verde ativo,
+   laranja aquecendo */
+.st{font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--claro);
+  background:#dc2626;border-radius:999px;padding:3px 10px;white-space:nowrap}
+.st.ativo{background:#16a34a}
+.st.quente{background:#ea580c}
 
 .fan .valor{font-size:29px}
 
 /* Cartoes com icone: icone animado a esquerda, texto alinhado a direita */
-.icard{flex-direction:row;align-items:center;justify-content:space-between;gap:10px}
-.icard .txt{display:flex;flex-direction:column;align-items:flex-end;text-align:right;gap:6px}
-.icard .leitura{justify-content:flex-end;margin-top:0}
+/* Aquecedor e fans: nome a direita; icone, numero e estado centrados */
+.icard{flex-direction:column;align-items:center;justify-content:space-between;gap:8px}
+.icard > .rotulo{align-self:flex-end}
 .icard.clicavel::after{display:none}
-.helice,.chama{width:46px;height:46px;flex:none;color:#b5b0af}
+.linhaIcone{display:flex;align-items:center;justify-content:center;gap:8px}
+.linhaIcone .leitura{margin-top:0}
+.helice,.chama{width:34px;height:34px;flex:none;color:#b5b0af}
 .helice.gira{color:#16a34a;animation:gira var(--dur,1s) linear infinite}
 @keyframes gira{to{transform:rotate(360deg)}}
-.chama .fora{fill:#b5b0af} .chama .miolo{fill:none}
+.chama .fora{fill:#b5b0af} .chama .meio,.chama .nucleo{fill:none}
 .chama.acesa{transform-origin:50% 92%;animation:tremula .45s ease-in-out infinite alternate}
-.chama.acesa .fora{fill:#dc2626} .chama.acesa .miolo{fill:#f97316}
+.chama.acesa .fora{fill:#dc2626} .chama.acesa .meio{fill:#f97316}
+.chama.acesa .nucleo{fill:#facc15}
 @keyframes tremula{0%{transform:scale(1,1) rotate(-3deg)}
   50%{transform:scale(.96,1.06) rotate(1deg)}100%{transform:scale(1.04,.95) rotate(3deg)}}
 @media (prefers-reduced-motion:reduce){.helice.gira,.chama.acesa{animation:none}}
 .gota{display:inline-block;width:13px;height:13px;fill:#0ea5e9;vertical-align:-1px;margin-right:5px}
 #c-u,#c-ua{justify-content:flex-start;gap:12px}
 #c-u .leitura,#c-ua .leitura{margin-top:4px}
-.st{white-space:nowrap}
 
 /* Cabecalho: titulo a esquerda; icone do display e o interruptor dele a direita */
 .cabecalho{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
@@ -182,9 +180,7 @@ svg{display:block;width:100%;height:auto}
 .eixo{display:flex;justify-content:space-between;margin:2px 10.6% 0;font-size:10.5px;
   color:var(--rodape);font-variant-numeric:tabular-nums}
 
-.bloco{margin-top:10px;border:1px solid var(--borda);border-radius:16px;
-  background:var(--card);padding:14px}
-.bloco > b,.topo b{display:block;color:var(--mudo);font:800 9.5px var(--mono);
+.topo b{display:block;color:var(--mudo);font:800 9.5px var(--mono);
   letter-spacing:1.5px;text-transform:uppercase;margin-bottom:11px}
 .linha{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .linha label{flex:1;font-size:13.5px;line-height:1.3;color:var(--mudo)}
@@ -291,7 +287,7 @@ footer.ruim{color:var(--laranja)}
       <div class="leitura"><span class="valor" id="t">--</span><span class="un">°C</span></div></div>
     <div class="dir">
       <div class="lado alvo"><span class="tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>ALVO</span><b><span id="alvoCard">--</span>°</b></div>
-      <div class="lado" id="tmaxCard"><span class="tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z"/><path d="M12 8v5M12 16h.01"/></svg>MÁXIMO</span><b id="tmaxV">--</b></div>
+      <div class="lado" id="tmaxCard"><span class="tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z"/><path d="M12 8v5M12 16h.01"/></svg>MAX</span><b id="tmaxV">--</b></div>
       <div class="lado aq"><span class="tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v8M6.5 7a7 7 0 1 0 11 0"/></svg>AQUECEDOR</span><button class="sw" data-autoriza role="switch" aria-label="Ligar ou desligar o aquecedor" disabled></button></div>
     </div></div>
 
@@ -304,30 +300,28 @@ footer.ruim{color:var(--laranja)}
 
   <div class="cartao aquecedor">
     <div class="coluna clicavel icard" id="c-h" data-abre="m-h">
-      <svg class="chama" id="iAq" viewBox="0 0 48 48" aria-hidden="true"><path class="fora" d="M24 4c3 8 13 13 13 25a13 13 0 0 1-26 0c0-6 3-10 6.5-13 .8 4 3 6.5 6 7.2C21 17 21 10 24 4z"/><path class="miolo" d="M24 22c2 4 7 7 7 12a7 7 0 0 1-14 0c0-3 1.5-5 3.5-6.5.5 2 1.6 3.2 3.2 3.6C23 28 22.8 25 24 22z"/></svg>
-      <div class="txt"><span class="rotulo">Aquecedor</span>
-        <div class="leitura"><span class="valor" id="potCard">--</span><span class="un">%</span></div>
-        <span class="st parado" id="stAq">DESLIGADO</span></div>
+      <span class="rotulo">Aquecedor</span>
+      <div class="linhaIcone"><svg class="chama" id="iAq" viewBox="0 0 48 48" aria-hidden="true"><path class="fora" d="M24 3.5c3.2 8.2 13.5 13 13.5 25.5a13.5 13.5 0 0 1-27 0c0-6.2 3.1-10.4 6.8-13.4.8 4.1 3.1 6.7 6.2 7.4C21 16.6 21 9.6 24 3.5z"/><path class="meio" d="M24 18c2.4 4.6 8.2 7.6 8.2 13.6a8.2 8.2 0 0 1-16.4 0c0-3.6 1.8-6 4-7.6.6 2.3 1.9 3.8 3.7 4.2-.9-3.6-.4-6.8.5-10.2z"/><path class="nucleo" d="M24 30c1.2 2.2 3.6 3.6 3.6 6.2a3.6 3.6 0 0 1-7.2 0c0-2.4 2.4-3.8 3.6-6.2z"/></svg><div class="leitura"><span class="valor" id="potCard">--</span><span class="un">%</span></div></div>
+      <span class="st" id="stAq">DESLIGADO</span>
     </div>
     <div class="coluna clicavel icard" id="c-f1" data-abre="m-f1">
-      <svg class="helice" id="iF1" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="none" stroke="currentColor" stroke-width="2.5"/><g fill="currentColor"><path d="M24 24C22 15 25 7 31 6c5 1 4 9-7 18z"/><path d="M24 24C22 15 25 7 31 6c5 1 4 9-7 18z" transform="rotate(120 24 24)"/><path d="M24 24C22 15 25 7 31 6c5 1 4 9-7 18z" transform="rotate(240 24 24)"/></g><circle cx="24" cy="24" r="4" fill="#f5f3f2" stroke="currentColor" stroke-width="2.5"/></svg>
-      <div class="txt"><span class="rotulo">Fan aquecedor</span>
-        <div class="leitura"><span class="valor" id="f1">--</span><span class="un">%</span></div>
-        <span class="st parado" id="stF1">INATIVO</span></div>
+      <span class="rotulo">Fan aquecedor</span>
+      <div class="linhaIcone"><svg class="helice" id="iF1" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21.5" fill="none" stroke="currentColor" stroke-width="2.6"/><g fill="currentColor"><path d="M24 24C19.5 15 22.5 6.5 30 6c6.5.2 7 9-6 18z"/><path d="M24 24C19.5 15 22.5 6.5 30 6c6.5.2 7 9-6 18z" transform="rotate(120 24 24)"/><path d="M24 24C19.5 15 22.5 6.5 30 6c6.5.2 7 9-6 18z" transform="rotate(240 24 24)"/></g><circle cx="24" cy="24" r="4.6" fill="#f5f3f2"/><circle cx="24" cy="24" r="2.4" fill="currentColor"/></svg><div class="leitura"><span class="valor" id="f1">--</span><span class="un">%</span></div></div>
+      <span class="st" id="stF1">INATIVO</span>
     </div>
   </div>
 
-  <div class="cartao clicavel fan icard" id="c-f2" data-abre="m-f2">
-    <svg class="helice" id="iF2" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="none" stroke="currentColor" stroke-width="2.5"/><g fill="currentColor"><path d="M24 24C22 15 25 7 31 6c5 1 4 9-7 18z"/><path d="M24 24C22 15 25 7 31 6c5 1 4 9-7 18z" transform="rotate(120 24 24)"/><path d="M24 24C22 15 25 7 31 6c5 1 4 9-7 18z" transform="rotate(240 24 24)"/></g><circle cx="24" cy="24" r="4" fill="#f5f3f2" stroke="currentColor" stroke-width="2.5"/></svg>
-    <div class="txt"><div class="rotulo">Fan 1</div>
-      <div class="leitura"><span class="valor" id="f2">--</span><span class="un">%</span></div>
-      <span class="st parado" id="stF2">INATIVO</span></div></div>
+  <div class="cartao fan clicavel icard" id="c-f2" data-abre="m-f2">
+      <span class="rotulo">Fan 1</span>
+      <div class="linhaIcone"><svg class="helice" id="iF2" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21.5" fill="none" stroke="currentColor" stroke-width="2.6"/><g fill="currentColor"><path d="M24 24C19.5 15 22.5 6.5 30 6c6.5.2 7 9-6 18z"/><path d="M24 24C19.5 15 22.5 6.5 30 6c6.5.2 7 9-6 18z" transform="rotate(120 24 24)"/><path d="M24 24C19.5 15 22.5 6.5 30 6c6.5.2 7 9-6 18z" transform="rotate(240 24 24)"/></g><circle cx="24" cy="24" r="4.6" fill="#f5f3f2"/><circle cx="24" cy="24" r="2.4" fill="currentColor"/></svg><div class="leitura"><span class="valor" id="f2">--</span><span class="un">%</span></div></div>
+      <span class="st" id="stF2">INATIVO</span>
+    </div>
 
-  <div class="cartao clicavel fan icard" id="c-f3" data-abre="m-f2">
-    <svg class="helice" id="iF3" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="none" stroke="currentColor" stroke-width="2.5"/><g fill="currentColor"><path d="M24 24C22 15 25 7 31 6c5 1 4 9-7 18z"/><path d="M24 24C22 15 25 7 31 6c5 1 4 9-7 18z" transform="rotate(120 24 24)"/><path d="M24 24C22 15 25 7 31 6c5 1 4 9-7 18z" transform="rotate(240 24 24)"/></g><circle cx="24" cy="24" r="4" fill="#f5f3f2" stroke="currentColor" stroke-width="2.5"/></svg>
-    <div class="txt"><div class="rotulo">Fan 2</div>
-      <div class="leitura"><span class="valor" id="f3">--</span><span class="un">%</span></div>
-      <span class="st parado" id="stF3">INATIVO</span></div></div>
+  <div class="cartao fan clicavel icard" id="c-f3" data-abre="m-f2">
+      <span class="rotulo">Fan 2</span>
+      <div class="linhaIcone"><svg class="helice" id="iF3" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21.5" fill="none" stroke="currentColor" stroke-width="2.6"/><g fill="currentColor"><path d="M24 24C19.5 15 22.5 6.5 30 6c6.5.2 7 9-6 18z"/><path d="M24 24C19.5 15 22.5 6.5 30 6c6.5.2 7 9-6 18z" transform="rotate(120 24 24)"/><path d="M24 24C19.5 15 22.5 6.5 30 6c6.5.2 7 9-6 18z" transform="rotate(240 24 24)"/></g><circle cx="24" cy="24" r="4.6" fill="#f5f3f2"/><circle cx="24" cy="24" r="2.4" fill="currentColor"/></svg><div class="leitura"><span class="valor" id="f3">--</span><span class="un">%</span></div></div>
+      <span class="st" id="stF3">INATIVO</span>
+    </div>
 </div>
 
 <div class="fig">
@@ -390,10 +384,9 @@ footer.ruim{color:var(--laranja)}
     <div><span id="estadoF2" class="estado">—</span><small id="f2agora"></small></div>
     <button id="btnF2" disabled>—</button>
   </div>
-  <div class="linha"><label>Máxima · %<small>com o aquecedor ligado</small></label><input data-k="f2max" inputmode="numeric"></div>
-  <div class="linha"><label>Mínima · %<small>com o aquecedor desligado</small></label><input data-k="f2min" inputmode="numeric"></div>
+  <div class="linha"><label>Velocidade · %<small>liga a 100%; ligar o aquecedor também põe a 100%</small></label><input data-k="f2vel" inputmode="numeric"></div>
   <div class="linha"><label>Piso de PWM · %<small>vale para todos os ventiladores</small></label><input data-k="pwmin" inputmode="numeric"></div>
-  <small class="nota">Começa desligado a cada boot. Cada campo salva ao sair dele.</small>
+  <small class="nota">Começa desligado a cada boot. Os dois giram juntos. Cada campo salva ao sair dele.</small>
 </div></div>
 
 <div class="fundo" id="m-f1" hidden><div class="modal">
@@ -547,7 +540,7 @@ $("tmax").addEventListener("change", function () {
 });
 
 // --- chaves -----------------------------------------------------------------
-// Ligar o aquecedor so pelo modal: o cartao mostra o selo, nao tem botao.
+// Interruptor do aquecedor: no cartao da temperatura e no modal dela.
 todos("[data-autoriza]").forEach(function (b) {
   b.addEventListener("click", function (ev) {
     ev.stopPropagation();  // o do cartao nao abre o modal
@@ -556,11 +549,11 @@ todos("[data-autoriza]").forEach(function (b) {
   });
 });
 
-// Estado num cartao claro: bolinha verde (ativo) ou laranja (aquecendo);
-// parado vai sem bolinha, numa pilula vermelha.
+// Estado num cartao claro: pilula verde (ativo), laranja (aquecendo) ou
+// vermelha (parado), sempre com o texto claro.
 function st(el, classe, texto) {
-  el.textContent = classe ? "● " + texto : texto;
-  el.className = "st " + (classe || "parado");
+  el.textContent = texto;
+  el.className = "st" + (classe ? " " + classe : "");
 }
 $("btnF2").addEventListener("click", function () {
   this.disabled = true;
@@ -704,7 +697,7 @@ function ciclo() {
     var f2 = d.cfg.f2on;
     marca($("estadoF2"), f2 ? "LIGADO · " + d.fan2 + " %" : "DESLIGADO", f2 ? "on" : "");
     $("f2agora").textContent = f2
-      ? (d.aquecendo ? "na máxima: aquecedor ligado" : "na mínima: aquecedor desligado")
+      ? "girando a " + d.cfg.f2vel + " %"
       : "ligue aqui para começar a girar";
     chave($("btnF2"), f2, "DESLIGAR", "LIGAR");
 

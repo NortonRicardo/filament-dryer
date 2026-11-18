@@ -11,6 +11,7 @@
 
 #include "aviso.h"
 #include "pagina.h"
+#include "umidade.h"
 #include "registro.h"
 #include "tela.h"
 #include "controle.h"
@@ -43,9 +44,9 @@ static_assert(sizeof(SENHA_PADRAO) - 1 >= 8,
 static const char *AVISO_PORTAL = "REDE ESTUFA-SETUP \xC2\xB7 SENHA " SENHA_PADRAO;
 
 // 1 hora de historico para o grafico: um ponto a cada 15 s, a media das
-// leituras daquele intervalo. Por tempo, e nao por leitura, porque o main le
-// a cada 2 s ou a cada 10 s (cartucho ligado) - por leitura, a largura do
-// grafico mudaria de significado. 240 pontos x 2 vetores = ~2 KB de RAM.
+// leituras daquele intervalo (o main le a cada 2 s). Por tempo, e nao por
+// leitura: com o sensor sumido por um tempo, a largura do grafico continua
+// sendo 1 hora. 240 pontos x 2 vetores = ~2 KB de RAM.
 static const uint16_t N_HIST = 240;
 static const uint32_t PONTO_MS = 15000;
 
@@ -123,12 +124,9 @@ void servidorRegistra(float temperatura, float umidade) {
 
 void servidorSemSensor() { temLeitura = false; }
 
-// Umidade absoluta da ultima leitura, em g/m3. Mesma formula do main.cpp;
-// repetida aqui para o servidor nao depender dele.
+// Umidade absoluta da ultima leitura, em g/m3.
 float umidadeAbsolutaAtual() {
-  if (!temLeitura) return 0.0f;
-  const float ps = 6.112f * expf((17.67f * ultimaTemp) / (ultimaTemp + 243.5f));
-  return ps * ultimaUmid * 2.1674f / (273.15f + ultimaTemp);
+  return temLeitura ? umidadeAbsoluta(ultimaTemp, ultimaUmid) : 0.0f;
 }
 
 // Converte "i-esima amostra mais antiga" na posicao dela dentro do anel.
@@ -191,8 +189,7 @@ static void rotaDados() {
   json += ",\"ki\":";           json += String(c.ki, 3);
   json += ",\"kd\":";           json += String(c.kd, 1);
   json += ",\"f2on\":";         json += c.fan2Ligado ? "true" : "false";
-  json += ",\"f2max\":";        json += c.fan2Max;
-  json += ",\"f2min\":";        json += c.fan2Min;
+  json += ",\"f2vel\":";        json += c.fan2Vel;
   json += ",\"pwmin\":";        json += c.pwmMin;
   json += ",\"pos1\":";         json += c.pos1;
   json += ",\"rmp1\":";         json += c.rampa1;
@@ -301,7 +298,7 @@ static void rotaConfig() {
   if (servidor.hasArg("ki"))    c.ki          = servidor.arg("ki").toFloat();
   if (servidor.hasArg("kd"))    c.kd          = servidor.arg("kd").toFloat();
   if (servidor.hasArg("f2on"))  c.fan2Ligado  = servidor.arg("f2on") == "1";
-  if (!lePct("f2max", c.fan2Max) || !lePct("f2min", c.fan2Min) ||
+  if (!lePct("f2vel", c.fan2Vel) ||
       !lePct("pwmin", c.pwmMin)) {
     servidor.send(400, "text/plain; charset=utf-8",
                   "porcentagem fora de 0 a 100\n");

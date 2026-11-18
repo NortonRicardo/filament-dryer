@@ -12,23 +12,9 @@
 
 #include <stdint.h>
 
-// --- cores (o CSS original ao lado) ----------------------------------------
-static const uint16_t FUNDO   = 0x0842;  // #080b10
-static const uint16_t CARTAO  = 0x10A4;  // #111720
-static const uint16_t BORDA   = 0x2147;  // #202b38
-static const uint16_t TEXTO   = 0xF7BF;  // #f3f6fa
-static const uint16_t MUDO    = 0x8494;  // #8290a1
-static const uint16_t CIANO   = 0x46BE;  // #42d7f5
-static const uint16_t AZUL    = 0x64BF;  // #6197ff
-static const uint16_t LARANJA = 0xFCCA;  // #ff9b52
-static const uint16_t VERDE   = 0x5714;  // #55e0a0
-static const uint16_t ROXO    = 0xA45F;  // #a78bfa
-static const uint16_t VERMELHO = 0xFB4D; // #ff6b6b
-static const uint16_t RODAPE  = 0x5B2E;  // #586575
-static const uint16_t TURQUESA = 0x5F5A; // #5eead4, umidade absoluta
-
-// --- desenho claro (o mesmo do painel web) ----------------------------------
+// --- cores (o CSS do painel web ao lado) -----------------------------------
 // Fundo quase preto, cartoes claros com texto escuro, estados com bolinha.
+static const uint16_t LARANJA   = 0xFCCA;  // #ff9b52, listra do portal no rodape
 static const uint16_t FUNDO2    = 0x0841;  // #080808, fundo da tela
 static const uint16_t CLARO     = 0xF79E;  // #f5f3f2, cartao
 static const uint16_t ESCURO    = 0x10A2;  // #171515, valor
@@ -81,12 +67,9 @@ static const int16_t A_L4 = 96;                  // termina em 448
 struct Cartao {
   int16_t x, y, l, a;
   const char *rotulo;
-  const char *detalhe;   // linha de baixo fixa; "" quando e desenhada a parte
   const char *unidade;
-  bool grau;      // desenha o anelzinho do grau antes da unidade
-  bool centro;    // rotulo e valor centrados (senao, alinhados a esquerda)
-  bool estado;    // tem linha de estado ("● ATIVO") abaixo do valor
-  bool icone;     // icone animado a esquerda; rotulo, valor e estado a direita
+  bool icone;     // icone animado a esquerda; rotulo, valor e estado a direita.
+                  // Sem icone, rotulo e valor centrados.
 };
 
 static const uint8_t N_CARTOES = 7;
@@ -97,17 +80,17 @@ static const int16_t COL_D = MARGEM + COL_L + VAO;  // coluna da direita
 static const Cartao CARTOES[N_CARTOES] = {
   // Valor a esquerda; a direita, um sobre o outro, o alvo do aquecedor e a
   // maxima (desenhaAlvo e pintaMaximo no main).
-  {COL_E, Y_L1, LARGURA_TODA, A_L1, "Temperatura", "", "\xC2\xB0" "C", false, true, false, false},
+  {COL_E, Y_L1, LARGURA_TODA, A_L1, "Temperatura", "\xC2\xB0" "C", false},
   // Rotulo com o icone de gota antes (desenhaCartao).
-  {COL_E, Y_L2, COL_L, A_L2, "Relativa", "", "%", false, true, false, false},
-  {COL_D, Y_L2, COL_L, A_L2, "Absoluta", "", "g/m\xC2\xB3", false, true, false, false},
+  {COL_E, Y_L2, COL_L, A_L2, "Relativa", "%", false},
+  {COL_D, Y_L2, COL_L, A_L2, "Absoluta", "g/m\xC2\xB3", false},
   // Aquecedor e fan do aquecedor: um cartao so, dividido ao meio. Cada
   // metade ocupa a posicao de uma coluna; o fundo e desenhado inteiro.
   // Chama (aquecedor) e helices (fans) animadas a esquerda.
-  {COL_E, Y_L3, COL_L, A_L3, "Aquecedor", "", "%", false, false, true, true},
-  {COL_D, Y_L3, COL_L, A_L3, "Fan aquecedor", "", "%", false, false, true, true},
-  {COL_E, Y_L4, COL_L, A_L4, "Fan 1", "", "%", false, false, true, true},
-  {COL_D, Y_L4, COL_L, A_L4, "Fan 2", "", "%", false, false, true, true},
+  {COL_E, Y_L3, COL_L, A_L3, "Aquecedor", "%", true},
+  {COL_D, Y_L3, COL_L, A_L3, "Fan aquecedor", "%", true},
+  {COL_E, Y_L4, COL_L, A_L4, "Fan 1", "%", true},
+  {COL_D, Y_L4, COL_L, A_L4, "Fan 2", "%", true},
 };
 
 // --- chamadas do servidor -----------------------------------------------------

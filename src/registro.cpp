@@ -5,6 +5,7 @@
 
 #include "controle.h"
 #include "diario.h"
+#include "umidade.h"
 
 static const char *LOG_ATUAL   = "/log.txt";
 static const char *LOG_ANTIGO  = "/log.old";
@@ -203,11 +204,6 @@ void registroEnviaLog(WebServer &s) {
   }
   out.despeja();
   s.sendContent("");
-}
-
-static float umidadeAbsoluta(float t, float ur) {
-  const float ps = 6.112f * expf((17.67f * t) / (t + 243.5f));
-  return ps * ur * 2.1674f / (273.15f + t);
 }
 
 // Virgula decimal: o Excel em portugues le "24,5" como numero e "24.5" como

@@ -44,9 +44,11 @@
 #include "controle.h"
 #include "diario.h"
 #include "fontes.h"
+#include "icones.h"
 #include "registro.h"
 #include "servidor.h"
 #include "tela.h"
+#include "umidade.h"
 
 TFT_eSPI tft = TFT_eSPI();
 
@@ -96,34 +98,6 @@ static Bme280Spi bme;
 
 static const uint32_t INTERVALO_LEITURA = 2000;      // ms entre leituras
 
-// Com o cartucho a 100% e a caixa longe do teto, le uma vez por minuto: com
-// os 4,2 A passando o I2C nao respondia, entao cada leitura desliga o
-// cartucho por ~50 ms. A caixa sobe ~0,07 C/min, e a 100% o PID ja esta
-// no maximo - nao tem o que ajustar entre uma leitura e outra.
-// Abaixo de 100% a leitura cai no trecho desligado do PWM, sem desligar nada
-// a mais, e volta a INTERVALO_LEITURA - o PID precisa dela para regular.
-static const uint32_t INTERVALO_AQUECENDO = 60000;
-static const float    MARGEM_TETO = 10.0f;   // C abaixo do teto = "longe"
-
-// Com o cartucho ligado o I2C nao respondia (testado em 09/11/2026, ja com o
-// VIN ressoldado, os pull-ups de 4,7 k e o cabo a 25 cm do cartucho). O SPI
-// deve aguentar mais, mas ate o log provar isso a leitura continua assim:
-//
-// 1. Abaixo de 100% de potencia, a leitura espera o trecho da janela de PWM
-//    em que o cartucho ja esta desligado: sem pausa nenhuma. LEITURA_MS e o
-//    quanto esse trecho precisa durar (medicao de ~10 ms + a transferencia).
-//    Se em ESPERA_TRECHO_MS ele nao vier, le assim mesmo.
-// 2. A 100% nao existe trecho desligado: a leitura desliga o cartucho por
-//    SILENCIO_MS antes e durante a leitura inteira, direto, sem tentar com
-//    ele ligado. Carga resistiva corta na hora; a folga e para a fonte e a
-//    fiacao acomodarem.
-// 3. Fora isso (leitura que nao achou o trecho desligado), le com ele
-//    ligado; depois de FALHA_PAUSA falhas seguidas, com ele desligado.
-static const uint32_t LEITURA_MS = 50;
-static const uint32_t ESPERA_TRECHO_MS = 4000;
-static const uint8_t  FALHA_PAUSA = 4;
-static const uint32_t SILENCIO_MS = 5;   // era 20; baixado em 10/11/2026 para testar
-
 // Uma leitura corrompida pode dar um valor plausivel (30,0 C entre leituras
 // de 29,5): passa pelos filtros de salto. A caixa muda ~0,07 C/min, entao
 // uma diferenca maior que CONFIRMA_C so e aceita se a leitura seguinte, 2 s
@@ -151,7 +125,6 @@ static bool     pendente = false;
 static float    tempPendente = 0;
 static uint8_t  naoConfirmadas = 0;
 
-enum ModoLeitura { COM_CARTUCHO, PAUSA_LONGA };
 
 // ---------------------------------------------------------------------------
 // Sensor
@@ -187,35 +160,13 @@ static bool iniciaSensor() {
   return true;
 }
 
-// ---------------------------------------------------------------------------
-// Umidade absoluta - quanta agua existe mesmo no ar, em gramas por metro
-// cubico. Formula de Magnus, a mesma do projeto DryFilaBox do Marlon Nardi.
-//
-// Por que isso importa numa estufa, e muito:
-//
-//   A umidade RELATIVA diz o quanto o ar esta cheio em relacao ao que ele
-//   AGUENTA naquela temperatura. E ar quente aguenta muito mais agua. Entao
-//   so de aquecer a caixa a UR despenca, sem uma unica gota ter saido.
-//
-//   Exemplo real: 25 C com 60% de UR tem 13,8 g/m3 de agua. Aqueca para
-//   45 C sem tirar nada e a UR marca 21% -- parece seco. Mas continuam os
-//   mesmos 13,8 g/m3 ali dentro.
-//
-//   A umidade ABSOLUTA so cai quando a agua realmente deixa a caixa. E ela,
-//   nao a relativa, que diz se a secagem esta funcionando.
-//
-// Conferida contra tabela: 20 C e 50% dao 8,64 g/m3 (tabela: 8,65).
-static float umidadeAbsoluta(float tempC, float umidadeRel) {
-  const float pressaoSat = 6.112f * expf((17.67f * tempC) / (tempC + 243.5f));
-  return pressaoSat * umidadeRel * 2.1674f / (273.15f + tempC);
-}
 
 // ---------------------------------------------------------------------------
 // Validacao da leitura
 //
-// Quando o cartucho chaveia 4,2 A, o degrau de corrente acopla no cabo do
-// I2C e a transferencia se corrompe. O BME280 nao avisa: a biblioteca devolve
-// os bytes que leu, e a compensacao do datasheet transforma lixo em numero.
+// Ruido no cabo do sensor (o aquecedor chaveia ~15 A perto dele) pode
+// corromper a transferencia. O BME280 nao avisa: a biblioteca devolve os
+// bytes que leu, e a compensacao do datasheet transforma lixo em numero.
 //
 // Os valores nao sao aleatorios, sao assinaturas do barramento:
 //
@@ -260,12 +211,7 @@ static bool leituraPlausivel(float t, float u) {
   return true;
 }
 
-// Quem chama religa o cartucho (controleSilenciaSaida(false)) depois.
-static bool leSensor(float &temperatura, float &umidade, ModoLeitura modo) {
-  if (modo == PAUSA_LONGA) {
-    controleSilenciaSaida(true);
-    delay(SILENCIO_MS);
-  }
+static bool leSensor(float &temperatura, float &umidade) {
   if (!bme.takeForcedMeasurement()) return false;
 
   temperatura = bme.readTemperature();
@@ -295,71 +241,16 @@ uint32_t leiturasDescartadas() { return descartesTotal; }
 // ---------------------------------------------------------------------------
 // Desenho
 //
-// Regra em todo este bloco: escolher a fonte logo antes de cada desenho ou
-// medicao. setTextFont() zera a free font e setFreeFont() a repoe, entao
-// misturar as duas sem reescolher daria a fonte errada sem erro de compilacao.
+// Regra em todo este bloco: escolher a fonte (fonte()) logo antes de cada
+// desenho ou medicao.
 // ---------------------------------------------------------------------------
 
-// Desenha texto com espaco extra entre as letras - metade do visual deste
-// layout vem dai, e a TFT_eSPI nao tem letter-spacing.
-//
-// Resolve de passagem dois caracteres que as fontes nao tem, por cobrirem so
-// 0x20 a 0x7E: "·" vira um ponto desenhado e "Ø" vira um O cortado.
-//
-// Com medir=true nao desenha nada, so devolve a largura - e assim que se
-// centraliza ou alinha a direita.
-static int16_t textoEspacado(int16_t x, int16_t y, const char *texto,
-                             int16_t espaco, uint16_t cor, uint16_t fundo,
-                             bool medir = false) {
-  const int16_t inicio = x;
-  const int16_t altura = tft.fontHeight();
-  bool primeiro = true;
-
-  if (!medir) {
-    tft.setTextDatum(ML_DATUM);
-    tft.setTextColor(cor, fundo);
-  }
-
-  for (const uint8_t *p = (const uint8_t *)texto; *p; p++) {
-    if (!primeiro) x += espaco;
-    primeiro = false;
-
-    if (p[0] == 0xC2 && p[1] == 0xB7) {  // "·"
-      if (!medir) tft.fillCircle(x + 2, y, 2, cor);
-      x += 5;
-      p++;
-      continue;
-    }
-
-    char letra[2] = {0, 0};
-    bool cortado = false;
-
-    if (p[0] == 0xC3 && p[1] == 0x98) {  // "Ø"
-      letra[0] = 'O';
-      cortado = true;
-      p++;
-    } else {
-      letra[0] = (char)p[0];
-    }
-
-    const int16_t largura = tft.textWidth(letra);
-    if (!medir) {
-      tft.drawString(letra, x, y);
-      if (cortado) {
-        tft.drawLine(x + largura - 1, y - altura / 2 + 2,
-                     x + 1, y + altura / 2 - 2, cor);
-      }
-    }
-    x += largura;
-  }
-
-  return x - inicio;
-}
-
+// Texto centrado num ponto, na fonte ja escolhida.
 static void textoCentrado(int16_t cx, int16_t y, const char *texto,
-                          int16_t espaco, uint16_t cor, uint16_t fundo) {
-  const int16_t largura = textoEspacado(0, 0, texto, espaco, cor, fundo, true);
-  textoEspacado(cx - largura / 2, y, texto, espaco, cor, fundo);
+                          uint16_t cor, uint16_t fundo) {
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextColor(cor, fundo);
+  tft.drawString(texto, cx, y);
 }
 
 // ---------------------------------------------------------------------------
@@ -376,10 +267,6 @@ static void usaFonte(A &a, const uint8_t *&atual, const uint8_t *f) {
 }
 static const uint8_t *fonteTft = nullptr;
 static void fonte(const uint8_t *f) { usaFonte(tft, fonteTft, f); }
-// As telas de sistema (atualizacao) usam as fontes internas da biblioteca.
-static void fonteInterna() {
-  if (fonteTft) { tft.unloadFont(); fonteTft = nullptr; }
-}
 
 // Posicoes dentro do cartao, por linha: rotulo no alto, valor no meio,
 // estado embaixo. Temperatura e umidade centradas; aquecedor e fans com o
@@ -399,11 +286,8 @@ static int16_t yValor(const Cartao &c) {
   return c.y + 54;
 }
 static int16_t faixaTopo(const Cartao &c)    { return yValor(c) - FAIXA_A / 2; }
-// Cartao com icone: a faixa comeca depois dele (ICONE_ESPACO px da borda).
-static const int16_t ICONE_ESPACO = 44;
 static int16_t faixaLargura(const Cartao &c) {
-  if (c.l == LARGURA_TODA) return FAIXA_TEMP_L;
-  return c.icone ? c.l - ICONE_ESPACO - 6 : c.l - 6;
+  return c.l == LARGURA_TODA ? FAIXA_TEMP_L : c.l - 6;
 }
 // Temperatura: valor e rotulo na metade esquerda; na direita, o alvo e a
 // maxima. A linha fica exatamente no meio, alinhada com a do aquecedor.
@@ -411,23 +295,24 @@ static const int16_t TEMP_ESQ = LARGURA_TODA / 2;  // 150
 static int16_t centroX(const Cartao &c) {
   return c.l == LARGURA_TODA ? c.x + TEMP_ESQ / 2 : c.x + c.l / 2;
 }
-static int16_t faixaX(const Cartao &c) {
-  return c.icone ? c.x + ICONE_ESPACO : centroX(c) - faixaLargura(c) / 2;
-}
+static int16_t faixaX(const Cartao &c) { return centroX(c) - faixaLargura(c) / 2; }
 static int16_t xDireita(const Cartao &c)     { return c.x + c.l - 12; }  // fim do texto a direita
 static int16_t yEstado(const Cartao &c)      { return c.y == Y_L3 ? c.y + 90 : c.y + 80; }
-static int16_t yDetalhe(const Cartao &c)     { return c.y + c.a - 13; }
 
 // O valor e montado num sprite fora da tela e empurrado de uma vez. Apagar a
 // faixa direto na tela e redesenhar deixava um quadro em branco visivel - a
-// piscada na troca de valor. Tres sprites, um por largura de faixa: meio
-// cartao (~10 KB), temperatura (~10 KB) e cartao com icone (~7 KB).
+// piscada na troca de valor. Dois sprites: meio cartao (~10 KB) e a faixa
+// da temperatura (~10 KB).
 static TFT_eSprite faixaMeia = TFT_eSprite(&tft);
 static TFT_eSprite faixaTemp = TFT_eSprite(&tft);
-static TFT_eSprite faixaIcone = TFT_eSprite(&tft);
-static bool faixaMeiaOk = false, faixaTempOk = false, faixaIconeOk = false;
-static bool faixasCriadas = false;
-static const uint8_t *fonteMeia = nullptr, *fonteTemp = nullptr, *fonteIcone = nullptr;
+static bool faixaMeiaOk = false, faixaTempOk = false, faixasCriadas = false;
+static const uint8_t *fonteMeia = nullptr, *fonteTemp = nullptr;
+
+// Onde o icone animado ficou em cada cartao (x na tela). Ele vai junto do
+// numero, centrados como um grupo: muda de lugar quando o numero muda de
+// largura ("0" e "100").
+static int16_t xIcone[N_CARTOES];
+static void iconeMudouDeLugar(uint8_t i);
 
 // O que esta desenhado em cada cartao. Valor igual nao redesenha.
 static char valorNaTela[N_CARTOES][12];
@@ -435,12 +320,13 @@ static bool dadoNaTela[N_CARTOES];
 
 static void esqueceValor(uint8_t i) { valorNaTela[i][0] = '\0'; }
 
-// Numero grande e unidade pequena ao lado, centrados juntos. Template porque
+// Numero grande e unidade pequena ao lado, centrados juntos (nos cartoes com
+// icone, o icone vai na frente e entra no centro do grupo). Template porque
 // desenha tanto na tela quanto no sprite: na TFT_eSPI so drawPixel e
 // virtual, entao passar o sprite como TFT_eSPI& desenharia na tela.
 template <typename Alvo>
-static void montaValor(Alvo &a, const uint8_t *&fonteA, int16_t ox, int16_t oy,
-                       const Cartao &c, const char *valor, bool temDado) {
+static int16_t montaValor(Alvo &a, const uint8_t *&fonteA, int16_t ox, int16_t oy,
+                          const Cartao &c, const char *valor, bool temDado) {
   const int16_t lf = faixaLargura(c);
   a.fillRect(ox, oy, lf, FAIXA_A, CLARO);
 
@@ -448,10 +334,11 @@ static void montaValor(Alvo &a, const uint8_t *&fonteA, int16_t ox, int16_t oy,
   const int16_t larguraUnidade = temDado ? a.textWidth(c.unidade) : 0;
   usaFonte(a, fonteA, INTER_VALOR);
   const int16_t larguraValor = a.textWidth(valor);
-  const int16_t total = larguraValor + (temDado ? 4 + larguraUnidade : 0);
+  const int16_t icone = c.icone ? ICONE_L + 8 : 0;
+  const int16_t total = icone + larguraValor + (temDado ? 4 + larguraUnidade : 0);
 
-  // Com icone, alinhado a direita (6 px antes do fim da faixa); senao, no centro.
-  const int16_t x = c.icone ? ox + lf - 6 - total : ox + lf / 2 - total / 2;
+  const int16_t inicio = ox + lf / 2 - total / 2;  // onde o icone fica
+  const int16_t x = inicio + icone;
   const int16_t y = oy + FAIXA_A / 2;
 
   a.setTextDatum(ML_DATUM);
@@ -463,6 +350,7 @@ static void montaValor(Alvo &a, const uint8_t *&fonteA, int16_t ox, int16_t oy,
     a.setTextColor(UNID_C, CLARO);
     a.drawString(c.unidade, x + larguraValor + 4, y + 6);
   }
+  return inicio - ox;
 }
 
 // Sem dado, "--" em cinza: o cartao existe no layout mas nao inventa leitura.
@@ -479,20 +367,23 @@ static void desenhaValor(uint8_t i, const char *valor, bool temDado) {
     faixaMeiaOk = faixaMeia.createSprite(COL_L - 6, FAIXA_A) != nullptr;
     faixaTemp.setColorDepth(16);
     faixaTempOk = faixaTemp.createSprite(FAIXA_TEMP_L, FAIXA_A) != nullptr;
-    faixaIcone.setColorDepth(16);
-    faixaIconeOk = faixaIcone.createSprite(COL_L - ICONE_ESPACO - 6, FAIXA_A) != nullptr;
   }
 
   const bool temp = c.l == LARGURA_TODA;
-  TFT_eSprite &faixa = temp ? faixaTemp : c.icone ? faixaIcone : faixaMeia;
-  const uint8_t *&fonteF = temp ? fonteTemp : c.icone ? fonteIcone : fonteMeia;
-  const bool ok = temp ? faixaTempOk : c.icone ? faixaIconeOk : faixaMeiaOk;
+  TFT_eSprite &faixa = temp ? faixaTemp : faixaMeia;
+  const uint8_t *&fonteF = temp ? fonteTemp : fonteMeia;
+  const bool ok = temp ? faixaTempOk : faixaMeiaOk;
 
+  int16_t dx;
   if (ok) {
-    montaValor(faixa, fonteF, 0, 0, c, valor, temDado);
+    dx = montaValor(faixa, fonteF, 0, 0, c, valor, temDado);
     faixa.pushSprite(faixaX(c), faixaTopo(c));
   } else {  // sem memoria: pisca, mas funciona
-    montaValor(tft, fonteTft, faixaX(c), faixaTopo(c), c, valor, temDado);
+    dx = montaValor(tft, fonteTft, faixaX(c), faixaTopo(c), c, valor, temDado);
+  }
+  if (c.icone) {            // a faixa apagou o icone: desenha de novo no lugar novo
+    xIcone[i] = faixaX(c) + dx;
+    iconeMudouDeLugar(i);
   }
 }
 
@@ -539,7 +430,6 @@ static void desenhaCartao(uint8_t i) {
   } else {
     textoEm(centroX(c), yRotulo(c), c.rotulo, INTER_ROTULO, ROTULO_C);
   }
-  if (c.detalhe[0]) textoEm(centroX(c), yDetalhe(c), c.detalhe, INTER_ROTULO, UNID_C);
 }
 
 static void telaFixa() {
@@ -684,9 +574,9 @@ static void pintaMaximo() {
   char buf[12];
   if (temMaxima) {
     snprintf(buf, sizeof buf, "%.1f\xC2\xB0", tempMaxima);
-    linhaTemperatura(1, ICONE_MAX, "M\xC3\x81XIMO", buf, OK_C);
+    linhaTemperatura(1, ICONE_MAX, "MAX", buf, OK_C);
   } else {
-    linhaTemperatura(1, ICONE_MAX, "M\xC3\x81XIMO", "--", UNID_C);
+    linhaTemperatura(1, ICONE_MAX, "MAX", "--", UNID_C);
   }
 }
 
@@ -726,37 +616,26 @@ static void mostraSemSensor() {
   if (telaLigada) pintaMedidas();
 }
 
-// Linha de estado do cartao. Ligado: bolinha e texto na cor (verde ativo,
-// laranja aquecendo). Parado: texto claro numa pilula vermelha - o mesmo do
-// painel web. So redesenha quando muda.
+// Linha de estado do cartao: pilula verde (ativo, no alvo), laranja
+// (aquecendo) ou vermelha (parado, protecao) - o mesmo do painel web. So
+// redesenha quando muda.
 static char estadoNaTela[N_CARTOES][16];
 
-static void desenhaEstado(uint8_t i, const char *texto, uint16_t cor, bool pilula) {
+static void desenhaEstado(uint8_t i, const char *texto, uint16_t cor) {
   if (strcmp(estadoNaTela[i], texto) == 0) return;
   snprintf(estadoNaTela[i], sizeof estadoNaTela[i], "%s", texto);
 
   const Cartao &c = CARTOES[i];
-  const int16_t cy = yEstado(c);
-  tft.fillRect(c.x + ICONE_ESPACO, cy - 11, c.l - ICONE_ESPACO - 3, 22, CLARO);
+  const int16_t cy = yEstado(c), cx = c.x + c.l / 2;
+  tft.fillRect(c.x + 3, cy - 11, c.l - 6, 22, CLARO);
 
+  // Pilula da cor do estado, texto claro dentro, centrada.
   fonte(INTER_ESTADO);
-  const int16_t lt = tft.textWidth(texto);
-  // Centro do conjunto, de modo que ele termine na margem direita.
-  const int16_t largura = pilula ? lt + 20 : 12 + lt;
-  const int16_t cx = xDireita(c) - largura / 2;
+  const int16_t lt = tft.textWidth(texto), l = lt + 20, a = 20;
+  tft.fillRoundRect(cx - l / 2, cy - a / 2, l, a, a / 2, cor);
   tft.setTextDatum(ML_DATUM);
-
-  if (pilula) {
-    const int16_t l = lt + 20, a = 20;
-    tft.fillRoundRect(cx - l / 2, cy - a / 2, l, a, a / 2, cor);
-    tft.setTextColor(CLARO, cor);
-    tft.drawString(texto, cx - lt / 2, cy + 1);
-  } else {
-    const int16_t x = cx - (12 + lt) / 2;
-    tft.fillCircle(x + 4, cy, 4, cor);
-    tft.setTextColor(cor, CLARO);
-    tft.drawString(texto, x + 12, cy + 1);
-  }
+  tft.setTextColor(CLARO, cor);
+  tft.drawString(texto, cx - lt / 2, cy + 1);
 }
 
 // Esquerda do valor da temperatura: o alvo do aquecedor.
@@ -778,24 +657,24 @@ static void pintaControle() {
   // Potencia que o PID pede, e o estado do aquecedor.
   snprintf(buf, sizeof buf, "%u", controleAutorizado() ? controlePotencia() : 0);
   desenhaValor(CARTAO_POT, buf, true);
-  if (controleEstado() == EST_FALHA)          desenhaEstado(CARTAO_POT, "PROTE\xC3\x87\xC3\x83O", PARADO_C, true);
-  else if (controleEstado() == EST_AQUECENDO) desenhaEstado(CARTAO_POT, "AQUECENDO", QUENTE_C, false);
-  else if (controleAutorizado())              desenhaEstado(CARTAO_POT, "NO ALVO", OK_C, false);
-  else                                        desenhaEstado(CARTAO_POT, "DESLIGADO", PARADO_C, true);
+  if (controleEstado() == EST_FALHA)          desenhaEstado(CARTAO_POT, "PROTE\xC3\x87\xC3\x83O", PARADO_C);
+  else if (controleEstado() == EST_AQUECENDO) desenhaEstado(CARTAO_POT, "AQUECENDO", QUENTE_C);
+  else if (controleAutorizado())              desenhaEstado(CARTAO_POT, "NO ALVO", OK_C);
+  else                                        desenhaEstado(CARTAO_POT, "DESLIGADO", PARADO_C);
   desenhaAlvo();
 
   // Fan do aquecedor (canal 0) e os dois de circulacao (canal 1, juntos).
   const uint8_t fanAq = controleVelocidade(0), circ = controleVelocidade(1);
   snprintf(buf, sizeof buf, "%u", fanAq);
   desenhaValor(CARTAO_FANAQ, buf, true);
-  if (fanAq > 0) desenhaEstado(CARTAO_FANAQ, "ATIVO", OK_C, false);
-  else           desenhaEstado(CARTAO_FANAQ, "INATIVO", PARADO_C, true);
+  if (fanAq > 0) desenhaEstado(CARTAO_FANAQ, "ATIVO", OK_C);
+  else           desenhaEstado(CARTAO_FANAQ, "INATIVO", PARADO_C);
 
   snprintf(buf, sizeof buf, "%u", circ);
   for (uint8_t i = CARTAO_CIRC1; i <= CARTAO_CIRC2; i++) {
     desenhaValor(i, buf, true);
-    if (circ > 0) desenhaEstado(i, "ATIVO", OK_C, false);
-    else          desenhaEstado(i, "INATIVO", PARADO_C, true);
+    if (circ > 0) desenhaEstado(i, "ATIVO", OK_C);
+    else          desenhaEstado(i, "INATIVO", PARADO_C);
   }
 }
 
@@ -814,48 +693,47 @@ static TFT_eSprite icone = TFT_eSprite(&tft);
 static bool iconeOk = false;
 static const uint32_t QUADRO_MS = 50;   // ~20 quadros por segundo
 
-static void desenhaHelice(float angulo, uint16_t cor) {
-  const int16_t cx = 16, cy = 16;
-  icone.fillSprite(CLARO);
-  icone.drawCircle(cx, cy, 15, cor);
-  for (uint8_t p = 0; p < 3; p++) {
-    const float a = angulo + p * 2.0944f;   // 120 graus
-    const int16_t tx = cx + 12 * cosf(a), ty = cy + 12 * sinf(a);
-    const int16_t ax = cx + 7 * cosf(a - 0.75f), ay = cy + 7 * sinf(a - 0.75f);
-    const int16_t bx = cx + 6 * cosf(a + 0.35f), by = cy + 6 * sinf(a + 0.35f);
-    icone.fillTriangle(cx, cy, ax, ay, tx, ty, cor);
-    icone.fillTriangle(cx, cy, tx, ty, bx, by, cor);
+// Pinta uma mascara de 4 bits no sprite do icone, misturando a cor com o que
+// ja esta embaixo (as camadas da chama se sobrepoem).
+static void pintaMascara(const uint8_t *mascara, uint16_t cor) {
+  for (uint16_t p = 0; p < ICONE_L * ICONE_L; p++) {
+    const uint8_t b = pgm_read_byte(mascara + p / 2);
+    const uint8_t a = (p & 1) ? (b & 0x0F) : (b >> 4);
+    if (!a) continue;
+    const int16_t x = p % ICONE_L, y = p / ICONE_L;
+    icone.drawPixel(x, y, a == 15 ? cor : icone.alphaBlend(a * 17, cor, icone.readPixel(x, y)));
   }
-  icone.fillCircle(cx, cy, 3, CLARO);
-  icone.drawCircle(cx, cy, 3, cor);
+}
+
+static void desenhaHelice(uint8_t quadro, uint16_t cor) {
+  icone.fillSprite(CLARO);
+  pintaMascara(HELICE[quadro], cor);
 }
 
 static void desenhaChama(uint8_t quadro, bool acesa) {
   icone.fillSprite(CLARO);
-  // Quatro quadros: a ponta balanca e a chama sobe e desce um pouco.
-  static const int8_t PONTA_X[4] = {0, 2, 0, -2};
-  static const int8_t PONTA_Y[4] = {0, 1, 2, 1};
-  const int8_t dx = acesa ? PONTA_X[quadro] : 0, dy = acesa ? PONTA_Y[quadro] : 0;
-  const uint16_t fora = acesa ? PARADO_C : SEMDADO_C;
-  icone.fillCircle(16, 21, 9, fora);
-  icone.fillTriangle(7, 19, 25, 19, 16 + dx, 2 + dy, fora);
-  if (acesa) {
-    icone.fillCircle(16, 23, 5, LARANJA_C);
-    icone.fillTriangle(11, 22, 21, 22, 16 - dx / 2, 11 + dy, LARANJA_C);
-    icone.fillCircle(16, 25, 2, AMARELO_C);
-  }
+  if (!acesa) { pintaMascara(CHAMA_FORA[0], SEMDADO_C); return; }
+  pintaMascara(CHAMA_FORA[quadro], PARADO_C);
+  pintaMascara(CHAMA_MEIO[quadro], LARANJA_C);
+  pintaMascara(CHAMA_NUCLEO[quadro], AMARELO_C);
 }
 
 static void pushIcone(uint8_t i) {
-  const Cartao &c = CARTOES[i];
-  icone.pushSprite(c.x + 6, yValor(c) - 16);
+  icone.pushSprite(xIcone[i], yValor(CARTOES[i]) - ICONE_L / 2);
 }
 
-static float anguloFan[3] = {0, 0, 0};
+static float anguloFan[3] = {0, 0, 0};   // em quadros da helice
 static int8_t  estadoIcone[4] = {-1, -1, -1, -1};  // -1 = redesenhar
 
 static void esqueceIcones() {
   for (uint8_t k = 0; k < 4; k++) estadoIcone[k] = -1;
+}
+
+static void iconeMudouDeLugar(uint8_t i) {
+  if (i == CARTAO_POT) estadoIcone[0] = -1;
+  else if (i == CARTAO_FANAQ) estadoIcone[1] = -1;
+  else if (i == CARTAO_CIRC1) estadoIcone[2] = -1;
+  else if (i == CARTAO_CIRC2) estadoIcone[3] = -1;
 }
 
 static void animaIcones() {
@@ -865,7 +743,7 @@ static void animaIcones() {
 
   if (!iconeOk) {
     icone.setColorDepth(16);
-    iconeOk = icone.createSprite(32, 32) != nullptr;
+    iconeOk = icone.createSprite(ICONE_L, ICONE_L) != nullptr;
     if (!iconeOk) return;
   }
 
@@ -873,7 +751,7 @@ static void animaIcones() {
   static uint8_t quadro = 0, conta = 0;
   const bool acesa = controleEstado() == EST_AQUECENDO;
   if (acesa) {
-    if (++conta >= 3) { conta = 0; quadro = (quadro + 1) % 4; estadoIcone[0] = -1; }
+    if (++conta >= 3) { conta = 0; quadro = (quadro + 1) % CHAMA_QUADROS; estadoIcone[0] = -1; }
   }
   if (estadoIcone[0] != (acesa ? quadro + 1 : 0)) {
     estadoIcone[0] = acesa ? quadro + 1 : 0;
@@ -886,15 +764,16 @@ static void animaIcones() {
   for (uint8_t f = 0; f < 3; f++) {
     const uint8_t pct = controleVelocidade(f == 0 ? 0 : 1);
     if (pct > 0) {
-      // 30% gira devagar, 100% bem rapido: de ~0,6 a ~2 voltas por segundo.
-      anguloFan[f] += 0.2f + pct * 0.0055f;
-      if (anguloFan[f] > 6.2832f) anguloFan[f] -= 6.2832f;
-      desenhaHelice(anguloFan[f], OK_C);
+      // Cada quadro e 12 graus. 30% gira devagar, 100% bem rapido: de ~0,7
+      // a ~2 voltas por segundo.
+      anguloFan[f] += 0.6f + pct * 0.0145f;
+      while (anguloFan[f] >= HELICE_QUADROS) anguloFan[f] -= HELICE_QUADROS;
+      desenhaHelice((uint8_t)anguloFan[f], OK_C);
       pushIcone(CARTAO_FAN[f]);
       estadoIcone[1 + f] = 1;
     } else if (estadoIcone[1 + f] != 0) {
       estadoIcone[1 + f] = 0;
-      desenhaHelice(anguloFan[f], SEMDADO_C);
+      desenhaHelice((uint8_t)anguloFan[f], SEMDADO_C);
       pushIcone(CARTAO_FAN[f]);
     }
   }
@@ -913,13 +792,13 @@ static void desenhaRodape(const char *endereco) {
     // alternando com o aviso a cada 3 s (servidorEndereco()).
     tft.fillRect(0, topo, LARGURA, ALTURA_RODAPE, LARANJA);
     fonte(INTER_ESTADO);
-    textoCentrado(LARGURA / 2, Y_RODAPE, endereco, 1, FUNDO2, LARANJA);
+    textoCentrado(LARGURA / 2, Y_RODAPE, endereco, FUNDO2, LARANJA);
     return;
   }
 
   tft.fillRect(0, topo, LARGURA, ALTURA_RODAPE, FUNDO2);
   fonte(INTER_ROTULO);
-  textoCentrado(LARGURA / 2, Y_RODAPE, endereco, 1, TITULO_C, FUNDO2);
+  textoCentrado(LARGURA / 2, Y_RODAPE, endereco, TITULO_C, FUNDO2);
 }
 
 // Relogio no centro do topo. Horas e minutos so: redesenha uma vez por
@@ -1023,28 +902,25 @@ void telaAtualizando(uint8_t pct) {
   static bool montada = false;
   const int16_t bx = 30, by = ALTURA / 2 + 10, bl = LARGURA - 60, ba = 18;
 
-  fonteInterna();
   if (pct == 0 || !montada) {
     montada = true;
     tft.fillScreen(FUNDO2);
-    tft.setTextDatum(MC_DATUM);
-    tft.setTextColor(TEXTO, FUNDO2);
-    tft.drawString("ATUALIZANDO", LARGURA / 2, ALTURA / 2 - 40, 4);
-    tft.setTextColor(MUDO, FUNDO2);
-    tft.drawString("aquecedor desligado - nao desligue a energia",
-                   LARGURA / 2, ALTURA / 2 - 12, 2);
-    tft.drawRoundRect(bx, by, bl, ba, 6, BORDA);
+    fonte(INTER_ESTADO);
+    textoCentrado(LARGURA / 2, ALTURA / 2 - 40, "ATUALIZANDO", TOPO_C, FUNDO2);
+    fonte(INTER_ROTULO);
+    textoCentrado(LARGURA / 2, ALTURA / 2 - 14,
+                  "aquecedor desligado \xC2\xB7 n\xC3\xA3o desligue a energia",
+                  TITULO_C, FUNDO2);
+    tft.drawRoundRect(bx, by, bl, ba, 6, TITULO_C);
   }
 
-  tft.fillRoundRect(bx + 2, by + 2, (bl - 4) * pct / 100, ba - 4, 4, CIANO);
+  tft.fillRoundRect(bx + 2, by + 2, (bl - 4) * pct / 100, ba - 4, 4, CONECT_C);
 
   char buf[8];
   snprintf(buf, sizeof buf, "%u%%", pct);
-  tft.setTextDatum(MC_DATUM);
-  tft.setTextColor(TEXTO, FUNDO2);
-  tft.setTextPadding(60);
-  tft.drawString(buf, LARGURA / 2, by + ba + 22, 4);
-  tft.setTextPadding(0);
+  tft.fillRect(LARGURA / 2 - 30, by + ba + 12, 60, 20, FUNDO2);
+  fonte(INTER_ESTADO);
+  textoCentrado(LARGURA / 2, by + ba + 22, buf, TOPO_C, FUNDO2);
 
   if (!telaLigada) {          // imagem apagada pelo painel: mostra mesmo assim
     telaLigada = true;
@@ -1230,44 +1106,15 @@ void loop() {
     if (telaLigada) desenhaRodape(endereco);
   }
 
-  // Cartucho a 100%, caixa longe do teto e nada pendente: le a cada 50 s.
-  // Em qualquer outro caso, a cada 2 s.
-  const bool leituraEspacada = falhasSeguidas == 0 && !pendente
-                               && controlePotencia() >= 100
-                               && ultimaTemp < TETO_ABSOLUTO - MARGEM_TETO;
-  const uint32_t intervalo = leituraEspacada ? INTERVALO_AQUECENDO
-                                             : INTERVALO_LEITURA;
-
-  // Abaixo de 100% espera o trecho em que o PWM ja desligou o cartucho -
-  // ate ESPERA_TRECHO_MS; depois disso le assim mesmo.
-  const bool esperaTrecho = !controleSaidaQuieta(LEITURA_MS)
-                            && controleTemTrechoQuieto(LEITURA_MS)
-                            && agora - ultimaLeitura < intervalo + ESPERA_TRECHO_MS;
-
+  // Le o sensor a cada 2 s, com o cartucho ligado ou nao: no SPI o
+  // barramento aguenta os 15 A do aquecedor (no I2C nao aguentava, e a
+  // leitura precisava desligar o cartucho por alguns ms).
   if (sensorOk) {
-    if (agora - ultimaLeitura >= intervalo && !esperaTrecho) {
+    if (agora - ultimaLeitura >= INTERVALO_LEITURA) {
       ultimaLeitura = agora;
 
-      // A 100%, ou depois de FALHA_PAUSA falhas seguidas, desliga o
-      // cartucho para ler. O PID nem fica sabendo das pausas: a potencia
-      // pedida nao muda.
-      const bool pausa = controlePotencia() >= 100
-                         || falhasSeguidas >= FALHA_PAUSA;
-      const ModoLeitura modo = pausa ? PAUSA_LONGA : COM_CARTUCHO;
-
       float temperatura, umidade;
-      bool leu = leSensor(temperatura, umidade, modo);
-
-      // Reconfigurar (bme.begin) espera a calibracao num laco sem limite de
-      // tempo: com o barramento corrompido pelo cartucho, nao sai nunca. Por
-      // isso so acontece na pausa longa, com ele desligado.
-      const bool reconfigurou = !leu && modo == PAUSA_LONGA
-                                && falhasSeguidas + 1 < FALHAS_MAX;
-      if (reconfigurou) iniciaSensor();
-
-      // Religa ja, sem esperar a proxima volta do loop.
-      controleSilenciaSaida(false);
-      controleTick();
+      const bool leu = leSensor(temperatura, umidade);
 
       // Diferenca grande e plausivel: so vale se a proxima confirmar.
       bool aguardando = false;
@@ -1299,15 +1146,15 @@ void loop() {
         controleNovaLeitura(true, temperatura);
         if (telaLigada) pintaControle();
       } else if (++falhasSeguidas < FALHAS_MAX) {
-        // Falha isolada: quase sempre o cartucho corrompendo a transferencia;
-        // o sensor nao perdeu nada e a proxima leitura vem boa. Tenta de novo
-        // em 2 s; depois de FALHA_PAUSA falhas, com o cartucho desligado.
-        // Ate la o controle segue com a ultima potencia.
-        const char *proxima = controlePotencia() >= 100 || falhasSeguidas >= FALHA_PAUSA
-                              ? "cartucho desligado" : "cartucho ligado";
-        diario.printf("Sensor           : leitura falhou (%u de %u)%s, a proxima com %s\n",
+        // Falha isolada: ruido na transferencia; o sensor nao perdeu nada e
+        // a proxima leitura vem boa. A partir da segunda seguida, reconfigura:
+        // o sensor pode ter reiniciado num tranco de tensao e perdido o modo
+        // forcado. Ate la o controle segue com a ultima potencia.
+        const bool reconfigura = falhasSeguidas >= 2;
+        if (reconfigura) iniciaSensor();
+        diario.printf("Sensor           : leitura falhou (%u de %u)%s\n",
                       falhasSeguidas, FALHAS_MAX,
-                      reconfigurou ? ", reconfigurado" : "", proxima);
+                      reconfigura ? ", reconfigurado" : "");
       } else {
         // Falhou FALHAS_MAX vezes seguidas: cabo solto, provavelmente. Volta
         // a procurar em vez de repetir o ultimo valor, que pareceria um
