@@ -31,7 +31,7 @@ const char *servidorEndereco();
 float umidadeAbsolutaAtual();
 
 // Quantas leituras o filtro de plausibilidade jogou fora desde o boot.
-// Implementada no main.cpp. Numero subindo = ruido no barramento I2C,
+// Implementada no main.cpp. Numero subindo = ruido no barramento do sensor,
 // tipicamente o cartucho chaveando perto do cabo do sensor.
 uint32_t leiturasDescartadas();
 

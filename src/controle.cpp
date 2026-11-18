@@ -10,8 +10,13 @@
 // o GPIO2: aquele e pino de strapping, e com o MOSFET pendurado podia
 // atrapalhar o boot. O 25 e um pino comum, em nivel baixo no boot.
 static const uint8_t PIN_AQUECEDOR = 25;
-static const uint8_t PIN_FAN1 = 32;       // ventilador do hotend
-static const uint8_t PIN_FAN2 = 33;       // ventilador de circulacao
+// Ventilador preso no aquecedor PTC (segue o aquecedor) e os dois de
+// circulacao. Os dois de circulacao saem do mesmo canal de PWM, ligado nos
+// dois pinos: giram sempre juntos, na mesma velocidade. Cada pino tem o seu
+// transistor, borne e fio de comando.
+static const uint8_t PIN_FAN_AQUEC = 16;  // ventilador do aquecedor
+static const uint8_t PIN_CIRC_A = 32;     // circulacao
+static const uint8_t PIN_CIRC_B = 33;     // circulacao
 
 // 25 kHz fica acima do que o ouvido capta. Abaixo disso o ventilador chia,
 // porque a bobina vibra no ritmo do chaveamento.
@@ -166,7 +171,7 @@ static void falha(const char *porque) {
 // ---------------------------------------------------------------------------
 // Ventiladores
 //
-// Ventilador do hotend: 100% enquanto o PID pede potencia, segue 100% por
+// Ventilador do aquecedor: 100% enquanto o PID pede potencia, segue 100% por
 // pos1 depois que ela vai a zero, e so entao desce em rampa ate parar. O bloco continua quente
 // quando o aquecedor corta - cortar o ventilador junto deixaria todo esse
 // calor parado em cima do metal.
@@ -218,8 +223,9 @@ void controleInicia() {
 
   ledcSetup(CANAL_FAN1, PWM_FREQ, PWM_BITS);
   ledcSetup(CANAL_FAN2, PWM_FREQ, PWM_BITS);
-  ledcAttachPin(PIN_FAN1, CANAL_FAN1);
-  ledcAttachPin(PIN_FAN2, CANAL_FAN2);
+  ledcAttachPin(PIN_FAN_AQUEC, CANAL_FAN1);
+  ledcAttachPin(PIN_CIRC_A, CANAL_FAN2);
+  ledcAttachPin(PIN_CIRC_B, CANAL_FAN2);
   aplica(0, 0);
 
   nvs.begin("estufa", false);
@@ -249,8 +255,8 @@ void controleInicia() {
   diario.printf("PID              : kp %.2f  ki %.3f  kd %.1f\n", cfg.kp, cfg.ki, cfg.kd);
   diario.printf("Protecao         : corta se %u min no maximo sem subir 1 C\n",
                 cfg.semSubirMin);
-  diario.printf("Ventiladores     : P%d e P%d, PWM %lu Hz, piso %u%%\n",
-                PIN_FAN1, PIN_FAN2, (unsigned long)PWM_FREQ, cfg.pwmMin);
+  diario.printf("Ventiladores     : aquecedor P%d, circulacao P%d+P%d, PWM %lu Hz, piso %u%%\n",
+                PIN_FAN_AQUEC, PIN_CIRC_A, PIN_CIRC_B, (unsigned long)PWM_FREQ, cfg.pwmMin);
   diario.printf("Circulacao       : DESLIGADA no boot, max %u%%, min %u%%\n",
                 cfg.fan2Max, cfg.fan2Min);
 

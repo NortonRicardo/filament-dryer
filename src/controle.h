@@ -53,7 +53,7 @@ struct Config {
   uint8_t  fan2Max;     // % da circulacao com o aquecedor ligado
   uint8_t  fan2Min;     // % da circulacao com o aquecedor desligado
   uint8_t  pwmMin;      // % abaixo do qual o ventilador nao parte
-  uint16_t pos1;        // s que o ventilador do hotend fica a 100% apos desligar
+  uint16_t pos1;        // s que o ventilador do aquecedor fica a 100% apos desligar
   uint16_t rampa1;      // s que ele leva descendo de 100% ate parar
   uint16_t semSubirMin; // min ligado sem a temperatura subir 1 C; 5 a 60
 };
@@ -67,7 +67,7 @@ void controleNovaLeitura(bool sensorOk, float temperatura);
 void controleTick();
 
 // Desliga o cartucho por um instante para a leitura do sensor acontecer com
-// o barramento quieto. O I2C deste projeto nao sobrevive aos 4,2 A passando;
+// o barramento quieto. O barramento do sensor nao sobrevivia aos 4,2 A passando;
 // como o bloco aquecedor tem inercia de minutos e a pausa e de dezenas de
 // milissegundos, o custo termico e nulo.
 //
