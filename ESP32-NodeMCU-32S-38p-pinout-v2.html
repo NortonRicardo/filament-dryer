@@ -2035,29 +2035,36 @@ void loop() {
   <div class="note ok" style="margin-top:22px"><b>Na V2</b><p>São <b>três coolers</b>: o que vem preso no aquecedor PTC, no <code>P16</code>, que segue o aquecedor; e os dois de circulação, no <code>P32</code> e no <code>P33</code>, que giram juntos, com o mesmo PWM e o mesmo controle do painel. O cooler do hotend sai. Os transistores ficam no módulo de potência, junto da fonte, e os sinais chegam pelo cabo de rede (Etapa 6). A ligação de cada canal, com diodo e resistor de base de 150 Ω (ou MOSFET com 100 Ω e 10 kΩ), continua a mesma desta etapa.</p></div>
 
   <section>
-    <h2>Dois ventiladores iguais, dois canais separados</h2>
-    <p>Os dois são de 12 V e 120 mm, os dois são chaveados, e cada um tem a sua
-    própria velocidade. O cooler Intel de três fios saiu do projeto.</p>
+    <h2>Três ventiladores, dois canais de PWM</h2>
+    <p>Todos de 12 V e chaveados no lado baixo, cada um com o seu transistor,
+    o seu diodo e o seu fio de comando. O do aquecedor tem canal próprio; os
+    dois de circulação dividem o mesmo PWM e giram sempre juntos.</p>
     <div class="tbl"><table>
       <thead><tr><th>Ventilador</th><th>Onde fica</th><th>Trabalho</th><th>Faixa de uso</th></tr></thead>
       <tbody>
         <tr>
-          <td class="pin">Cooler 1</td>
-          <td><small>Perto do hotend, embaixo</small></td>
-          <td><small>Tira o calor do bloco e espalha pelo gabinete</small></td>
-          <td><small>Liga e desliga acompanhando o aquecedor</small></td>
+          <td class="pin">Fan do aquecedor · P16</td>
+          <td><small>Preso no aquecedor PTC (vem com ele)</small></td>
+          <td><small>Sopra o ar através das aletas do PTC</small></td>
+          <td><small>Automático: 100% enquanto aquece, segue girando um tempo depois e desce em rampa</small></td>
         </tr>
         <tr>
-          <td class="pin">Cooler 2</td>
-          <td><small>Mais acima, na lateral</small></td>
-          <td><small>Sopra para cima e põe o ar para circular</small></td>
-          <td><small><b>70–80%</b> em regime normal, <b>100%</b> quando o hotend vai a plena carga</small></td>
+          <td class="pin">Fan 1 · P32</td>
+          <td><small>Dentro da geladeira</small></td>
+          <td><small>Circulação: espalha o ar quente pela caixa</small></td>
+          <td><small rowspan="2">Liga a <b>100%</b>; ligar o aquecedor também põe a 100%. A velocidade se ajusta no painel</small></td>
+        </tr>
+        <tr>
+          <td class="pin">Fan 2 · P33</td>
+          <td><small>Dentro da geladeira</small></td>
+          <td><small>Circulação, junto com o Fan 1</small></td>
+          <td><small>Mesmo PWM do Fan 1: sempre na mesma velocidade</small></td>
         </tr>
       </tbody>
     </table></div>
     <div class="notes">
       <div class="note ok"><b>Nenhum ventilador em 3,3 V — nunca houve</b><p>Na versão anterior desta página havia um <code>10 kΩ → 3V3</code>, e dá para ler como se um ventilador estivesse sendo alimentado ali. Não estava: aquilo era um <i>pull-up</i> no <b>fio de rotação</b> do cooler Intel, um fio de sinal que só informava se a hélice estava girando. Corrente de ventilador nunca passou por ali. Como o Intel saiu do projeto, o fio e o resistor saíram junto.</p></div>
-      <div class="note"><b>Duas velocidades exigem duas chaves</b><p>Um transistor é um interruptor: ele tem um estado só. Para o cooler 1 estar em 40% enquanto o cooler 2 está em 80%, são necessários <b>dois canais</b> — cada um com sua chave, seu resistor e seu diodo. Ligar os dois ventiladores na mesma chave faria os dois andarem sempre juntos, na mesma velocidade.</p></div>
+      <div class="note"><b>Três chaves, dois PWMs</b><p>Cada ventilador tem o seu transistor, porque um transistor sozinho não aguentaria a corrente de dois. Mas os dois de circulação recebem <b>o mesmo PWM</b>: o firmware liga o mesmo canal do gerador de PWM nos pinos <code>P32</code> e <code>P33</code>. Velocidade diferente só existe entre o fan do aquecedor e a circulação.</p></div>
     </div>
   </section>
 
@@ -2093,15 +2100,15 @@ void loop() {
       <div class="note warn"><b>Girar mais devagar ajuda, mas não resolve tudo</b><p>Essa foi a sua ideia, e ela está meio certa. O PWM corta o <b>aquecimento médio</b>: a 60% o transistor dissipa 60% do calor. Mas ele <b>não reduz o pico de corrente</b> — durante cada pulso ligado passa a corrente inteira do ventilador, e é esse pico que decide se o transistor satura ou não.</p><p>Traduzindo: a 500 mA, limitar o PWM a 60% derruba o calor de 600 mW para 360 mW e salva o transistor do forno. Mas ele continua sem saturar, ainda esquenta, e o ventilador recebe uns 10,8 V em vez de 12 V. Funciona; não é bonito.</p></div>
       <div class="note warn"><b>Meça antes de ligar, não depois</b><p>Ligue um ventilador direto nos 12 V com o multímetro em série, escala de corrente contínua. O número que aparecer decide tudo. Dois minutos agora valem mais do que qualquer tabela minha.</p></div>
       <div class="note"><b>Se o seu for de alta vazão e passar de 350 mA</b><p>Não precisa desistir: limite o PWM no firmware a 60% e acompanhe a temperatura do transistor na primeira hora. Se der para encostar o dedo e segurar, está dentro. Se queimar o dedo, a saída é um MOSFET de nível lógico — são baratos e qualquer <code>IRLZ44N</code> ou <code>AO3400</code> serve. O IRLB8721 do aquecedor continua intocado.</p></div>
-      <div class="note"><b>São dois transistores</b><p>Um por canal. Dois 2N2222, dois resistores de base e dois diodos — os canais são independentes e nenhuma peça é compartilhada.</p></div>
+      <div class="note"><b>São três transistores</b><p>Um por ventilador: três 2N2222 (ou MOSFETs), três resistores de base e três diodos. Nenhuma peça é compartilhada.</p></div>
     </div>
   </section>
 
   <section>
     <h2>Ligações</h2>
-    <p>Os dois canais são idênticos. A chave nunca fica no lado positivo: os
-    12 V vão direto da fonte ao ventilador, e a chave abre e fecha o caminho
-    de volta para o terra.</p>
+    <p>Os três canais são idênticos; só muda o pino. A chave nunca fica no lado
+    positivo: os 12 V vão direto da fonte ao ventilador, e a chave abre e fecha
+    o caminho de volta para o terra. O símbolo de terra (⏚) é o GND comum.</p>
     <div class="legend">
       <span><i style="background:var(--pwr)"></i>+12 V</span>
       <span><i style="background:var(--sig)"></i>Terra comum</span>
@@ -2109,91 +2116,101 @@ void loop() {
       <span><i style="background:var(--v33)"></i>Diodo de roda livre</span>
     </div>
     <div class="fig">
-      <svg viewBox="0 0 940 640" role="img" aria-label="Esquema: fonte de 12 V, dois ventiladores de 120 mm, dois transistores 2N2222 e dois diodos de roda livre">
-        <line x1="200" y1="50" x2="925" y2="50" stroke="var(--pwr)" stroke-width="2.5"/>
-        <line x1="115" y1="590" x2="900" y2="590" stroke="var(--sig)" stroke-width="2.5"/>
+      <svg viewBox="0 0 940 700" role="img" aria-label="Esquema: fonte de 12 V, três ventiladores, três transistores e três diodos de roda livre">
+        <rect x="40" y="20" width="150" height="70" rx="6" class="box"/>
+        <text x="115" y="52" text-anchor="middle" class="t-b">Fonte 12 V</text>
+        <text x="115" y="72" text-anchor="middle" class="t-s t-mut">borne ③ · coolers</text>
+        <polyline points="190,50 920,50 920,580" fill="none" stroke="var(--pwr)" stroke-width="2.5"/>
         <text x="206" y="40" class="t-b" fill="var(--pwr)">+12 V</text>
-        <text x="121" y="610" class="t-b" fill="var(--sig)">GND comum</text>
-
-        <rect x="40" y="20" width="150" height="90" rx="6" class="box"/>
-        <text x="115" y="58" text-anchor="middle" class="t-b">Fonte 12 V</text>
-        <text x="115" y="78" text-anchor="middle" class="t-s t-mut">5 A · externa</text>
-        <line x1="115" y1="110" x2="115" y2="590" stroke="var(--sig)" stroke-width="2.5"/>
-
-        <rect x="40" y="230" width="160" height="200" rx="6" class="box"/>
-        <text x="120" y="272" text-anchor="middle" class="t-b">NodeMCU</text>
-        <text x="120" y="292" text-anchor="middle" class="t-s t-mut">ESP-32S</text>
-        <text x="190" y="315" text-anchor="end" class="t-s t-mut">P32</text>
-        <text x="190" y="378" text-anchor="end" class="t-s t-mut">P33</text>
-        <text x="190" y="418" text-anchor="end" class="t-s t-mut">GND</text>
-        <polyline points="200,410 250,410 250,590" fill="none" stroke="var(--sig)" stroke-width="2.5"/>
-
-        <polyline points="200,310 270,310 270,160 300,160" fill="none" stroke="var(--gpio)" stroke-width="2.5"/>
-        <rect x="300" y="152" width="60" height="18" rx="3" fill="var(--board)" stroke="var(--gpio)" stroke-width="1.5"/>
-        <text x="330" y="145" text-anchor="middle" class="t-s" fill="var(--gpio)">150 Ω</text>
-        <line x1="360" y1="160" x2="420" y2="160" stroke="var(--gpio)" stroke-width="2.5"/>
-        <rect x="420" y="120" width="120" height="80" rx="6" class="box"/>
-        <text x="480" y="155" text-anchor="middle" class="t-b">2N2222</text>
-        <text x="480" y="174" text-anchor="middle" class="t-s t-mut">canal 1</text>
-        <text x="414" y="146" text-anchor="end" class="t-s t-mut">B</text>
-        <text x="548" y="146" class="t-s t-mut">C</text>
-        <text x="505" y="218" class="t-s t-mut">E</text>
-        <line x1="540" y1="160" x2="700" y2="160" stroke="var(--sig)" stroke-width="2.5"/>
-        <polyline points="500,200 500,260 670,260 670,590" fill="none" stroke="var(--sig)" stroke-width="2.5"/>
-        <rect x="700" y="100" width="180" height="120" rx="6" class="box"/>
-        <text x="790" y="142" text-anchor="middle" class="t-b">Cooler 1</text>
-        <text x="790" y="162" text-anchor="middle" class="t-s t-mut">120 mm · 12 V</text>
-        <text x="790" y="182" text-anchor="middle" class="t-s t-mut">junto ao hotend</text>
-        <text x="790" y="204" text-anchor="middle" class="t-s" fill="var(--gpio)">PWM</text>
-        <polyline points="880,130 900,130 900,50" fill="none" stroke="var(--pwr)" stroke-width="2.5"/>
-        <line x1="620" y1="50" x2="620" y2="160" stroke="var(--v33)" stroke-width="2.5"/>
-        <polygon points="610,120 630,120 620,98" fill="var(--v33)"/>
-        <line x1="608" y1="96" x2="632" y2="96" stroke="var(--v33)" stroke-width="3"/>
-
-        <polyline points="200,375 265,375 265,400 300,400" fill="none" stroke="var(--gpio)" stroke-width="2.5"/>
-        <rect x="300" y="392" width="60" height="18" rx="3" fill="var(--board)" stroke="var(--gpio)" stroke-width="1.5"/>
-        <text x="330" y="385" text-anchor="middle" class="t-s" fill="var(--gpio)">150 Ω</text>
-        <line x1="360" y1="400" x2="420" y2="400" stroke="var(--gpio)" stroke-width="2.5"/>
-        <rect x="420" y="360" width="120" height="80" rx="6" class="box"/>
-        <text x="480" y="395" text-anchor="middle" class="t-b">2N2222</text>
-        <text x="480" y="414" text-anchor="middle" class="t-s t-mut">canal 2</text>
-        <text x="414" y="386" text-anchor="end" class="t-s t-mut">B</text>
-        <text x="548" y="386" class="t-s t-mut">C</text>
-        <text x="505" y="458" class="t-s t-mut">E</text>
-        <line x1="540" y1="400" x2="700" y2="400" stroke="var(--sig)" stroke-width="2.5"/>
-        <line x1="480" y1="440" x2="480" y2="590" stroke="var(--sig)" stroke-width="2.5"/>
-        <rect x="700" y="340" width="180" height="120" rx="6" class="box"/>
-        <text x="790" y="382" text-anchor="middle" class="t-b">Cooler 2</text>
-        <text x="790" y="402" text-anchor="middle" class="t-s t-mut">120 mm · 12 V</text>
-        <text x="790" y="422" text-anchor="middle" class="t-s t-mut">lateral, soprando para cima</text>
-        <text x="790" y="444" text-anchor="middle" class="t-s" fill="var(--gpio)">PWM</text>
-        <polyline points="880,370 920,370 920,50" fill="none" stroke="var(--pwr)" stroke-width="2.5"/>
-        <line x1="580" y1="50" x2="580" y2="400" stroke="var(--v33)" stroke-width="2.5"/>
-        <polygon points="570,340 590,340 580,318" fill="var(--v33)"/>
-        <line x1="568" y1="316" x2="592" y2="316" stroke="var(--v33)" stroke-width="3"/>
-        <text x="562" y="340" text-anchor="end" class="t-s" fill="var(--v33)">1N4007</text>
-        <text x="562" y="358" text-anchor="end" class="t-s t-mut">listra para cima</text>
-
-        <circle cx="900" cy="50" r="4.5" fill="var(--pwr)"/>
-        <circle cx="920" cy="50" r="4.5" fill="var(--pwr)"/>
-        <circle cx="620" cy="50" r="4.5" fill="var(--pwr)"/>
-        <circle cx="580" cy="50" r="4.5" fill="var(--pwr)"/>
-        <circle cx="620" cy="160" r="4.5" fill="var(--sig)"/>
-        <circle cx="580" cy="400" r="4.5" fill="var(--sig)"/>
-        <circle cx="115" cy="590" r="4.5" fill="var(--sig)"/>
-        <circle cx="250" cy="590" r="4.5" fill="var(--sig)"/>
-        <circle cx="480" cy="590" r="4.5" fill="var(--sig)"/>
-        <circle cx="670" cy="590" r="4.5" fill="var(--sig)"/>
+        <line x1="115" y1="90" x2="115" y2="104" stroke="var(--sig)" stroke-width="2.5"/><line x1="104" y1="104" x2="126" y2="104" stroke="var(--sig)" stroke-width="2.5"/><line x1="108" y1="109" x2="122" y2="109" stroke="var(--sig)" stroke-width="2.5"/><line x1="112" y1="114" x2="118" y2="114" stroke="var(--sig)" stroke-width="2.5"/>
+        <rect x="40" y="130" width="160" height="530" rx="6" class="box"/>
+        <text x="120" y="380" text-anchor="middle" class="t-b">NodeMCU</text>
+        <text x="120" y="400" text-anchor="middle" class="t-s t-mut">ESP-32S</text>
+        <text x="190" y="650" text-anchor="end" class="t-s t-mut">GND</text>
+        <line x1="200" y1="646" x2="200" y2="660" stroke="var(--sig)" stroke-width="2.5"/><line x1="189" y1="660" x2="211" y2="660" stroke="var(--sig)" stroke-width="2.5"/><line x1="193" y1="665" x2="207" y2="665" stroke="var(--sig)" stroke-width="2.5"/><line x1="197" y1="670" x2="203" y2="670" stroke="var(--sig)" stroke-width="2.5"/>
+        <text x="190" y="175" text-anchor="end" class="t-s t-mut">P16</text>
+        <line x1="200" y1="170" x2="300" y2="170" stroke="var(--gpio)" stroke-width="2.5"/>
+        <rect x="300" y="161" width="60" height="18" rx="3" fill="var(--board)" stroke="var(--gpio)" stroke-width="1.5"/>
+        <text x="330" y="154" text-anchor="middle" class="t-s" fill="var(--gpio)">150 Ω</text>
+        <line x1="360" y1="170" x2="420" y2="170" stroke="var(--gpio)" stroke-width="2.5"/>
+        <rect x="420" y="130" width="120" height="80" rx="6" class="box"/>
+        <text x="480" y="165" text-anchor="middle" class="t-b">2N2222</text>
+        <text x="480" y="184" text-anchor="middle" class="t-s t-mut">ou MOSFET</text>
+        <text x="414" y="156" text-anchor="end" class="t-s t-mut">B</text>
+        <text x="548" y="156" class="t-s t-mut">C</text>
+        <text x="490" y="226" text-anchor="end" class="t-s t-mut">E</text>
+        <line x1="500" y1="210" x2="500" y2="224" stroke="var(--sig)" stroke-width="2.5"/><line x1="489" y1="224" x2="511" y2="224" stroke="var(--sig)" stroke-width="2.5"/><line x1="493" y1="229" x2="507" y2="229" stroke="var(--sig)" stroke-width="2.5"/><line x1="497" y1="234" x2="503" y2="234" stroke="var(--sig)" stroke-width="2.5"/>
+        <line x1="540" y1="170" x2="700" y2="170" stroke="var(--sig)" stroke-width="2.5"/>
+        <rect x="700" y="125" width="170" height="85" rx="6" class="box"/>
+        <text x="785" y="155" text-anchor="middle" class="t-b">Fan do aquecedor</text>
+        <text x="785" y="175" text-anchor="middle" class="t-s t-mut">preso no PTC, sopra por ele</text>
+        <text x="785" y="195" text-anchor="middle" class="t-s" fill="var(--gpio)">canal 1 · segue o aquecedor</text>
+        <line x1="870" y1="140" x2="920" y2="140" stroke="var(--pwr)" stroke-width="2.5"/>
+        <circle cx="920" cy="140" r="4.5" fill="var(--pwr)"/>
+        <polyline points="895,140 895,225 680,225 680,170" fill="none" stroke="var(--v33)" stroke-width="2.5"/>
+        <polygon points="885,190 905,190 895,168" fill="var(--v33)"/>
+        <line x1="883" y1="166" x2="907" y2="166" stroke="var(--v33)" stroke-width="3"/>
+        <circle cx="895" cy="140" r="4.5" fill="var(--pwr)"/>
+        <circle cx="680" cy="170" r="4.5" fill="var(--sig)"/>
+        <text x="190" y="395" text-anchor="end" class="t-s t-mut">P32</text>
+        <line x1="200" y1="390" x2="300" y2="390" stroke="var(--gpio)" stroke-width="2.5"/>
+        <rect x="300" y="381" width="60" height="18" rx="3" fill="var(--board)" stroke="var(--gpio)" stroke-width="1.5"/>
+        <text x="330" y="374" text-anchor="middle" class="t-s" fill="var(--gpio)">150 Ω</text>
+        <line x1="360" y1="390" x2="420" y2="390" stroke="var(--gpio)" stroke-width="2.5"/>
+        <rect x="420" y="350" width="120" height="80" rx="6" class="box"/>
+        <text x="480" y="385" text-anchor="middle" class="t-b">2N2222</text>
+        <text x="480" y="404" text-anchor="middle" class="t-s t-mut">ou MOSFET</text>
+        <text x="414" y="376" text-anchor="end" class="t-s t-mut">B</text>
+        <text x="548" y="376" class="t-s t-mut">C</text>
+        <text x="490" y="446" text-anchor="end" class="t-s t-mut">E</text>
+        <line x1="500" y1="430" x2="500" y2="444" stroke="var(--sig)" stroke-width="2.5"/><line x1="489" y1="444" x2="511" y2="444" stroke="var(--sig)" stroke-width="2.5"/><line x1="493" y1="449" x2="507" y2="449" stroke="var(--sig)" stroke-width="2.5"/><line x1="497" y1="454" x2="503" y2="454" stroke="var(--sig)" stroke-width="2.5"/>
+        <line x1="540" y1="390" x2="700" y2="390" stroke="var(--sig)" stroke-width="2.5"/>
+        <rect x="700" y="345" width="170" height="85" rx="6" class="box"/>
+        <text x="785" y="375" text-anchor="middle" class="t-b">Fan 1 · circulação</text>
+        <text x="785" y="395" text-anchor="middle" class="t-s t-mut">120 mm · 12 V</text>
+        <text x="785" y="415" text-anchor="middle" class="t-s" fill="var(--gpio)">canal 2 · circulação</text>
+        <line x1="870" y1="360" x2="920" y2="360" stroke="var(--pwr)" stroke-width="2.5"/>
+        <circle cx="920" cy="360" r="4.5" fill="var(--pwr)"/>
+        <polyline points="895,360 895,445 680,445 680,390" fill="none" stroke="var(--v33)" stroke-width="2.5"/>
+        <polygon points="885,410 905,410 895,388" fill="var(--v33)"/>
+        <line x1="883" y1="386" x2="907" y2="386" stroke="var(--v33)" stroke-width="3"/>
+        <circle cx="895" cy="360" r="4.5" fill="var(--pwr)"/>
+        <circle cx="680" cy="390" r="4.5" fill="var(--sig)"/>
+        <text x="190" y="615" text-anchor="end" class="t-s t-mut">P33</text>
+        <line x1="200" y1="610" x2="300" y2="610" stroke="var(--gpio)" stroke-width="2.5"/>
+        <rect x="300" y="601" width="60" height="18" rx="3" fill="var(--board)" stroke="var(--gpio)" stroke-width="1.5"/>
+        <text x="330" y="594" text-anchor="middle" class="t-s" fill="var(--gpio)">150 Ω</text>
+        <line x1="360" y1="610" x2="420" y2="610" stroke="var(--gpio)" stroke-width="2.5"/>
+        <rect x="420" y="570" width="120" height="80" rx="6" class="box"/>
+        <text x="480" y="605" text-anchor="middle" class="t-b">2N2222</text>
+        <text x="480" y="624" text-anchor="middle" class="t-s t-mut">ou MOSFET</text>
+        <text x="414" y="596" text-anchor="end" class="t-s t-mut">B</text>
+        <text x="548" y="596" class="t-s t-mut">C</text>
+        <text x="490" y="666" text-anchor="end" class="t-s t-mut">E</text>
+        <line x1="500" y1="650" x2="500" y2="664" stroke="var(--sig)" stroke-width="2.5"/><line x1="489" y1="664" x2="511" y2="664" stroke="var(--sig)" stroke-width="2.5"/><line x1="493" y1="669" x2="507" y2="669" stroke="var(--sig)" stroke-width="2.5"/><line x1="497" y1="674" x2="503" y2="674" stroke="var(--sig)" stroke-width="2.5"/>
+        <line x1="540" y1="610" x2="700" y2="610" stroke="var(--sig)" stroke-width="2.5"/>
+        <rect x="700" y="565" width="170" height="85" rx="6" class="box"/>
+        <text x="785" y="595" text-anchor="middle" class="t-b">Fan 2 · circulação</text>
+        <text x="785" y="615" text-anchor="middle" class="t-s t-mut">120 mm · 12 V</text>
+        <text x="785" y="635" text-anchor="middle" class="t-s" fill="var(--gpio)">canal 2 · junto do Fan 1</text>
+        <line x1="870" y1="580" x2="920" y2="580" stroke="var(--pwr)" stroke-width="2.5"/>
+        <circle cx="920" cy="580" r="4.5" fill="var(--pwr)"/>
+        <polyline points="895,580 895,665 680,665 680,610" fill="none" stroke="var(--v33)" stroke-width="2.5"/>
+        <polygon points="885,630 905,630 895,608" fill="var(--v33)"/>
+        <line x1="883" y1="606" x2="907" y2="606" stroke="var(--v33)" stroke-width="3"/>
+        <circle cx="895" cy="580" r="4.5" fill="var(--pwr)"/>
+        <circle cx="680" cy="610" r="4.5" fill="var(--sig)"/>
+        <text x="680" y="246" class="t-s" fill="var(--v33)">1N4007 · listra para cima, no +12 V</text>
       </svg>
     </div>
     <div class="tbl"><table>
       <thead><tr><th>De</th><th>Para</th><th>Observação</th></tr></thead>
       <tbody>
-        <tr class="grp"><td colspan="3">Cada ventilador · os dois são iguais</td></tr>
+        <tr class="grp"><td colspan="3">Cada ventilador · os três são iguais</td></tr>
         <tr><td class="pin">vermelho</td><td class="pin">+12 V</td><td><small>Direto da fonte. A chave nunca entra no lado positivo.</small></td></tr>
         <tr><td class="pin">preto</td><td class="pin">coletor (C)</td><td><small>É o lado que o transistor liga e desliga do terra.</small></td></tr>
         <tr class="grp"><td colspan="3">Cada 2N2222 · face chata para você, pernas para baixo: E · B · C</td></tr>
-        <tr><td class="pin">base (B)</td><td class="pin">P32 ou P33 por 150 Ω</td><td><small><b>Nunca direto no pino.</b> Sem o resistor, a junção base-emissor é um curto e leva o GPIO junto.</small></td></tr>
+        <tr><td class="pin">base (B)</td><td class="pin">P16, P32 ou P33 por 150 Ω</td><td><small><b>Nunca direto no pino.</b> Sem o resistor, a junção base-emissor é um curto e leva o GPIO junto.</small></td></tr>
         <tr><td class="pin">base (B)</td><td class="pin">GND por 10 kΩ</td><td><small>Segura a base em zero enquanto o ESP32 inicia e os pinos ficam soltos.</small></td></tr>
         <tr><td class="pin">coletor (C)</td><td class="pin">preto do ventilador</td><td><small>O ânodo do diodo também chega aqui.</small></td></tr>
         <tr><td class="pin">emissor (E)</td><td class="pin">GND</td><td><small>O mesmo terra da fonte e do ESP32.</small></td></tr>
@@ -2334,20 +2351,21 @@ void loop() {
 
   <section>
     <h2>A estratégia de controle</h2>
-    <p>Como está no firmware. Ao ligar o ESP32, os dois ventiladores e o
+    <p>Como está no firmware. Ao ligar o ESP32, os três ventiladores e o
     aquecedor começam <b>desligados</b>, e só a página liga.</p>
     <div class="tbl"><table>
-      <thead><tr><th>Situação</th><th>Cooler 1 · hotend</th><th>Cooler 2 · circulação</th></tr></thead>
+      <thead><tr><th>Situação</th><th>Fan do aquecedor · P16</th><th>Fan 1 e Fan 2 · P32 e P33</th></tr></thead>
       <tbody>
         <tr><td><small>Boot, nada ligado</small></td><td class="q">0%</td><td class="q">0%</td></tr>
-        <tr><td><small>Cooler 2 ligado, aquecedor desligado</small></td><td class="q">0%</td><td class="q">mínima · padrão 70%</td></tr>
-        <tr><td><small>Aquecendo</small></td><td class="q">100%</td><td class="q">máxima · padrão 100%</td></tr>
-        <tr><td><small>Acabou de desligar o aquecimento</small></td><td class="q">100% por 3 min, depois rampa de 2 min até parar</td><td class="q">mínima</td></tr>
+        <tr><td><small>Circulação ligada pelo painel</small></td><td class="q">0%</td><td class="q">100% na hora</td></tr>
+        <tr><td><small>Aquecedor ligado pelo painel</small></td><td class="q">100% enquanto aquece</td><td class="q">liga, se estiver desligada, e vai a 100%</td></tr>
+        <tr><td><small>Velocidade baixada no painel</small></td><td class="q">—</td><td class="q">a que foi escolhida (mínimo: o piso de PWM)</td></tr>
+        <tr><td><small>Acabou de desligar o aquecimento</small></td><td class="q">100% por um tempo, depois rampa até parar</td><td class="q">continua como estava</td></tr>
       </tbody>
     </table></div>
     <div class="notes">
-      <div class="note warn"><b>O cooler 1 desliga depois do aquecedor, não junto</b><p>O bloco do hotend continua quente depois que o cartucho desliga. Cortar o ventilador no mesmo instante deixa todo esse calor parado em cima do bloco. Por isso ele segue a 100% e depois desce em rampa. Os dois tempos se ajustam no modal do FAN 01, em minutos.</p></div>
-      <div class="note ok"><b>Já está no firmware</b><p>O cooler 1 é automático: segue o aquecedor e não tem botão próprio. O cooler 2 tem liga/desliga, máxima e mínima no modal do FAN 02, e nasce desligado a cada boot, como a autorização do aquecedor. No display e na página, cada cartão mostra um selo: <b>DESLIGADO</b> em vermelho, <b>LIGADO</b> em verde. O aquecedor é controlado por PID: os ventiladores tratam como "aquecendo" qualquer potência acima de 0%.</p></div>
+      <div class="note warn"><b>O fan do aquecedor desliga depois dele, não junto</b><p>O PTC continua quente logo depois de cortar. Parar o ventilador no mesmo instante deixa esse calor parado nas aletas. Por isso ele segue a 100% e depois desce em rampa. Os dois tempos se ajustam no modal do fan do aquecedor, em minutos.</p></div>
+      <div class="note ok"><b>Já está no firmware</b><p>O fan do aquecedor é automático: segue o aquecedor e não tem botão próprio. A circulação tem liga/desliga e velocidade no modal dos Fans 1 e 2, e nasce desligada a cada boot, como o aquecedor. Na tela e no painel, cada cartão mostra a hélice (verde e girando quando ligado, mais rápido quanto maior a velocidade) e o estado numa pílula: <b>ATIVO</b> em verde, <b>INATIVO</b> em vermelho.</p></div>
     </div>
   </section>
 
@@ -2368,11 +2386,12 @@ void loop() {
     <div class="tbl"><table>
       <thead><tr><th>Função</th><th>Pino</th><th>Por quê</th></tr></thead>
       <tbody>
-        <tr><td><small>PWM do cooler 1</small></td><td class="pin">P32</td><td><small>Livre, com saída, fora dos pinos de strapping e longe da flash.</small></td></tr>
-        <tr><td><small>PWM do cooler 2</small></td><td class="pin">P33</td><td><small>Mesma coisa. Os dois aceitam o LEDC, que é o gerador de PWM por hardware do ESP32.</small></td></tr>
+        <tr><td><small>Fan do aquecedor</small></td><td class="pin">P16</td><td><small>Livre e quieto no boot (o <code>P14</code> solta pulsos ao ligar e daria trancos no ventilador).</small></td></tr>
+        <tr><td><small>Fan 1 · circulação</small></td><td class="pin">P32</td><td><small>Livre, com saída, fora dos pinos de strapping e longe da flash.</small></td></tr>
+        <tr><td><small>Fan 2 · circulação</small></td><td class="pin">P33</td><td><small>Mesma coisa. Recebe o mesmo canal de PWM (LEDC) do <code>P32</code>.</small></td></tr>
       </tbody>
     </table></div>
-    <div class="note"><b>O mapa até aqui</b><p>Display em <code>P18</code>, <code>P23</code>, <code>P13</code>, <code>P27</code>, <code>P26</code>, e a luz de fundo no <code>P17</code>. Sensor em <code>P21</code> e <code>P22</code>. Ventiladores em <code>P32</code> e <code>P33</code>. Aquecedor no <code>P25</code>. Onze dos 32 GPIOs ocupados. O <code>P16</code> e o <code>P19</code> ficam reservados para o touch.</p></div>
+    <div class="note"><b>O mapa da V2</b><p>Display em <code>P18</code>, <code>P23</code>, <code>P13</code>, <code>P27</code>, <code>P26</code>, e a luz de fundo no <code>P17</code>. Sensor em SPI no <code>P22</code>, <code>P21</code>, <code>P19</code> e <code>P4</code>. Ventiladores no <code>P16</code>, <code>P32</code> e <code>P33</code>. Aquecedor no <code>P25</code>. Catorze GPIOs ocupados; o touch deixou de ter pinos reservados.</p></div>
   </section>
 
   <section>
