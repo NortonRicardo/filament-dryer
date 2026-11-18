@@ -19,12 +19,16 @@
 // Sem touch por enquanto: este modulo veio sem o chip XPT2046 (U2). O codigo
 // do touch esta guardado em extras/touch/.
 //
-// Ligacao do BME280 (I2C, pinos declarados abaixo):
-//   VIN -> 3V3        SCL -> GPIO22
-//   GND -> GND        SDA -> GPIO21
+// Ligacao do BME280 (SPI por software, pinos declarados abaixo). As pontes
+// CSB -> VCC e SDO -> GND do modulo precisam estar desfeitas:
+//   VCC -> 3V3        SCL (SCK) -> GPIO22
+//   GND -> GND        SDA (SDI) -> GPIO21
+//                     SDO       -> GPIO19
+//                     CSB (CS)  -> GPIO4   (10 k do CS ao 3V3, no modulo)
 //
-// O display e SPI e o sensor e I2C: barramentos diferentes, sem disputa de
-// pino e sem precisar coordenar acesso entre os dois.
+// O display usa o SPI de hardware (VSPI, 40 MHz) nos pinos 18 e 23; o sensor
+// usa outros pinos, por software e devagar: o cabo comprido ate ele nao
+// atrapalha a tela, e um nao precisa esperar o outro.
 // ---------------------------------------------------------------------------
 
 #include <Arduino.h>
@@ -32,19 +36,19 @@
 #include <time.h>
 #include <esp_task_wdt.h>
 #include <TFT_eSPI.h>
-#include <Wire.h>
+#include <WiFi.h>
 #include <Adafruit_BME280.h>
 #include <Preferences.h>
 
 #include "aviso.h"
 #include "controle.h"
 #include "diario.h"
+#include "fontes.h"
 #include "registro.h"
 #include "servidor.h"
 #include "tela.h"
 
 TFT_eSPI tft = TFT_eSPI();
-Adafruit_BME280 bme;
 
 // Qual driver de tela foi compilado. Se nao acender, troque em platformio.ini.
 #if defined(ST7796_DRIVER)
@@ -65,16 +69,35 @@ static const char *INVERSAO = "ligada (INVON)";
 static const char *INVERSAO = "nao definida (padrao do driver)";
 #endif
 
-static const uint8_t PIN_SDA = 21;
-static const uint8_t PIN_SCL = 22;
+// BME280 em SPI. Trocado do I2C em 15/11/2026: com o cartucho ligado o I2C
+// nao respondia de jeito nenhum. No SPI as linhas sao empurradas para 0 e
+// para 1 pelos pinos, em vez de puxadas para 1 por um resistor - aguentam
+// bem mais ruido.
+static const uint8_t PIN_SCK = 22;   // SCL do modulo
+static const uint8_t PIN_SDI = 21;   // SDA do modulo (dado ESP32 -> sensor)
+static const uint8_t PIN_SDO = 19;   // SDO do modulo (dado sensor -> ESP32)
+static const uint8_t PIN_CS  = 4;    // CSB do modulo
 
-// O modulo responde em 0x76 ou 0x77, conforme o resistor de endereco da placa.
-static const uint8_t ENDERECOS[] = {0x76, 0x77};
+// 100 kHz: o cabo tem ~1 m, e SPI foi feito para centimetros. Devagar, as
+// bordas tem tempo de assentar. Uma leitura leva ~2 ms assim - sobra.
+static const uint32_t SPI_SENSOR_HZ = 100000;
+
+// A biblioteca so deixa escolher a velocidade do SPI por software criando o
+// dispositivo na mao. O construtor padrao deixa spi_dev vazio; aqui ele
+// recebe um a SPI_SENSOR_HZ, e a biblioteca passa a falar SPI.
+class Bme280Spi : public Adafruit_BME280 {
+ public:
+  Bme280Spi() {
+    spi_dev = new Adafruit_SPIDevice(PIN_CS, PIN_SCK, PIN_SDO, PIN_SDI,
+                                     SPI_SENSOR_HZ);
+  }
+};
+static Bme280Spi bme;
 
 static const uint32_t INTERVALO_LEITURA = 2000;      // ms entre leituras
 
 // Com o cartucho a 100% e a caixa longe do teto, le uma vez por minuto: com
-// os 4,2 A passando o I2C nao responde, entao cada leitura desliga o
+// os 4,2 A passando o I2C nao respondia, entao cada leitura desliga o
 // cartucho por ~50 ms. A caixa sobe ~0,07 C/min, e a 100% o PID ja esta
 // no maximo - nao tem o que ajustar entre uma leitura e outra.
 // Abaixo de 100% a leitura cai no trecho desligado do PWM, sem desligar nada
@@ -82,12 +105,13 @@ static const uint32_t INTERVALO_LEITURA = 2000;      // ms entre leituras
 static const uint32_t INTERVALO_AQUECENDO = 60000;
 static const float    MARGEM_TETO = 10.0f;   // C abaixo do teto = "longe"
 
-// Com o cartucho ligado o I2C nao responde (testado em 09/11/2026, ja com o
-// VIN ressoldado, os pull-ups de 4,7 k e o cabo a 25 cm do cartucho). Entao:
+// Com o cartucho ligado o I2C nao respondia (testado em 09/11/2026, ja com o
+// VIN ressoldado, os pull-ups de 4,7 k e o cabo a 25 cm do cartucho). O SPI
+// deve aguentar mais, mas ate o log provar isso a leitura continua assim:
 //
 // 1. Abaixo de 100% de potencia, a leitura espera o trecho da janela de PWM
 //    em que o cartucho ja esta desligado: sem pausa nenhuma. LEITURA_MS e o
-//    quanto esse trecho precisa durar (medicao de ~10 ms + I2C a 20 kHz).
+//    quanto esse trecho precisa durar (medicao de ~10 ms + a transferencia).
 //    Se em ESPERA_TRECHO_MS ele nao vier, le assim mesmo.
 // 2. A 100% nao existe trecho desligado: a leitura desliga o cartucho por
 //    SILENCIO_MS antes e durante a leitura inteira, direto, sem tentar com
@@ -108,12 +132,6 @@ static const uint32_t SILENCIO_MS = 5;   // era 20; baixado em 10/11/2026 para t
 static const float   CONFIRMA_C = 0.3f;
 static const uint8_t CONFIRMA_MAX = 3;
 
-// I2C a 20 kHz em vez dos 100 kHz padrao. O sensor fica a ~1 m da placa, e
-// I2C foi feito para centimetros: cabo longo tem capacitancia, deixa as bordas
-// do sinal moles e pega o ruido do cartucho chaveando 4,2 A. Mais devagar, o
-// sinal tem tempo de assentar. Para uma leitura a cada 2 s sobra velocidade.
-static const uint32_t I2C_FREQ = 20000;
-
 // Leituras falhas seguidas antes de dar o sensor por perdido. Uma falha
 // isolada (ruido, ou o sensor reiniciado por um tranco de tensao) nao deve
 // derrubar a secagem; um sensor solto de verdade falha sempre e e pego em
@@ -125,7 +143,6 @@ static const uint32_t WATCHDOG_S = 30;
 static const uint32_t INTERVALO_RETENTATIVA = 5000;  // ms entre buscas do sensor
 
 static bool     sensorOk = false;
-static uint8_t  enderecoSensor = 0;
 static uint32_t ultimaLeitura = 0;
 static uint8_t  falhasSeguidas = 0;
 
@@ -152,32 +169,11 @@ static const char *nomeChip(uint8_t id) {
   }
 }
 
-// Lista quem responde no barramento. Se o sensor nao aparecer, isso separa
-// "ligacao errada" de "endereco diferente do esperado".
-static void varreI2C() {
-  diario.println("Varredura I2C:");
-  uint8_t achados = 0;
-
-  for (uint8_t endereco = 1; endereco < 127; endereco++) {
-    Wire.beginTransmission(endereco);
-    if (Wire.endTransmission() == 0) {
-      diario.printf("  0x%02X respondeu\n", endereco);
-      achados++;
-    }
-  }
-
-  if (achados == 0) {
-    diario.println("  ninguem respondeu - confira SDA, SCL, GND e os 3V3");
-  }
-}
-
+// bme.begin() le o chip ID (tem de ser 0x60) e reseta o sensor. Sem sensor,
+// a linha SDO fica solta e o chip ID nao bate: volta false sem travar.
 static bool iniciaSensor() {
-  for (uint8_t endereco : ENDERECOS) {
-    if (!bme.begin(endereco, &Wire)) continue;
-    Wire.setClock(I2C_FREQ);  // a biblioteca pode reabrir o barramento
-
-    enderecoSensor = endereco;
-
+  if (!bme.begin()) return false;
+  {
     // MODO FORCADO em vez de continuo: o sensor dorme entre as leituras e
     // nao se aquece. Em modo continuo o proprio chip esquenta e puxa a
     // temperatura para cima alguns decimos - erro que nao da para corrigir
@@ -187,9 +183,8 @@ static bool iniciaSensor() {
                     Adafruit_BME280::SAMPLING_NONE, // pressao: nao interessa
                     Adafruit_BME280::SAMPLING_X1,   // umidade
                     Adafruit_BME280::FILTER_OFF);
-    return true;
   }
-  return false;
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -367,54 +362,72 @@ static void textoCentrado(int16_t cx, int16_t y, const char *texto,
   textoEspacado(cx - largura / 2, y, texto, espaco, cor, fundo);
 }
 
-// Posicoes dentro do cartao, relativas a altura dele: rotulo no alto,
-// valor no meio, detalhe embaixo.
+// ---------------------------------------------------------------------------
+// Fontes: a Inter, suavizada, gravada em src/fontes.h. Cada objeto (a tela e
+// cada sprite) carrega a sua; trocar so quando muda, porque carregar le a
+// tabela de caracteres da fonte.
+// ---------------------------------------------------------------------------
+template <typename A>
+static void usaFonte(A &a, const uint8_t *&atual, const uint8_t *f) {
+  if (atual == f) return;
+  if (atual) a.unloadFont();
+  a.loadFont(f);
+  atual = f;
+}
+static const uint8_t *fonteTft = nullptr;
+static void fonte(const uint8_t *f) { usaFonte(tft, fonteTft, f); }
+// As telas de sistema (atualizacao) usam as fontes internas da biblioteca.
+static void fonteInterna() {
+  if (fonteTft) { tft.unloadFont(); fonteTft = nullptr; }
+}
+
+// Posicoes dentro do cartao, por linha: rotulo no alto, valor no meio,
+// estado embaixo. Temperatura e umidade centradas; aquecedor e fans com o
+// icone animado a esquerda e o texto alinhado a direita.
 //
 // A faixa reservada ao valor e o que se apaga a cada leitura. Apagar so ela,
 // e nao o cartao inteiro, e o que evita piscar. Ela cobre a altura dos
-// digitos da FreeSansBold24pt (~34 px) com folga, sem encostar no rotulo nem
-// no detalhe.
-static int16_t yRotulo(const Cartao &c)     { return c.y + 20; }
-static int16_t yValor(const Cartao &c)      { return c.y + c.a / 2 + 4; }
-static int16_t faixaTopo(const Cartao &c)   { return yValor(c) - 24; }
-static int16_t faixaAltura(const Cartao &)  { return 48; }
-static int16_t yDetalhe(const Cartao &c)    { return c.y + c.a - 18; }
-
-// Unidade ao lado do numero, em fonte pequena e cinza. O grau nao existe na
-// fonte, entao vai desenhado como dois circulos - que e o que ele e.
-// Template porque desenha tanto na tela quanto no sprite: na TFT_eSPI so
-// drawPixel e virtual, entao passar o sprite como TFT_eSPI& desenharia na
-// tela.
-template <typename Alvo>
-static int16_t desenhaUnidade(Alvo &a, int16_t x, int16_t y, const Cartao &c,
-                              bool medir) {
-  int16_t largura = 0;
-
-  if (c.grau) {
-    if (!medir) {
-      a.drawCircle(x + 3, y - 5, 3, MUDO);
-      a.drawCircle(x + 3, y - 5, 2, MUDO);
-    }
-    x += 9;
-    largura += 9;
-  }
-
-  a.setTextFont(2);
-  largura += a.textWidth(c.unidade);
-  if (!medir) {
-    a.setTextDatum(ML_DATUM);
-    a.setTextColor(MUDO, CARTAO);
-    a.drawString(c.unidade, x, y);
-  }
-  return largura;
+// digitos da Inter Bold 42 (~31 px) sem encostar no rotulo nem no que vem
+// embaixo. Na temperatura ela e mais estreita: dos lados ficam o alvo e a
+// maxima.
+static const int16_t FAIXA_A = 36;
+static const int16_t FAIXA_TEMP_L = 144;
+static int16_t yRotulo(const Cartao &c) { return c.y + ((c.y == Y_L1 || c.y == Y_L4) ? 18 : 20); }
+static int16_t yValor(const Cartao &c) {
+  if (c.y == Y_L1) return c.y + 52;
+  if (c.y == Y_L4) return c.y + 50;
+  return c.y + 54;
 }
+static int16_t faixaTopo(const Cartao &c)    { return yValor(c) - FAIXA_A / 2; }
+// Cartao com icone: a faixa comeca depois dele (ICONE_ESPACO px da borda).
+static const int16_t ICONE_ESPACO = 44;
+static int16_t faixaLargura(const Cartao &c) {
+  if (c.l == LARGURA_TODA) return FAIXA_TEMP_L;
+  return c.icone ? c.l - ICONE_ESPACO - 6 : c.l - 6;
+}
+// Temperatura: valor e rotulo na metade esquerda; na direita, o alvo e a
+// maxima. A linha fica exatamente no meio, alinhada com a do aquecedor.
+static const int16_t TEMP_ESQ = LARGURA_TODA / 2;  // 150
+static int16_t centroX(const Cartao &c) {
+  return c.l == LARGURA_TODA ? c.x + TEMP_ESQ / 2 : c.x + c.l / 2;
+}
+static int16_t faixaX(const Cartao &c) {
+  return c.icone ? c.x + ICONE_ESPACO : centroX(c) - faixaLargura(c) / 2;
+}
+static int16_t xDireita(const Cartao &c)     { return c.x + c.l - 12; }  // fim do texto a direita
+static int16_t yEstado(const Cartao &c)      { return c.y == Y_L3 ? c.y + 90 : c.y + 80; }
+static int16_t yDetalhe(const Cartao &c)     { return c.y + c.a - 13; }
 
 // O valor e montado num sprite fora da tela e empurrado de uma vez. Apagar a
 // faixa direto na tela e redesenhar deixava um quadro em branco visivel - a
-// piscada na troca de valor. Todos os cartoes tem a mesma largura, entao um
-// sprite so serve para todos (~13 KB).
-static TFT_eSprite faixa = TFT_eSprite(&tft);
-static bool faixaOk = false;
+// piscada na troca de valor. Tres sprites, um por largura de faixa: meio
+// cartao (~10 KB), temperatura (~10 KB) e cartao com icone (~7 KB).
+static TFT_eSprite faixaMeia = TFT_eSprite(&tft);
+static TFT_eSprite faixaTemp = TFT_eSprite(&tft);
+static TFT_eSprite faixaIcone = TFT_eSprite(&tft);
+static bool faixaMeiaOk = false, faixaTempOk = false, faixaIconeOk = false;
+static bool faixasCriadas = false;
+static const uint8_t *fonteMeia = nullptr, *fonteTemp = nullptr, *fonteIcone = nullptr;
 
 // O que esta desenhado em cada cartao. Valor igual nao redesenha.
 static char valorNaTela[N_CARTOES][12];
@@ -422,30 +435,37 @@ static bool dadoNaTela[N_CARTOES];
 
 static void esqueceValor(uint8_t i) { valorNaTela[i][0] = '\0'; }
 
+// Numero grande e unidade pequena ao lado, centrados juntos. Template porque
+// desenha tanto na tela quanto no sprite: na TFT_eSPI so drawPixel e
+// virtual, entao passar o sprite como TFT_eSPI& desenharia na tela.
 template <typename Alvo>
-static void montaValor(Alvo &a, int16_t ox, int16_t oy, const Cartao &c,
-                       const char *valor, bool temDado) {
-  a.fillRect(ox, oy, c.l - 6, faixaAltura(c), CARTAO);
+static void montaValor(Alvo &a, const uint8_t *&fonteA, int16_t ox, int16_t oy,
+                       const Cartao &c, const char *valor, bool temDado) {
+  const int16_t lf = faixaLargura(c);
+  a.fillRect(ox, oy, lf, FAIXA_A, CLARO);
 
-  a.setFreeFont(&FreeSansBold24pt7b);
+  usaFonte(a, fonteA, INTER_ROTULO);
+  const int16_t larguraUnidade = temDado ? a.textWidth(c.unidade) : 0;
+  usaFonte(a, fonteA, INTER_VALOR);
   const int16_t larguraValor = a.textWidth(valor);
-  const int16_t larguraUnidade = temDado ? desenhaUnidade(a, 0, 0, c, true) : 0;
-  const int16_t total = larguraValor + (temDado ? 3 + larguraUnidade : 0);
+  const int16_t total = larguraValor + (temDado ? 4 + larguraUnidade : 0);
 
-  const int16_t x = ox + (c.l - 6) / 2 - total / 2;
-  const int16_t y = oy + faixaAltura(c) / 2;
+  // Com icone, alinhado a direita (6 px antes do fim da faixa); senao, no centro.
+  const int16_t x = c.icone ? ox + lf - 6 - total : ox + lf / 2 - total / 2;
+  const int16_t y = oy + FAIXA_A / 2;
 
-  // desenhaUnidade() trocou a fonte ao medir: reescolhe antes de desenhar.
-  a.setFreeFont(&FreeSansBold24pt7b);
   a.setTextDatum(ML_DATUM);
-  a.setTextColor(temDado ? c.cor : MUDO, CARTAO);
+  a.setTextColor(temDado ? ESCURO : SEMDADO_C, CLARO);
   a.drawString(valor, x, y);
 
-  if (temDado) desenhaUnidade(a, x + larguraValor + 3, y, c, false);
+  if (temDado) {
+    usaFonte(a, fonteA, INTER_ROTULO);
+    a.setTextColor(UNID_C, CLARO);
+    a.drawString(c.unidade, x + larguraValor + 4, y + 6);
+  }
 }
 
-// Numero grande mais a unidade, centrados juntos no cartao. Sem dado, "--"
-// em cinza: o cartao existe no layout mas nao inventa leitura.
+// Sem dado, "--" em cinza: o cartao existe no layout mas nao inventa leitura.
 static void desenhaValor(uint8_t i, const char *valor, bool temDado) {
   if (dadoNaTela[i] == temDado && strcmp(valorNaTela[i], valor) == 0) return;
   snprintf(valorNaTela[i], sizeof valorNaTela[i], "%s", valor);
@@ -453,34 +473,123 @@ static void desenhaValor(uint8_t i, const char *valor, bool temDado) {
 
   const Cartao &c = CARTOES[i];
 
-  if (!faixaOk) {
-    faixa.setColorDepth(16);
-    faixaOk = faixa.createSprite(c.l - 6, faixaAltura(c)) != nullptr;
+  if (!faixasCriadas) {
+    faixasCriadas = true;
+    faixaMeia.setColorDepth(16);
+    faixaMeiaOk = faixaMeia.createSprite(COL_L - 6, FAIXA_A) != nullptr;
+    faixaTemp.setColorDepth(16);
+    faixaTempOk = faixaTemp.createSprite(FAIXA_TEMP_L, FAIXA_A) != nullptr;
+    faixaIcone.setColorDepth(16);
+    faixaIconeOk = faixaIcone.createSprite(COL_L - ICONE_ESPACO - 6, FAIXA_A) != nullptr;
   }
 
-  if (faixaOk) {
-    montaValor(faixa, 0, 0, c, valor, temDado);
-    faixa.pushSprite(c.x + 3, faixaTopo(c));
-  } else {
-    montaValor(tft, c.x + 3, faixaTopo(c), c, valor, temDado);  // sem memoria: pisca, mas funciona
+  const bool temp = c.l == LARGURA_TODA;
+  TFT_eSprite &faixa = temp ? faixaTemp : c.icone ? faixaIcone : faixaMeia;
+  const uint8_t *&fonteF = temp ? fonteTemp : c.icone ? fonteIcone : fonteMeia;
+  const bool ok = temp ? faixaTempOk : c.icone ? faixaIconeOk : faixaMeiaOk;
+
+  if (ok) {
+    montaValor(faixa, fonteF, 0, 0, c, valor, temDado);
+    faixa.pushSprite(faixaX(c), faixaTopo(c));
+  } else {  // sem memoria: pisca, mas funciona
+    montaValor(tft, fonteTft, faixaX(c), faixaTopo(c), c, valor, temDado);
   }
+}
+
+// Texto pequeno centrado num ponto do cartao.
+static void textoEm(int16_t cx, int16_t y, const char *texto, const uint8_t *f,
+                    uint16_t cor) {
+  fonte(f);
+  tft.setTextColor(cor, CLARO);
+  tft.setTextDatum(MC_DATUM);
+  tft.drawString(texto, cx, y);
 }
 
 static void desenhaCartao(uint8_t i) {
   const Cartao &c = CARTOES[i];
   esqueceValor(i);
 
-  tft.fillRoundRect(c.x, c.y, c.l, c.a, 9, CARTAO);
-  tft.drawRoundRect(c.x, c.y, c.l, c.a, 9, BORDA);
+  if (i == CARTAO_POT) {
+    // Aquecedor e fan do aquecedor: um fundo so, das duas colunas, com uma
+    // linha no meio. A metade do fan nao pinta fundo.
+    tft.fillRoundRect(COL_E, c.y, LARGURA_TODA, c.a, 10, CLARO);
+    tft.drawFastVLine(LARGURA / 2, c.y + 16, c.a - 32, DIVISOR_C);
+  } else if (i != CARTAO_FANAQ) {
+    tft.fillRoundRect(c.x, c.y, c.l, c.a, 10, CLARO);
+  }
+  if (i == CARTAO_TEMP) {
+    tft.drawFastVLine(c.x + TEMP_ESQ, c.y + 14, c.a - 28, DIVISOR_C);
+  }
 
-  tft.setTextFont(1);
-  textoCentrado(c.x + c.l / 2, yRotulo(c), c.rotulo, 2, MUDO, CARTAO);
-  textoCentrado(c.x + c.l / 2, yDetalhe(c), c.detalhe, 1, MUDO, CARTAO);
+  if (c.icone) {                         // rotulo alinhado a direita
+    fonte(INTER_ROTULO);
+    tft.setTextColor(ROTULO_C, CLARO);
+    tft.setTextDatum(MR_DATUM);
+    tft.drawString(c.rotulo, xDireita(c), yRotulo(c));
+  } else if (i == CARTAO_UMID || i == CARTAO_UABS) {
+    // Umidade: gota antes do rotulo, os dois centrados juntos.
+    fonte(INTER_ROTULO);
+    const int16_t lt = tft.textWidth(c.rotulo), total = 10 + 5 + lt;
+    const int16_t x = centroX(c) - total / 2, cy = yRotulo(c);
+    tft.fillCircle(x + 5, cy + 2, 4, GOTA_C);
+    tft.fillTriangle(x + 1, cy + 1, x + 9, cy + 1, x + 5, cy - 7, GOTA_C);
+    tft.setTextColor(ROTULO_C, CLARO);
+    tft.setTextDatum(ML_DATUM);
+    tft.drawString(c.rotulo, x + 15, cy);
+  } else {
+    textoEm(centroX(c), yRotulo(c), c.rotulo, INTER_ROTULO, ROTULO_C);
+  }
+  if (c.detalhe[0]) textoEm(centroX(c), yDetalhe(c), c.detalhe, INTER_ROTULO, UNID_C);
 }
 
 static void telaFixa() {
-  tft.fillScreen(FUNDO);
+  tft.fillScreen(FUNDO2);
   for (uint8_t i = 0; i < N_CARTOES; i++) desenhaCartao(i);
+}
+
+// Coluna da direita da temperatura: uma etiqueta (icone dentro do nome,
+// texto claro numa pilula da cor do valor) e o numero a direita. Linha 0 e o
+// alvo do aquecedor (bandeira); linha 1, a maxima (escudo) - os mesmos do
+// painel web.
+enum IconeTemp { ICONE_ALVO, ICONE_MAX };
+
+// Icones de 12 px, desenhados com linhas: nessa escala ficam mais nitidos
+// que qualquer fonte de icones.
+static void desenhaIcone(IconeTemp icone, int16_t x, int16_t cy, uint16_t cor) {
+  if (icone == ICONE_ALVO) {                       // bandeira
+    tft.fillRect(x, cy - 6, 2, 13, cor);           // mastro
+    tft.fillTriangle(x + 2, cy - 6, x + 10, cy - 3, x + 2, cy, cor);
+  } else {                                         // escudo com "!"
+    tft.drawLine(x, cy - 5, x + 5, cy - 7, cor);
+    tft.drawLine(x + 5, cy - 7, x + 10, cy - 5, cor);
+    tft.drawLine(x, cy - 5, x, cy, cor);
+    tft.drawLine(x + 10, cy - 5, x + 10, cy, cor);
+    tft.drawLine(x, cy, x + 5, cy + 6, cor);
+    tft.drawLine(x + 10, cy, x + 5, cy + 6, cor);
+    tft.drawFastVLine(x + 5, cy - 3, 4, cor);
+    tft.drawPixel(x + 5, cy + 3, cor);
+  }
+}
+
+static void linhaTemperatura(uint8_t linha, IconeTemp icone, const char *nome,
+                             const char *valor, uint16_t cor) {
+  const Cartao &c = CARTOES[CARTAO_TEMP];
+  const int16_t x0 = c.x + TEMP_ESQ + 1, x1 = c.x + c.l;
+  const int16_t y = c.y + (linha == 0 ? 32 : 62);
+  tft.fillRect(x0 + 2, y - 11, x1 - x0 - 6, 22, CLARO);
+
+  fonte(INTER_ESTADO);
+  const int16_t lt = tft.textWidth(nome);
+  const int16_t px = x0 + 8, pa = 20, pl = 7 + 11 + 5 + lt + 8;
+  tft.fillRoundRect(px, y - pa / 2, pl, pa, pa / 2, cor);
+  desenhaIcone(icone, px + 7, y, CLARO);
+  tft.setTextDatum(ML_DATUM);
+  tft.setTextColor(CLARO, cor);
+  tft.drawString(nome, px + 7 + 11 + 5, y + 1);
+
+  tft.setTextDatum(MR_DATUM);
+  tft.setTextColor(cor, CLARO);
+  tft.drawString(valor, x1 - 8, y + 1);
 }
 
 // Uma casa decimal, menos a partir de 100: assim o texto nunca passa de
@@ -572,17 +681,12 @@ static void salvaMaxima(float valor) {
 // Fonte 2, maior que a dos outros detalhes, porque e um valor que se
 // consulta de longe.
 static void pintaMaximo() {
-  const Cartao &c = CARTOES[CARTAO_TEMP];
-  char buf[20];
-
-  tft.fillRect(c.x + 3, yDetalhe(c) - 9, c.l - 6, 18, CARTAO);
-  tft.setTextFont(2);
-
+  char buf[12];
   if (temMaxima) {
-    snprintf(buf, sizeof buf, "MAX %.1f C", tempMaxima);
-    textoCentrado(c.x + c.l / 2, yDetalhe(c), buf, 1, VERDE, CARTAO);
+    snprintf(buf, sizeof buf, "%.1f\xC2\xB0", tempMaxima);
+    linhaTemperatura(1, ICONE_MAX, "M\xC3\x81XIMO", buf, OK_C);
   } else {
-    textoCentrado(c.x + c.l / 2, yDetalhe(c), "MAX --", 1, MUDO, CARTAO);
+    linhaTemperatura(1, ICONE_MAX, "M\xC3\x81XIMO", "--", UNID_C);
   }
 }
 
@@ -622,49 +726,178 @@ static void mostraSemSensor() {
   if (telaLigada) pintaMedidas();
 }
 
-// Ventiladores e aquecedor, com o que o controle decidiu. O detalhe do cartao
-// grande e reescrito junto, porque ele carrega o estado do aquecedor.
-// Selo de estado na linha de baixo do cartao: borda arredondada com o texto
-// dentro, so informativo. Verde ligado, vermelho desligado - o mesmo selo da
-// pagina web.
-static void desenhaSelo(uint8_t i, const char *texto, uint16_t cor) {
+// Linha de estado do cartao. Ligado: bolinha e texto na cor (verde ativo,
+// laranja aquecendo). Parado: texto claro numa pilula vermelha - o mesmo do
+// painel web. So redesenha quando muda.
+static char estadoNaTela[N_CARTOES][16];
+
+static void desenhaEstado(uint8_t i, const char *texto, uint16_t cor, bool pilula) {
+  if (strcmp(estadoNaTela[i], texto) == 0) return;
+  snprintf(estadoNaTela[i], sizeof estadoNaTela[i], "%s", texto);
+
   const Cartao &c = CARTOES[i];
-  const int16_t cy = yDetalhe(c);
-  const int16_t a = 18;
+  const int16_t cy = yEstado(c);
+  tft.fillRect(c.x + ICONE_ESPACO, cy - 11, c.l - ICONE_ESPACO - 3, 22, CLARO);
 
-  tft.fillRect(c.x + 3, cy - 10, c.l - 6, 20, CARTAO);
-  tft.setTextFont(1);
-  const int16_t lt = textoEspacado(0, 0, texto, 1, cor, CARTAO, true);
-  const int16_t l = lt + 18;
-  const int16_t x = c.x + c.l / 2 - l / 2;
+  fonte(INTER_ESTADO);
+  const int16_t lt = tft.textWidth(texto);
+  // Centro do conjunto, de modo que ele termine na margem direita.
+  const int16_t largura = pilula ? lt + 20 : 12 + lt;
+  const int16_t cx = xDireita(c) - largura / 2;
+  tft.setTextDatum(ML_DATUM);
 
-  tft.drawRoundRect(x, cy - a / 2, l, a, a / 2, cor);
-  textoEspacado(x + 9, cy, texto, 1, cor, CARTAO);
+  if (pilula) {
+    const int16_t l = lt + 20, a = 20;
+    tft.fillRoundRect(cx - l / 2, cy - a / 2, l, a, a / 2, cor);
+    tft.setTextColor(CLARO, cor);
+    tft.drawString(texto, cx - lt / 2, cy + 1);
+  } else {
+    const int16_t x = cx - (12 + lt) / 2;
+    tft.fillCircle(x + 4, cy, 4, cor);
+    tft.setTextColor(cor, CLARO);
+    tft.drawString(texto, x + 12, cy + 1);
+  }
+}
+
+// Esquerda do valor da temperatura: o alvo do aquecedor.
+static float alvoNaTela = -1;   // -1: redesenhar
+static void desenhaAlvo() {
+  const float alvo = controleConfig().alvo;
+  if (alvo == alvoNaTela) return;
+  alvoNaTela = alvo;
+  char buf[12];
+  snprintf(buf, sizeof buf, "%.0f\xC2\xB0", alvo);
+  linhaTemperatura(0, ICONE_ALVO, "ALVO", buf, QUENTE_C);
 }
 
 // Ventiladores e aquecedor, com o que o controle decidiu. No boot tudo esta
-// desligado, e os tres cartoes mostram o selo vermelho ate o painel web ligar.
+// desligado: os cartoes mostram a pilula vermelha ate o painel web ligar.
 static void pintaControle() {
   char buf[16];
 
-  for (uint8_t i = 0; i < 2; i++) {
-    const uint8_t pct = controleVelocidade(i);
-    const uint8_t cartao = CARTAO_FAN1 + i;
-    snprintf(buf, sizeof buf, "%u", pct);
-    desenhaValor(cartao, buf, pct > 0);
-    desenhaSelo(cartao, pct > 0 ? "LIGADO" : "DESLIGADO",
-                pct > 0 ? VERDE : VERMELHO);
+  // Potencia que o PID pede, e o estado do aquecedor.
+  snprintf(buf, sizeof buf, "%u", controleAutorizado() ? controlePotencia() : 0);
+  desenhaValor(CARTAO_POT, buf, true);
+  if (controleEstado() == EST_FALHA)          desenhaEstado(CARTAO_POT, "PROTE\xC3\x87\xC3\x83O", PARADO_C, true);
+  else if (controleEstado() == EST_AQUECENDO) desenhaEstado(CARTAO_POT, "AQUECENDO", QUENTE_C, false);
+  else if (controleAutorizado())              desenhaEstado(CARTAO_POT, "NO ALVO", OK_C, false);
+  else                                        desenhaEstado(CARTAO_POT, "DESLIGADO", PARADO_C, true);
+  desenhaAlvo();
+
+  // Fan do aquecedor (canal 0) e os dois de circulacao (canal 1, juntos).
+  const uint8_t fanAq = controleVelocidade(0), circ = controleVelocidade(1);
+  snprintf(buf, sizeof buf, "%u", fanAq);
+  desenhaValor(CARTAO_FANAQ, buf, true);
+  if (fanAq > 0) desenhaEstado(CARTAO_FANAQ, "ATIVO", OK_C, false);
+  else           desenhaEstado(CARTAO_FANAQ, "INATIVO", PARADO_C, true);
+
+  snprintf(buf, sizeof buf, "%u", circ);
+  for (uint8_t i = CARTAO_CIRC1; i <= CARTAO_CIRC2; i++) {
+    desenhaValor(i, buf, true);
+    if (circ > 0) desenhaEstado(i, "ATIVO", OK_C, false);
+    else          desenhaEstado(i, "INATIVO", PARADO_C, true);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Icones animados dos cartoes do aquecedor e dos fans.
+//
+// Fan: helice de tres pas. Ligado, verde e girando - mais rapido quanto
+// maior a velocidade. Parado, cinza.
+// Aquecedor: chama. Aquecendo, vermelha com o miolo laranja e amarelo,
+// tremulando. Parado, cinza.
+//
+// Cada quadro e montado num sprite de 32x32 e empurrado de uma vez: so o
+// icone e redesenhado, sem piscar o cartao.
+// ---------------------------------------------------------------------------
+static TFT_eSprite icone = TFT_eSprite(&tft);
+static bool iconeOk = false;
+static const uint32_t QUADRO_MS = 50;   // ~20 quadros por segundo
+
+static void desenhaHelice(float angulo, uint16_t cor) {
+  const int16_t cx = 16, cy = 16;
+  icone.fillSprite(CLARO);
+  icone.drawCircle(cx, cy, 15, cor);
+  for (uint8_t p = 0; p < 3; p++) {
+    const float a = angulo + p * 2.0944f;   // 120 graus
+    const int16_t tx = cx + 12 * cosf(a), ty = cy + 12 * sinf(a);
+    const int16_t ax = cx + 7 * cosf(a - 0.75f), ay = cy + 7 * sinf(a - 0.75f);
+    const int16_t bx = cx + 6 * cosf(a + 0.35f), by = cy + 6 * sinf(a + 0.35f);
+    icone.fillTriangle(cx, cy, ax, ay, tx, ty, cor);
+    icone.fillTriangle(cx, cy, tx, ty, bx, by, cor);
+  }
+  icone.fillCircle(cx, cy, 3, CLARO);
+  icone.drawCircle(cx, cy, 3, cor);
+}
+
+static void desenhaChama(uint8_t quadro, bool acesa) {
+  icone.fillSprite(CLARO);
+  // Quatro quadros: a ponta balanca e a chama sobe e desce um pouco.
+  static const int8_t PONTA_X[4] = {0, 2, 0, -2};
+  static const int8_t PONTA_Y[4] = {0, 1, 2, 1};
+  const int8_t dx = acesa ? PONTA_X[quadro] : 0, dy = acesa ? PONTA_Y[quadro] : 0;
+  const uint16_t fora = acesa ? PARADO_C : SEMDADO_C;
+  icone.fillCircle(16, 21, 9, fora);
+  icone.fillTriangle(7, 19, 25, 19, 16 + dx, 2 + dy, fora);
+  if (acesa) {
+    icone.fillCircle(16, 23, 5, LARANJA_C);
+    icone.fillTriangle(11, 22, 21, 22, 16 - dx / 2, 11 + dy, LARANJA_C);
+    icone.fillCircle(16, 25, 2, AMARELO_C);
+  }
+}
+
+static void pushIcone(uint8_t i) {
+  const Cartao &c = CARTOES[i];
+  icone.pushSprite(c.x + 6, yValor(c) - 16);
+}
+
+static float anguloFan[3] = {0, 0, 0};
+static int8_t  estadoIcone[4] = {-1, -1, -1, -1};  // -1 = redesenhar
+
+static void esqueceIcones() {
+  for (uint8_t k = 0; k < 4; k++) estadoIcone[k] = -1;
+}
+
+static void animaIcones() {
+  static uint32_t ultimo = 0;
+  if (!telaLigada || millis() - ultimo < QUADRO_MS) return;
+  ultimo = millis();
+
+  if (!iconeOk) {
+    icone.setColorDepth(16);
+    iconeOk = icone.createSprite(32, 32) != nullptr;
+    if (!iconeOk) return;
   }
 
-  snprintf(buf, sizeof buf, "%.0f", controleConfig().alvo);
-  desenhaValor(CARTAO_HOTEND, buf, controleAquecedorLigado());
+  // Chama: so anima enquanto aquece; parada, desenha uma vez.
+  static uint8_t quadro = 0, conta = 0;
+  const bool acesa = controleEstado() == EST_AQUECENDO;
+  if (acesa) {
+    if (++conta >= 3) { conta = 0; quadro = (quadro + 1) % 4; estadoIcone[0] = -1; }
+  }
+  if (estadoIcone[0] != (acesa ? quadro + 1 : 0)) {
+    estadoIcone[0] = acesa ? quadro + 1 : 0;
+    desenhaChama(quadro, acesa);
+    pushIcone(CARTAO_POT);
+  }
 
-  // Ligado = liberado no painel, mesmo que agora esteja no alvo sem aquecer;
-  // o numero fica laranja quando aquece de fato. Protecao aparece em vez de
-  // DESLIGADO para a falha nao passar por desligamento normal.
-  if (controleEstado() == EST_FALHA)  desenhaSelo(CARTAO_HOTEND, "PROTECAO", VERMELHO);
-  else if (controleAutorizado())      desenhaSelo(CARTAO_HOTEND, "LIGADO", VERDE);
-  else                                desenhaSelo(CARTAO_HOTEND, "DESLIGADO", VERMELHO);
+  // Fans: canal 0 e o do aquecedor; canal 1 move os dois de circulacao.
+  static const uint8_t CARTAO_FAN[3] = {CARTAO_FANAQ, CARTAO_CIRC1, CARTAO_CIRC2};
+  for (uint8_t f = 0; f < 3; f++) {
+    const uint8_t pct = controleVelocidade(f == 0 ? 0 : 1);
+    if (pct > 0) {
+      // 30% gira devagar, 100% bem rapido: de ~0,6 a ~2 voltas por segundo.
+      anguloFan[f] += 0.2f + pct * 0.0055f;
+      if (anguloFan[f] > 6.2832f) anguloFan[f] -= 6.2832f;
+      desenhaHelice(anguloFan[f], OK_C);
+      pushIcone(CARTAO_FAN[f]);
+      estadoIcone[1 + f] = 1;
+    } else if (estadoIcone[1 + f] != 0) {
+      estadoIcone[1 + f] = 0;
+      desenhaHelice(anguloFan[f], SEMDADO_C);
+      pushIcone(CARTAO_FAN[f]);
+    }
+  }
 }
 
 // Rodape: so o endereco, centrado. Como ele vira "sem Wi-Fi" ou
@@ -679,21 +912,47 @@ static void desenhaRodape(const char *endereco) {
     // Sem a rede de casa: listra laranja com o nome e a senha da rede propria,
     // alternando com o aviso a cada 3 s (servidorEndereco()).
     tft.fillRect(0, topo, LARGURA, ALTURA_RODAPE, LARANJA);
-    tft.setTextFont(2);
-    textoCentrado(LARGURA / 2, Y_RODAPE, endereco, 1, FUNDO, LARANJA);
+    fonte(INTER_ESTADO);
+    textoCentrado(LARGURA / 2, Y_RODAPE, endereco, 1, FUNDO2, LARANJA);
     return;
   }
 
-  tft.fillRect(0, topo, LARGURA, ALTURA_RODAPE, FUNDO);
-  tft.setTextFont(2);
-  textoCentrado(LARGURA / 2, Y_RODAPE, endereco, 1, RODAPE, FUNDO);
+  tft.fillRect(0, topo, LARGURA, ALTURA_RODAPE, FUNDO2);
+  fonte(INTER_ROTULO);
+  textoCentrado(LARGURA / 2, Y_RODAPE, endereco, 1, TITULO_C, FUNDO2);
 }
 
-// Relogio pequeno no canto direito do topo. Horas e minutos so: redesenha uma
-// vez por minuto. "--:--" ate a hora chegar pela internet.
+// Relogio no centro do topo. Horas e minutos so: redesenha uma vez por
+// minuto. "--:--" ate a hora chegar pela internet.
 static char relogioNaTela[8] = "";
+static int8_t conexaoNaTela = -1;   // -1 nunca desenhado, 0 sem rede, 1 conectado
+
+// Indicador de conexao no canto direito: tres arcos e um ponto, como o
+// simbolo de Wi-Fi, e o texto. Verde conectado, vermelho sem rede.
+static void desenhaConexao(bool forca) {
+  const int8_t ok = (WiFi.status() == WL_CONNECTED) ? 1 : 0;
+  if (!forca && ok == conexaoNaTela) return;
+  conexaoNaTela = ok;
+
+  const uint16_t cor = ok ? CONECT_C : SEMREDE_C;
+  const char *texto = ok ? "conectado" : "sem rede";
+  tft.fillRect(LARGURA - MARGEM - 92, 0, 92, ALTURA_TOPO, FUNDO2);
+
+  fonte(INTER_ROTULO);
+  tft.setTextDatum(MR_DATUM);
+  tft.setTextColor(cor, FUNDO2);
+  tft.drawString(texto, LARGURA - MARGEM, Y_TOPO);
+
+  const int16_t cx = LARGURA - MARGEM - tft.textWidth(texto) - 12, cy = Y_TOPO + 5;
+  tft.fillCircle(cx, cy, 2, cor);
+  for (int16_t r = 5; r <= 13; r += 4) {
+    tft.drawArc(cx, cy, r + 1, r, 135, 225, cor, FUNDO2, false);
+  }
+}
 
 static void desenhaRelogio(bool forca) {
+  desenhaConexao(forca);
+
   char texto[8] = "--:--";
   if (horaCerta()) {
     const time_t agora = time(nullptr);
@@ -704,15 +963,18 @@ static void desenhaRelogio(bool forca) {
   if (!forca && strcmp(texto, relogioNaTela) == 0) return;
   snprintf(relogioNaTela, sizeof relogioNaTela, "%s", texto);
 
-  tft.fillRect(LARGURA - MARGEM - 60, 0, 60, ALTURA_TOPO, FUNDO);
-  tft.setTextFont(2);
-  tft.setTextDatum(MR_DATUM);
-  tft.setTextColor(MUDO, FUNDO);
-  tft.drawString(texto, LARGURA - MARGEM, Y_TOPO);
+  tft.fillRect(LARGURA / 2 - 40, 0, 80, ALTURA_TOPO, FUNDO2);
+  fonte(INTER_RELOGIO);
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextColor(TOPO_C, FUNDO2);
+  tft.drawString(texto, LARGURA / 2, Y_TOPO);
 }
 
 // Painel inteiro: no boot e ao religar a imagem.
 static void desenhaPainel() {
+  for (uint8_t i = 0; i < N_CARTOES; i++) estadoNaTela[i][0] = '\0';
+  alvoNaTela = -1;
+  esqueceIcones();
   telaFixa();
   desenhaRelogio(true);
   desenhaRodape(servidorEndereco());
@@ -761,13 +1023,14 @@ void telaAtualizando(uint8_t pct) {
   static bool montada = false;
   const int16_t bx = 30, by = ALTURA / 2 + 10, bl = LARGURA - 60, ba = 18;
 
+  fonteInterna();
   if (pct == 0 || !montada) {
     montada = true;
-    tft.fillScreen(FUNDO);
+    tft.fillScreen(FUNDO2);
     tft.setTextDatum(MC_DATUM);
-    tft.setTextColor(TEXTO, FUNDO);
+    tft.setTextColor(TEXTO, FUNDO2);
     tft.drawString("ATUALIZANDO", LARGURA / 2, ALTURA / 2 - 40, 4);
-    tft.setTextColor(MUDO, FUNDO);
+    tft.setTextColor(MUDO, FUNDO2);
     tft.drawString("aquecedor desligado - nao desligue a energia",
                    LARGURA / 2, ALTURA / 2 - 12, 2);
     tft.drawRoundRect(bx, by, bl, ba, 6, BORDA);
@@ -778,7 +1041,7 @@ void telaAtualizando(uint8_t pct) {
   char buf[8];
   snprintf(buf, sizeof buf, "%u%%", pct);
   tft.setTextDatum(MC_DATUM);
-  tft.setTextColor(TEXTO, FUNDO);
+  tft.setTextColor(TEXTO, FUNDO2);
   tft.setTextPadding(60);
   tft.drawString(buf, LARGURA / 2, by + ba + 22, 4);
   tft.setTextPadding(0);
@@ -866,29 +1129,25 @@ void setup() {
   diario.printf("Barramento SPI   : %d MHz\n", SPI_FREQUENCY / 1000000);
   diario.printf("Pinos da tela    : SCK=%d MOSI=%d CS=%d DC=%d RST=%d\n",
                 TFT_SCLK, TFT_MOSI, TFT_CS, TFT_DC, TFT_RST);
-  diario.printf("Pinos do sensor  : SDA=%d SCL=%d\n", PIN_SDA, PIN_SCL);
+  diario.printf("Pinos do sensor  : SPI SCK=%d SDI=%d SDO=%d CS=%d\n",
+                PIN_SCK, PIN_SDI, PIN_SDO, PIN_CS);
 
   controleInicia();
   servidorInicia();  // nao bloqueia: a rede sobe em paralelo ao resto
   carregaMaxima();
   diario.printf("Temp. maxima     : %.1f C\n", tempMaxima);
 
-  Wire.begin(PIN_SDA, PIN_SCL);
-  Wire.setClock(I2C_FREQ);
-  diario.printf("I2C              : %lu kHz (cabo longo ate o sensor)\n",
-                (unsigned long)(I2C_FREQ / 1000));
-  varreI2C();
+  diario.printf("SPI do sensor    : %lu kHz por software (cabo longo)\n",
+                (unsigned long)(SPI_SENSOR_HZ / 1000));
 
   sensorOk = iniciaSensor();
   if (sensorOk) {
     const uint8_t id = bme.sensorID();
-    diario.printf("Sensor           : 0x%02X, chip ID 0x%02X (%s)\n",
-                  enderecoSensor, id, nomeChip(id));
-    if (id != 0x60) {
-      diario.println("ATENCAO: nao e um BME280. A umidade vai sair invalida.");
-    }
+    diario.printf("Sensor           : SPI, chip ID 0x%02X (%s)\n", id, nomeChip(id));
   } else {
-    diario.println("Sensor           : NAO encontrado em 0x76 nem 0x77");
+    diario.println("Sensor           : NAO respondeu no SPI");
+    diario.println("                   confira SCK, SDI, SDO, CS, 3V3, GND e se as");
+    diario.println("                   pontes CSB-VCC e SDO-GND foram desfeitas");
     diario.println("                   seguindo sem ele, tentando de novo a cada 5 s");
   }
 
@@ -947,6 +1206,7 @@ void loop() {
   // O endereco muda sozinho: conectando -> IP, ou IP -> reconectando. A tela
   // acompanha comparando o texto, para nao repintar a linha a cada volta.
   if (telaEstaLigada()) desenhaRelogio(false);
+  animaIcones();
 
   int codigoAviso;
   if (avisoResultado(codigoAviso)) {
@@ -1069,7 +1329,7 @@ void loop() {
 
     if (iniciaSensor()) {
       sensorOk = true;
-      diario.printf("Sensor apareceu em 0x%02X\n", enderecoSensor);
+      diario.println("Sensor           : apareceu (SPI)");
     }
   }
 

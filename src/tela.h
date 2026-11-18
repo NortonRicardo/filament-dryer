@@ -1,11 +1,11 @@
 // ---------------------------------------------------------------------------
-// Layout da tela, seguindo o desenho THERMO.
+// Layout da tela: o mesmo desenho do painel web (cartoes claros sobre fundo
+// quase preto, estados com bolinha colorida).
 //
-// Paleta e medidas vindas do mockup, convertidas para RGB565. O erro da
-// conversao e de no maximo 5/255 por canal - imperceptivel.
+// Cores convertidas para RGB565. O erro da conversao e de no maximo 5/255
+// por canal - imperceptivel.
 //
-// Display de 4" 320x480 em retrato (ST7796S). Os cinco cartoes sao os mesmos
-// do painel de 2,4"; so cresceram para ocupar a tela.
+// Display de 4" 320x480 em retrato (ST7796S).
 // ---------------------------------------------------------------------------
 
 #pragma once
@@ -27,72 +27,87 @@ static const uint16_t VERMELHO = 0xFB4D; // #ff6b6b
 static const uint16_t RODAPE  = 0x5B2E;  // #586575
 static const uint16_t TURQUESA = 0x5F5A; // #5eead4, umidade absoluta
 
+// --- desenho claro (o mesmo do painel web) ----------------------------------
+// Fundo quase preto, cartoes claros com texto escuro, estados com bolinha.
+static const uint16_t FUNDO2    = 0x0841;  // #080808, fundo da tela
+static const uint16_t CLARO     = 0xF79E;  // #f5f3f2, cartao
+static const uint16_t ESCURO    = 0x10A2;  // #171515, valor
+static const uint16_t ROTULO_C  = 0x39A6;  // #3a3737, rotulo do cartao
+static const uint16_t UNID_C    = 0x6B4D;  // #6f6a69, unidade e detalhe
+static const uint16_t SEMDADO_C = 0xA4F3;  // #a39e9d, "--" sem leitura
+static const uint16_t OK_C      = 0x1509;  // #16a34a, ativo / maxima definida
+static const uint16_t QUENTE_C  = 0xEAC1;  // #ea580c, aquecendo
+static const uint16_t PARADO_C  = 0xD924;  // #dc2626, parado / protecao
+static const uint16_t TOPO_C    = 0xF79E;  // #f5f3f2, relogio
+static const uint16_t TITULO_C  = 0xAD34;  // #aaa6a5, titulo e rodape
+static const uint16_t CONECT_C  = 0x3ED1;  // #38d98a, conectado
+static const uint16_t SEMREDE_C = 0xE2CB;  // #e45b5b, sem rede
+static const uint16_t DIVISOR_C = 0xDEDB;  // #dedbda, linha que divide o cartao
+static const uint16_t GOTA_C    = 0x0D3D;  // #0ea5e9, gota da umidade
+static const uint16_t LARANJA_C = 0xFAE2;  // #f97316, miolo da chama
+static const uint16_t AMARELO_C = 0xFE62;  // #facc15, centro da chama
+
 // --- medidas ---------------------------------------------------------------
 static const int16_t LARGURA = 320;
 static const int16_t ALTURA  = 480;
 static const int16_t MARGEM  = 10;
 static const int16_t VAO     = 8;
 static const int16_t COL_L   = (LARGURA - 2 * MARGEM - VAO) / 2;  // 146
+static const int16_t LARGURA_TODA = LARGURA - 2 * MARGEM;         // 300
 
 // Rodape com o endereco do servidor, centrado na faixa de baixo.
 static const int16_t ALTURA_RODAPE = 24;
 static const int16_t Y_RODAPE = ALTURA - ALTURA_RODAPE / 2;  // 468
 
-// Faixa de topo com o relogio, no canto direito.
-static const int16_t ALTURA_TOPO = 20;
-static const int16_t Y_TOPO = ALTURA_TOPO / 2;  // 10
+// Topo: relogio no centro e a conexao a direita.
+static const int16_t ALTURA_TOPO = 30;
+static const int16_t Y_TOPO = 15;
 
-// Tres linhas de cartoes iguais entre o topo e o rodape:
-// (480 - topo - rodape - 3 vaos) / 3 = 137 px cada. A ultima linha termina
-// em y 447, e o rodape fica sozinho na faixa de 456 a 480.
-static const int16_t LINHA_A =
-    (ALTURA - ALTURA_TOPO - ALTURA_RODAPE - 3 * VAO) / 3;  // 137
-static const int16_t Y_L1 = ALTURA_TOPO;
-static const int16_t Y_L2 = Y_L1 + LINHA_A + VAO;
-static const int16_t Y_L3 = Y_L2 + LINHA_A + VAO;
+// Quatro linhas de cartoes:
+//   temperatura (largura toda)
+//   umidade relativa | umidade absoluta
+//   aquecedor | fan do aquecedor   (um cartao so, dividido ao meio)
+//   fan 1 | fan 2
+static const int16_t Y_L1 = 36;
+static const int16_t A_L1 = 92;
+static const int16_t Y_L2 = Y_L1 + A_L1 + VAO;   // 136
+static const int16_t A_L2 = 88;
+static const int16_t Y_L3 = Y_L2 + A_L2 + VAO;   // 232
+static const int16_t A_L3 = 112;
+static const int16_t Y_L4 = Y_L3 + A_L3 + VAO;   // 352
+static const int16_t A_L4 = 96;                  // termina em 448
 
 // Um cartao do painel. O valor e desenhado por cima, na faixa reservada.
 struct Cartao {
   int16_t x, y, l, a;
   const char *rotulo;
-  const char *detalhe;
+  const char *detalhe;   // linha de baixo fixa; "" quando e desenhada a parte
   const char *unidade;
   bool grau;      // desenha o anelzinho do grau antes da unidade
-  uint16_t cor;   // cor do valor quando ha dado
+  bool centro;    // rotulo e valor centrados (senao, alinhados a esquerda)
+  bool estado;    // tem linha de estado ("● ATIVO") abaixo do valor
+  bool icone;     // icone animado a esquerda; rotulo, valor e estado a direita
 };
 
-static const uint8_t N_CARTOES = 6;
+static const uint8_t N_CARTOES = 7;
 
-// Seis cartoes em tres linhas de dois:
-//   umidade relativa | umidade absoluta
-//   temperatura      | aquecedor
-//   FAN 01           | FAN 02
-// A ordem importa: os indices (enum abaixo) sao usados para atualizar cada
-// valor.
 static const int16_t COL_E = MARGEM;                // coluna da esquerda
 static const int16_t COL_D = MARGEM + COL_L + VAO;  // coluna da direita
 
 static const Cartao CARTOES[N_CARTOES] = {
-  // A relativa depende da temperatura: so de aquecer, ela cai. A absoluta
-  // so cai quando a agua sai da caixa - e ela que diz se esta secando.
-  {COL_E, Y_L1, COL_L, LINHA_A, "UMIDADE REL.", "CAI SO DE AQUECER",
-   "%", false, CIANO},
-  {COL_D, Y_L1, COL_L, LINHA_A, "UMIDADE ABS.", "AGUA REAL NO AR",
-   "g/m3", false, TURQUESA},
-
-  // Sem detalhe fixo: a linha de baixo mostra a temperatura maxima
-  // configurada no painel web, e e desenhada a parte (pintaMaximo no main.cpp).
-  {COL_E, Y_L2, COL_L, LINHA_A, "TEMPERATURA", "",
-   "C", true, LARANJA},
-  // Sem detalhe fixo: a linha de baixo e o selo de estado (pintaControle).
-  {COL_D, Y_L2, COL_L, LINHA_A, "AQUECEDOR",
-   "", "C", true, LARANJA},
-
-  // Sem detalhe fixo: a linha de baixo e o selo de estado (pintaControle).
-  {COL_E, Y_L3, COL_L, LINHA_A, "FAN 01", "",
-   "%", false, AZUL},
-  {COL_D, Y_L3, COL_L, LINHA_A, "FAN 02", "",
-   "%", false, ROXO},
+  // Valor a esquerda; a direita, um sobre o outro, o alvo do aquecedor e a
+  // maxima (desenhaAlvo e pintaMaximo no main).
+  {COL_E, Y_L1, LARGURA_TODA, A_L1, "Temperatura", "", "\xC2\xB0" "C", false, true, false, false},
+  // Rotulo com o icone de gota antes (desenhaCartao).
+  {COL_E, Y_L2, COL_L, A_L2, "Relativa", "", "%", false, true, false, false},
+  {COL_D, Y_L2, COL_L, A_L2, "Absoluta", "", "g/m\xC2\xB3", false, true, false, false},
+  // Aquecedor e fan do aquecedor: um cartao so, dividido ao meio. Cada
+  // metade ocupa a posicao de uma coluna; o fundo e desenhado inteiro.
+  // Chama (aquecedor) e helices (fans) animadas a esquerda.
+  {COL_E, Y_L3, COL_L, A_L3, "Aquecedor", "", "%", false, false, true, true},
+  {COL_D, Y_L3, COL_L, A_L3, "Fan aquecedor", "", "%", false, false, true, true},
+  {COL_E, Y_L4, COL_L, A_L4, "Fan 1", "", "%", false, false, true, true},
+  {COL_D, Y_L4, COL_L, A_L4, "Fan 2", "", "%", false, false, true, true},
 };
 
 // --- chamadas do servidor -----------------------------------------------------
@@ -120,10 +135,11 @@ bool painelTempMaxima(float &valor);  // false se nunca foi definida
 void painelDefineTempMaxima(float valor);
 
 enum {
-  CARTAO_UMID = 0,
-  CARTAO_UABS = 1,
-  CARTAO_TEMP = 2,
-  CARTAO_HOTEND = 3,
-  CARTAO_FAN1 = 4,
-  CARTAO_FAN2 = 5,
+  CARTAO_TEMP = 0,
+  CARTAO_UMID = 1,
+  CARTAO_UABS = 2,
+  CARTAO_POT = 3,     // potencia do aquecedor
+  CARTAO_FANAQ = 4,   // ventilador do aquecedor
+  CARTAO_CIRC1 = 5,
+  CARTAO_CIRC2 = 6,
 };
