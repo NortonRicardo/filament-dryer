@@ -11,19 +11,24 @@
 // atrapalhar o boot. O 25 e um pino comum, em nivel baixo no boot.
 static const uint8_t PIN_AQUECEDOR = 25;
 // Ventilador preso no aquecedor PTC (segue o aquecedor) e os dois de
-// circulacao. Os dois de circulacao saem do mesmo canal de PWM, ligado nos
-// dois pinos: giram sempre juntos, na mesma velocidade. Cada pino tem o seu
-// transistor, borne e fio de comando.
-static const uint8_t PIN_FAN_AQUEC = 16;  // ventilador do aquecedor
-static const uint8_t PIN_CIRC_A = 32;     // circulacao
-static const uint8_t PIN_CIRC_B = 33;     // circulacao
+// circulacao, cada um com o seu canal de PWM: ligam, desligam e mudam de
+// velocidade independentes. Cada pino tem o seu transistor, borne e fio de
+// comando.
+static const uint8_t PIN_FAN_AQUEC = 14;  // ventilador do aquecedor (era o 16)
+static const uint8_t PIN_CIRC_A = 32;     // Fan 1, circulacao
+static const uint8_t PIN_CIRC_B = 33;     // Fan 2, circulacao
 
 // 25 kHz fica acima do que o ouvido capta. Abaixo disso o ventilador chia,
 // porque a bobina vibra no ritmo do chaveamento.
 static const uint32_t PWM_FREQ = 25000;
 static const uint8_t  PWM_BITS = 8;
-static const uint8_t  CANAL_FAN1 = 0;
-static const uint8_t  CANAL_FAN2 = 1;
+// Canais do LEDC: o 0 e o 1 dividem um temporizador (25 kHz); o 2 e o 3
+// dividem outro, o da luz da tela (5 kHz, no main.cpp). Por isso o terceiro
+// ventilador vai no 4, que tem temporizador proprio.
+static const uint8_t  CANAL_FAN1 = 0;   // aquecedor
+static const uint8_t  CANAL_FAN2 = 1;   // Fan 1
+static const uint8_t  CANAL_FAN3 = 4;   // Fan 2
+static const uint8_t  CANAIS[3] = {CANAL_FAN1, CANAL_FAN2, CANAL_FAN3};
 
 // --- limites de configuracao ------------------------------------------------
 // O alvo para em 55 para sobrar margem ate o teto de 60.
@@ -66,8 +71,10 @@ static Config cfg = {
   4.0f,   // kp
   0.01f,  // ki
   0.0f,   // kd
-  false,  // circulacao: desligada no boot, so o painel web liga
-  100,    // circulacao: 100% ao ligar
+  false,  // Fan 1: desligado no boot, so o painel web liga
+  100,    // Fan 1: 100% ao ligar
+  false,  // Fan 2: idem
+  100,    // Fan 2: 100% ao ligar
   30,     // piso de PWM: abaixo disso a helice nao parte
   180,    // 3 min a 100% depois de desligar
   120,    // mais 2 min descendo ate parar
@@ -86,7 +93,7 @@ static const char *motivo = "";
 static bool autorizado = false;
 static bool aquecedorLigado = false;  // PID pedindo mais que 0%
 static float potencia = 0;            // 0 a 100 %, saida do PID
-static uint8_t velocidade[2] = {0, 0};
+static uint8_t velocidade[3] = {0, 0, 0};
 
 static uint32_t desdeDesligou = 0;   // millis em que a potencia foi a 0
 static bool     jaAqueceu = false;   // houve ao menos um ciclo nesta sessao
@@ -118,7 +125,7 @@ static void aplica(uint8_t i, uint8_t pct) {
   if (pct > 0 && pct < cfg.pwmMin) pct = cfg.pwmMin;
 
   velocidade[i] = pct;
-  ledcWrite(i == 0 ? CANAL_FAN1 : CANAL_FAN2, (uint32_t)pct * 255 / 100);
+  ledcWrite(CANAIS[i], (uint32_t)pct * 255 / 100);
 }
 
 // Define a potencia pedida ao cartucho. O pino em si e chaveado em
@@ -182,12 +189,11 @@ static void falha(const char *porque) {
 // circular rapido, e ligar o aquecedor tambem a poe a 100% (e liga, se
 // estiver desligada). Da para baixar a velocidade no painel depois.
 // ---------------------------------------------------------------------------
-static uint8_t velocidadeCirculacao() {
-  return cfg.fan2Ligado ? cfg.fan2Vel : 0;
-}
+
 
 static void atualizaVentiladores() {
-  aplica(1, velocidadeCirculacao());
+  aplica(1, cfg.fan2Ligado ? cfg.fan2Vel : 0);
+  aplica(2, cfg.fan3Ligado ? cfg.fan3Vel : 0);
 
   if (estado == EST_BLOQUEADO || estado == EST_FALHA) {
     aplica(0, 0);
@@ -224,9 +230,10 @@ void controleInicia() {
 
   ledcSetup(CANAL_FAN1, PWM_FREQ, PWM_BITS);
   ledcSetup(CANAL_FAN2, PWM_FREQ, PWM_BITS);
+  ledcSetup(CANAL_FAN3, PWM_FREQ, PWM_BITS);
   ledcAttachPin(PIN_FAN_AQUEC, CANAL_FAN1);
   ledcAttachPin(PIN_CIRC_A, CANAL_FAN2);
-  ledcAttachPin(PIN_CIRC_B, CANAL_FAN2);
+  ledcAttachPin(PIN_CIRC_B, CANAL_FAN3);
   aplica(0, 0);
 
   nvs.begin("estufa", false);
@@ -256,6 +263,7 @@ void controleInicia() {
   // os dois nascem falsos toda vez, por regra. Tudo comeca desligado.
   autorizado = false;
   cfg.fan2Ligado = false;
+  cfg.fan3Ligado = false;
   estado = EST_BLOQUEADO;
 
   diario.printf("Aquecedor        : DESLIGADO no boot, por regra\n");
@@ -264,9 +272,9 @@ void controleInicia() {
   diario.printf("PID              : kp %.2f  ki %.3f  kd %.1f\n", cfg.kp, cfg.ki, cfg.kd);
   diario.printf("Protecao         : corta se %u min no maximo sem subir 1 C\n",
                 cfg.semSubirMin);
-  diario.printf("Ventiladores     : aquecedor P%d, circulacao P%d+P%d, PWM %lu Hz, piso %u%%\n",
+  diario.printf("Ventiladores     : aquecedor P%d, Fan 1 P%d, Fan 2 P%d, PWM %lu Hz, piso %u%%\n",
                 PIN_FAN_AQUEC, PIN_CIRC_A, PIN_CIRC_B, (unsigned long)PWM_FREQ, cfg.pwmMin);
-  diario.printf("Circulacao       : DESLIGADA no boot, liga a 100%%\n");
+  diario.printf("Fan 1 e Fan 2    : DESLIGADOS no boot, ligam a 100%%\n");
 
   atualizaVentiladores();  // tudo em 0% ate o painel web ligar
 }
@@ -391,7 +399,7 @@ const char *controleMotivo() { return motivo; }
 bool controleAquecedorLigado() { return aquecedorLigado; }
 uint8_t controlePotencia() { return (uint8_t)(potencia + 0.5f); }
 bool controleAutorizado() { return autorizado; }
-uint8_t controleVelocidade(uint8_t i) { return i < 2 ? velocidade[i] : 0; }
+uint8_t controleVelocidade(uint8_t i) { return i < 3 ? velocidade[i] : 0; }
 
 void controleAutoriza(bool v) {
   autorizado = v;
@@ -401,8 +409,8 @@ void controleAutoriza(bool v) {
   estado = v ? EST_OCIOSO : EST_BLOQUEADO;
   diario.printf("Autorizacao      : %s\n", v ? "concedida pelo painel" : "retirada");
   if (v) {           // ligou o aquecedor: circulacao ligada e a 100%
-    cfg.fan2Ligado = true;
-    cfg.fan2Vel = 100;
+    cfg.fan2Ligado = cfg.fan3Ligado = true;
+    cfg.fan2Vel = cfg.fan3Vel = 100;
   }
   atualizaVentiladores();
 }
@@ -423,7 +431,8 @@ bool controleDefineConfig(const Config &n, const char **porque) {
   if (n.pwmMin > 80)      { *porque = "piso de PWM acima de 80%"; return false; }
   // Abaixo do piso a helice nao parte, e aplica() subiria o valor sozinha:
   // o numero pedido deixaria de ser o que o ventilador recebe.
-  if (n.fan2Vel < n.pwmMin || n.fan2Vel > 100) {
+  if (n.fan2Vel < n.pwmMin || n.fan2Vel > 100 ||
+      n.fan3Vel < n.pwmMin || n.fan3Vel > 100) {
     *porque = "velocidade da circulacao fora do piso a 100%"; return false;
   }
   if (n.pos1 > 3600 || n.rampa1 > 3600) {
@@ -433,9 +442,11 @@ bool controleDefineConfig(const Config &n, const char **porque) {
     *porque = "protecao sem subir fora de 5 a 60 min"; return false;
   }
 
-  const bool ligouCirculacao = n.fan2Ligado && !cfg.fan2Ligado;
+  const bool ligouFan1 = n.fan2Ligado && !cfg.fan2Ligado;
+  const bool ligouFan2 = n.fan3Ligado && !cfg.fan3Ligado;
   cfg = n;
-  if (ligouCirculacao) cfg.fan2Vel = 100;   // ligar e sempre a 100%
+  if (ligouFan1) cfg.fan2Vel = 100;   // ligar e sempre a 100%
+  if (ligouFan2) cfg.fan3Vel = 100;
   nvs.putFloat("alvo", cfg.alvo);
   nvs.putFloat("kp", cfg.kp);
   nvs.putFloat("ki", cfg.ki);
@@ -445,9 +456,9 @@ bool controleDefineConfig(const Config &n, const char **porque) {
   nvs.putUShort("rmp1", cfg.rampa1);
   nvs.putUShort(NVS_SUBIR, cfg.semSubirMin);
 
-  diario.printf("Config salva     : alvo %.1f C, PID %.2f/%.3f/%.1f, circulacao %s %u%%\n",
-                cfg.alvo, cfg.kp, cfg.ki, cfg.kd, cfg.fan2Ligado ? "ligada" : "desligada",
-                cfg.fan2Vel);
+  diario.printf("Config salva     : alvo %.1f C, PID %.2f/%.3f/%.1f, Fan 1 %u%%, Fan 2 %u%%\n",
+                cfg.alvo, cfg.kp, cfg.ki, cfg.kd,
+                cfg.fan2Ligado ? cfg.fan2Vel : 0, cfg.fan3Ligado ? cfg.fan3Vel : 0);
   // Aplica na hora: ligar, desligar ou mudar a faixa nao espera a proxima
   // leitura do sensor.
   atualizaVentiladores();

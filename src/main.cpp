@@ -663,18 +663,14 @@ static void pintaControle() {
   else                                        desenhaEstado(CARTAO_POT, "DESLIGADO", PARADO_C);
   desenhaAlvo();
 
-  // Fan do aquecedor (canal 0) e os dois de circulacao (canal 1, juntos).
-  const uint8_t fanAq = controleVelocidade(0), circ = controleVelocidade(1);
-  snprintf(buf, sizeof buf, "%u", fanAq);
-  desenhaValor(CARTAO_FANAQ, buf, true);
-  if (fanAq > 0) desenhaEstado(CARTAO_FANAQ, "ATIVO", OK_C);
-  else           desenhaEstado(CARTAO_FANAQ, "INATIVO", PARADO_C);
-
-  snprintf(buf, sizeof buf, "%u", circ);
-  for (uint8_t i = CARTAO_CIRC1; i <= CARTAO_CIRC2; i++) {
-    desenhaValor(i, buf, true);
-    if (circ > 0) desenhaEstado(i, "ATIVO", OK_C);
-    else          desenhaEstado(i, "INATIVO", PARADO_C);
+  // Fan do aquecedor (0), Fan 1 (1) e Fan 2 (2), cada um no seu cartao.
+  static const uint8_t CARTAO_DO_FAN[3] = {CARTAO_FANAQ, CARTAO_CIRC1, CARTAO_CIRC2};
+  for (uint8_t f = 0; f < 3; f++) {
+    const uint8_t pct = controleVelocidade(f);
+    snprintf(buf, sizeof buf, "%u", pct);
+    desenhaValor(CARTAO_DO_FAN[f], buf, true);
+    if (pct > 0) desenhaEstado(CARTAO_DO_FAN[f], "ATIVO", OK_C);
+    else         desenhaEstado(CARTAO_DO_FAN[f], "INATIVO", PARADO_C);
   }
 }
 
@@ -759,10 +755,10 @@ static void animaIcones() {
     pushIcone(CARTAO_POT);
   }
 
-  // Fans: canal 0 e o do aquecedor; canal 1 move os dois de circulacao.
+  // Fans: 0 o do aquecedor, 1 o Fan 1, 2 o Fan 2.
   static const uint8_t CARTAO_FAN[3] = {CARTAO_FANAQ, CARTAO_CIRC1, CARTAO_CIRC2};
   for (uint8_t f = 0; f < 3; f++) {
-    const uint8_t pct = controleVelocidade(f == 0 ? 0 : 1);
+    const uint8_t pct = controleVelocidade(f);
     if (pct > 0) {
       // Cada quadro e 12 graus. 30% gira devagar, 100% bem rapido: de ~0,7
       // a ~2 voltas por segundo.
@@ -1070,14 +1066,16 @@ void loop() {
 
   // A rampa do ventilador desce entre leituras, entao o controle roda no
   // ritmo do loop e nao no de 2 s do sensor.
-  static uint8_t velAnterior[2] = {255, 255};
+  static uint8_t velAnterior[3] = {255, 255, 255};
   controleTick();
-  if (controleVelocidade(0) != velAnterior[0] ||
-      controleVelocidade(1) != velAnterior[1]) {
-    velAnterior[0] = controleVelocidade(0);
-    velAnterior[1] = controleVelocidade(1);
-    if (telaLigada) pintaControle();
+  bool mudou = false;
+  for (uint8_t f = 0; f < 3; f++) {
+    if (controleVelocidade(f) != velAnterior[f]) {
+      velAnterior[f] = controleVelocidade(f);
+      mudou = true;
+    }
   }
+  if (mudou && telaLigada) pintaControle();
 
   // O endereco muda sozinho: conectando -> IP, ou IP -> reconectando. A tela
   // acompanha comparando o texto, para nao repintar a linha a cada volta.

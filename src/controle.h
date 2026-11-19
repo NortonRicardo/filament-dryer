@@ -50,9 +50,14 @@ struct Config {
   float    kp;          // PID: % de potencia por grau de erro
   float    ki;          // PID: % por grau por segundo de erro acumulado
   float    kd;          // PID: % por grau/s de subida (freia a chegada)
-  bool     fan2Ligado;  // circulacao ligada; nasce falso a cada boot, nao e salvo
-  uint8_t  fan2Vel;     // % da circulacao. Vai a 100 ao ligar a circulacao ou
-                        // o aquecedor; da para baixar depois. Nao e salvo.
+  // Fan 1 (fan2*) e Fan 2 (fan3*), de circulacao, cada um com o seu
+  // liga/desliga e a sua velocidade. Nascem desligados a cada boot e nao sao
+  // salvos. Ligar um deles, ou o aquecedor, o poe a 100%; da para baixar
+  // depois.
+  bool     fan2Ligado;
+  uint8_t  fan2Vel;
+  bool     fan3Ligado;
+  uint8_t  fan3Vel;
   uint8_t  pwmMin;      // % abaixo do qual o ventilador nao parte
   uint16_t pos1;        // s que o ventilador do aquecedor fica a 100% apos desligar
   uint16_t rampa1;      // s que ele leva descendo de 100% ate parar
@@ -73,7 +78,7 @@ const char *controleMotivo();      // vazio quando nao ha falha
 bool controleAquecedorLigado();    // PID pedindo mais que 0%
 uint8_t controlePotencia();        // 0 a 100 %, o que o PID pediu
 bool controleAutorizado();
-uint8_t controleVelocidade(uint8_t ventilador);  // 0 ou 1 -> 0 a 100 %
+uint8_t controleVelocidade(uint8_t ventilador);  // 0 aquecedor, 1 Fan 1, 2 Fan 2 -> 0 a 100 %
 
 // So o painel web chama. Autorizar com falha pendente limpa a falha.
 void controleAutoriza(bool autorizado);

@@ -317,7 +317,7 @@ footer.ruim{color:var(--laranja)}
       <span class="st" id="stF2">INATIVO</span>
     </div>
 
-  <div class="cartao fan clicavel icard" id="c-f3" data-abre="m-f2">
+  <div class="cartao fan clicavel icard" id="c-f3" data-abre="m-f3">
       <span class="rotulo">Fan 2</span>
       <div class="linhaIcone"><svg class="helice" id="iF3" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21.5" fill="none" stroke="currentColor" stroke-width="2.6"/><g fill="currentColor"><path d="M24 24C19.5 15 22.5 6.5 30 6c6.5.2 7 9-6 18z"/><path d="M24 24C19.5 15 22.5 6.5 30 6c6.5.2 7 9-6 18z" transform="rotate(120 24 24)"/><path d="M24 24C19.5 15 22.5 6.5 30 6c6.5.2 7 9-6 18z" transform="rotate(240 24 24)"/></g><circle cx="24" cy="24" r="4.6" fill="#f5f3f2"/><circle cx="24" cy="24" r="2.4" fill="currentColor"/></svg><div class="leitura"><span class="valor" id="f3">--</span><span class="un">%</span></div></div>
       <span class="st" id="stF3">INATIVO</span>
@@ -379,14 +379,25 @@ footer.ruim{color:var(--laranja)}
 </div></div>
 
 <div class="fundo" id="m-f2" hidden><div class="modal">
-  <div class="topo"><b>Fan 1 e Fan 2 · circulação</b><button data-fecha>FECHAR</button></div>
+  <div class="topo"><b>Fan 1 · circulação</b><button data-fecha>FECHAR</button></div>
   <div class="chave">
     <div><span id="estadoF2" class="estado">—</span><small id="f2agora"></small></div>
     <button id="btnF2" disabled>—</button>
   </div>
   <div class="linha"><label>Velocidade · %<small>liga a 100%; ligar o aquecedor também põe a 100%</small></label><input data-k="f2vel" inputmode="numeric"></div>
   <div class="linha"><label>Piso de PWM · %<small>vale para todos os ventiladores</small></label><input data-k="pwmin" inputmode="numeric"></div>
-  <small class="nota">Começa desligado a cada boot. Os dois giram juntos. Cada campo salva ao sair dele.</small>
+  <small class="nota">Começa desligado a cada boot. Cada campo salva ao sair dele.</small>
+</div></div>
+
+<div class="fundo" id="m-f3" hidden><div class="modal">
+  <div class="topo"><b>Fan 2 · circulação</b><button data-fecha>FECHAR</button></div>
+  <div class="chave">
+    <div><span id="estadoF3" class="estado">—</span><small id="f3agora"></small></div>
+    <button id="btnF3" disabled>—</button>
+  </div>
+  <div class="linha"><label>Velocidade · %<small>liga a 100%; ligar o aquecedor também põe a 100%</small></label><input data-k="f3vel" inputmode="numeric"></div>
+  <div class="linha"><label>Piso de PWM · %<small>vale para todos os ventiladores</small></label><input data-k="pwmin" inputmode="numeric"></div>
+  <small class="nota">Começa desligado a cada boot. Cada campo salva ao sair dele.</small>
 </div></div>
 
 <div class="fundo" id="m-f1" hidden><div class="modal">
@@ -555,9 +566,11 @@ function st(el, classe, texto) {
   el.textContent = texto;
   el.className = "st" + (classe ? " " + classe : "");
 }
-$("btnF2").addEventListener("click", function () {
-  this.disabled = true;
-  envia("config?f2on=" + (this.dataset.on === "1" ? 0 : 1));
+["2", "3"].forEach(function (n) {   // Fan 1 (f2) e Fan 2 (f3)
+  $("btnF" + n).addEventListener("click", function () {
+    this.disabled = true;
+    envia("config?f" + n + "on=" + (this.dataset.on === "1" ? 0 : 1));
+  });
 });
 $("swTela").addEventListener("click", function () {
   this.disabled = true;
@@ -679,27 +692,26 @@ function ciclo() {
     // Icones: chama acesa so aquecendo; helice verde girando quando ligada,
     // mais rapido quanto maior a velocidade (de ~1,6 s a ~0,35 s por volta).
     $("iAq").classList.toggle("acesa", d.estado === "AQUECENDO");
-    [["iF1", d.fan1], ["iF2", d.fan2], ["iF3", d.fan2]].forEach(function (h) {
+    [["iF1", d.fan1], ["iF2", d.fan2], ["iF3", d.fan3]].forEach(function (h) {
       var el = $(h[0]), on = h[1] > 0;
       el.classList.toggle("gira", on);
       if (on) el.style.setProperty("--dur", (1.6 - h[1] / 100 * 1.25).toFixed(2) + "s");
     });
 
-    // Os dois de circulacao saem do mesmo canal: mesmo valor nos dois cartoes.
     $("f1").textContent = d.fan1;
     $("f2").textContent = d.fan2;
-    $("f3").textContent = d.fan2;
+    $("f3").textContent = d.fan3;
     st($("stF1"), d.fan1 > 0 ? "ativo" : "", d.fan1 > 0 ? "ATIVO" : "INATIVO");
     st($("stF2"), d.fan2 > 0 ? "ativo" : "", d.fan2 > 0 ? "ATIVO" : "INATIVO");
-    st($("stF3"), d.fan2 > 0 ? "ativo" : "", d.fan2 > 0 ? "ATIVO" : "INATIVO");
+    st($("stF3"), d.fan3 > 0 ? "ativo" : "", d.fan3 > 0 ? "ATIVO" : "INATIVO");
     marca($("estadoF1"), d.fan1 > 0 ? "LIGADO · " + d.fan1 + " %" : "DESLIGADO", d.fan1 > 0 ? "on" : "");
 
-    var f2 = d.cfg.f2on;
-    marca($("estadoF2"), f2 ? "LIGADO · " + d.fan2 + " %" : "DESLIGADO", f2 ? "on" : "");
-    $("f2agora").textContent = f2
-      ? "girando a " + d.cfg.f2vel + " %"
-      : "ligue aqui para começar a girar";
-    chave($("btnF2"), f2, "DESLIGAR", "LIGAR");
+    [["2", d.cfg.f2on, d.fan2, d.cfg.f2vel], ["3", d.cfg.f3on, d.fan3, d.cfg.f3vel]].forEach(function (f) {
+      var n = f[0], on = f[1];
+      marca($("estadoF" + n), on ? "LIGADO · " + f[2] + " %" : "DESLIGADO", on ? "on" : "");
+      $("f" + n + "agora").textContent = on ? "girando a " + f[3] + " %" : "ligue aqui para começar a girar";
+      chave($("btnF" + n), on, "DESLIGAR", "LIGAR");
+    });
 
     // Imagem do display e brilho
     interruptor($("swTela"), d.tela);

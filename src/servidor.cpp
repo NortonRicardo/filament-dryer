@@ -183,6 +183,7 @@ static void rotaDados() {
   json += ",\"pot\":";          json += controlePotencia();
   json += ",\"fan1\":";         json += controleVelocidade(0);
   json += ",\"fan2\":";         json += controleVelocidade(1);
+  json += ",\"fan3\":";         json += controleVelocidade(2);
   json += ",\"teto\":";         json += String(TETO_ABSOLUTO, 0);
   json += ",\"cfg\":{\"alvo\":";  json += String(c.alvo, 1);
   json += ",\"kp\":";           json += String(c.kp, 2);
@@ -190,6 +191,8 @@ static void rotaDados() {
   json += ",\"kd\":";           json += String(c.kd, 1);
   json += ",\"f2on\":";         json += c.fan2Ligado ? "true" : "false";
   json += ",\"f2vel\":";        json += c.fan2Vel;
+  json += ",\"f3on\":";         json += c.fan3Ligado ? "true" : "false";
+  json += ",\"f3vel\":";        json += c.fan3Vel;
   json += ",\"pwmin\":";        json += c.pwmMin;
   json += ",\"pos1\":";         json += c.pos1;
   json += ",\"rmp1\":";         json += c.rampa1;
@@ -298,7 +301,8 @@ static void rotaConfig() {
   if (servidor.hasArg("ki"))    c.ki          = servidor.arg("ki").toFloat();
   if (servidor.hasArg("kd"))    c.kd          = servidor.arg("kd").toFloat();
   if (servidor.hasArg("f2on"))  c.fan2Ligado  = servidor.arg("f2on") == "1";
-  if (!lePct("f2vel", c.fan2Vel) ||
+  if (servidor.hasArg("f3on"))  c.fan3Ligado  = servidor.arg("f3on") == "1";
+  if (!lePct("f2vel", c.fan2Vel) || !lePct("f3vel", c.fan3Vel) ||
       !lePct("pwmin", c.pwmMin)) {
     servidor.send(400, "text/plain; charset=utf-8",
                   "porcentagem fora de 0 a 100\n");
